@@ -1,0 +1,133 @@
+cmake_minimum_required(VERSION 3.5) # Set minimum CMake version
+project(ctrecorder VERSION 1.0 LANGUAGES CXX)
+
+# Set a default build type if none was specified
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  message(STATUS "Setting build type to 'Release' as none was specified.  Use cmake -DCMAKE_BUILD_TYPE=Debug for Debug.")
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
+  # Set the possible values of build type for cmake-gui, ccmake
+  set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release" "MinSizeRel" "RelWithDebInfo")
+endif()
+
+# Declare an option for enabling Basler support
+option(ENABLE_BASLER "Enable support for Basler cameras" OFF)
+option(USE_OPENCV "Use OpenCV features" ON)
+option(USE_FFMPEG "Use OpenCV features" ON)
+
+# Set C++ standard
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
+message(STATUS "${CMAKE_PREFIX_PATH}")
+message(STATUS "updated:${CMAKE_PREFIX_PATH}")
+
+# prefer static libs
+if(APPLE)
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ".a" ".dylib")
+    # set(USE_OPENCV OFF CACHE BOOL "Use OPENCV features" FORCE)
+elseif(WIN32)
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ".dll" ".lib")
+    add_compile_definitions(USE_FFMPEG)
+    add_compile_definitions(USE_OPENCV)
+else()
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ".so" ".a")
+    add_compile_definitions(USE_FFMPEG)
+    add_compile_definitions(USE_OPENCV)
+endif()
+
+set(FFMPEG_FOLDER "/Users/glenne/ffmpeg-built-mac")
+# set(FFMPEG_FOLDER "/usr/local/Cellar/ffmpeg/7.0")
+
+list(INSERT CMAKE_PREFIX_PATH 0 "${FFMPEG_FOLDER}")
+# list(APPEND CMAKE_PREFIX_PATH "/home/glenne/ndi/NDI/lib/arm-rpi3-linux-gnuabihf")
+include_directories(
+    src
+    ${FFMPEG_FOLDER}/include
+    # /usr/local/opt/ffmpeg@4/include
+    /home/glenne/ndi/NDI/include
+    /usr/include/ndi
+    /usr/local/opt/ndi
+    /Library/NDI\ SDK\ for\ Apple/include/
+)
+
+# Fetch nlohmann/json from GitHub
+include(FetchContent)
+FetchContent_Declare(
+  json
+  GIT_REPOSITORY https://github.com/nlohmann/json.git
+  GIT_TAG v3.10.5 # Specify the version you want to use
+)
+FetchContent_MakeAvailable(json)
+
+set(SOURCE_FILES
+    src/ctrecorder.cpp
+    src/FrameProcessor.cpp
+    src/FFRecorder.cpp
+    src/MulticastReceiver.cpp
+    src/util.cpp
+    src/NdiReader.cpp
+)
+
+if (USE_OPENCV)
+    add_compile_definitions(USE_OPENCV)
+    list(APPEND SOURCE_FILES
+        src/OpenCVRecorder.cpp
+    )
+    # Find OpenCV package in the system
+    find_package(OpenCV REQUIRED)
+
+    # Include directories for OpenCV
+    include_directories(${OpenCV_INCLUDE_DIRS})
+endif()
+
+if (USE_FFMPEG)
+    add_compile_definitions(USE_FFMPEG)
+    list(APPEND SOURCE_FILES
+        src/FFRecorder.cpp
+    )
+    if (APPLE)
+        set(FFMPEG_FRAMEWORKS
+            "-framework VideoToolbox"
+            "-framework AudioToolbox"
+            "-framework CoreMedia"
+            "-framework CoreVideo"
+            "-framework CoreServices"
+            "-framework CoreFoundation")
+    endif()
+endif()
+
+if(ENABLE_BASLER)
+    # Add definitions that might be needed by your project
+    add_definitions(-DHAVE_BASLER)
+    find_package(pylon 7.3.1 REQUIRED)
+    set(BASLER_LIBS pylon::pylon)
+    list(APPEND SOURCE_FILES
+        BaslerReader.cpp
+    )
+endif()
+
+# Define the executable
+add_executable(ctrecorder ${SOURCE_FILES})
+
+# Link nlohmann_json::nlohmann_json to the target
+target_link_libraries(ctrecorder PRIVATE nlohmann_json::nlohmann_json)
+
+find_library(NDI_LIBRARIES ndi REQUIRED)
+
+find_library(AVFORMAT_LIBRARY avformat REQUIRED)
+find_library(AVCODEC_LIBRARY avcodec REQUIRED)
+find_library(AVUTIL_LIBRARY avutil REQUIRED)
+find_library(SWSCALE_LIBRARY swscale REQUIRED)
+find_library(SWSRESAMPLE_LIBRARY swresample REQUIRED)
+
+message(STATUS "avlibs found at ${AVFORMAT_LIBRARY} ${AVCODEC_LIBRARY} ${AVUTIL_LIBRARY} ${SWSCALE_LIBRARY} ${SWSRESAMPLE_LIBRARY}")
+message(STATUS "opencv found at ${OpenCV_INCLUDE_DIRS} ${OpenCV_LIBS}")
+message(STATUS "NDI found at ${NDI_LIBRARIES}")
+
+target_link_libraries(ctrecorder PRIVATE
+    ${OpenCV_LIBS} ${NDI_LIBRARIES}
+    z bz2 lzma
+    ${FFMPEG_FRAMEWORKS}
+    ${AVFORMAT_LIBRARY} ${AVCODEC_LIBRARY} ${AVUTIL_LIBRARY} ${SWSCALE_LIBRARY} ${SWSRESAMPLE_LIBRARY}
+    pthread ${BASLER_LIBS}
+)

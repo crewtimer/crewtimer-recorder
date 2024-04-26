@@ -15,6 +15,8 @@ import log from 'electron-log';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
 
+import { startRecording, stopRecording } from './recorder/recorder-main';
+
 class AppUpdater {
   constructor() {
     log.transports.file.level = 'info';
@@ -94,6 +96,8 @@ const createWindow = async () => {
     }
   });
 
+  startRecording();
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -119,9 +123,12 @@ const createWindow = async () => {
 app.on('window-all-closed', () => {
   // Respect the OSX convention of having the application in memory even
   // after all windows have been closed
-  if (process.platform !== 'darwin') {
-    app.quit();
-  }
+  // Nope, it's a pain for the most part. (Glenn)
+  // if (process.platform !== 'darwin') {
+  //   app.quit();
+  // }
+  stopRecording();
+  app.quit();
 });
 
 app
