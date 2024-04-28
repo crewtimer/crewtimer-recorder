@@ -15,8 +15,10 @@ class VideoController {
   const int interval;
   std::shared_ptr<VideoRecorder> videoRecorder;
   std::shared_ptr<FrameProcessor> frameProcessor;
-  std::shared_ptr<MulticastReceiver> mcastListener;
   std::shared_ptr<VideoReader> videoReader;
+#ifndef _WIN32
+  std::shared_ptr<MulticastReceiver> mcastListener;
+#endif
 
 public:
   VideoController(const std::string srcName, const std::string encoder,
@@ -57,6 +59,7 @@ public:
     videoReader->open(frameProcessor);
     videoReader->start();
 
+#ifndef _WIN32
     mcastListener = std::shared_ptr<MulticastReceiver>(
         new MulticastReceiver("239.215.23.42", 52342));
     mcastListener->setMessageCallback([this](const json &j) {
@@ -68,15 +71,17 @@ public:
     });
 
     mcastListener->start();
+#endif
   }
 
   void stop() {
     std::cout << "Shutting down..." << std::endl;
 
     std::cout << "Stopping multicast listener..." << std::endl;
+#ifndef _WIN32
     mcastListener->stop();
     mcastListener = nullptr;
-
+#endif
     std::cout << "Stopping video reader..." << std::endl;
     videoReader->stop();
     videoReader = nullptr;

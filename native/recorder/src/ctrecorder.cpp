@@ -9,13 +9,23 @@
 #include <thread>
 #include <vector>
 
+#ifdef _WIN32
+// Windows-specific includes and definitions
+#include <windows.h>
+#else
+// Unix-specific includes and definitions
+
 #include <unistd.h> // fork, setsid, XX_FILENO
+#endif
 
 #include "VideoController.hpp"
 #include "util.hpp"
 
 using namespace std::chrono;
 
+#ifdef _WIN32
+void daemonize() {}
+#else
 void daemonize() {
   pid_t pid;
 
@@ -48,7 +58,7 @@ void daemonize() {
   // close(STDOUT_FILENO);
   // close(STDERR_FILENO);
 }
-
+#endif
 std::function<void()> stopHandler = []() {};
 void signalHandler(int signal) {
   if (signal == SIGINT) {

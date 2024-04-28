@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <vector>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -113,7 +114,7 @@ public:
     pCodecCtx->bit_rate = 6000000;
     pCodecCtx->width = width;
     pCodecCtx->height = height;
-    pCodecCtx->framerate = (AVRational){int(fps), 1};
+    pCodecCtx->framerate = av_make_q(static_cast<int>(fps), 1);
     pCodecCtx->time_base = av_make_q(1, int(fps));
     pCodecCtx->pix_fmt = AV_PIX_FMT_YUV420P;
     pCodecCtx->max_b_frames = 0;

@@ -21,21 +21,45 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 message(STATUS "${CMAKE_PREFIX_PATH}")
 message(STATUS "updated:${CMAKE_PREFIX_PATH}")
 
+set(SOURCE_FILES
+    src/ctrecorder.cpp
+    src/FrameProcessor.cpp
+    src/FFRecorder.cpp
+    src/util.cpp
+    src/NdiReader.cpp
+)
+
 # prefer static libs
 if(APPLE)
     set(CMAKE_FIND_LIBRARY_SUFFIXES ".a" ".dylib")
+    set(EXTRA_LIBS z bz2 lzma pthread)
+    set(FFMPEG_FOLDER "/Users/glenne/ffmpeg-built-mac")
     # set(USE_OPENCV OFF CACHE BOOL "Use OPENCV features" FORCE)
+    list(APPEND SOURCE_FILES
+        src/MulticastReceiver.cpp
+    )
+    find_library(NDI_LIBRARIES ndi REQUIRED)
 elseif(WIN32)
-    set(CMAKE_FIND_LIBRARY_SUFFIXES ".dll" ".lib")
+    message(STATUS "Win32 section")
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ".a" ".dll" ".lib")
+    set(LIB_PREFIX lib)
+    set(EXTRA_LIBS  Ws2_32 Secur32 Bcrypt mfplat
+    mfuuid strmiids)
+    set(FFMPEG_FOLDER "C:/Users/glenne/git/crewtimer-connect/native/ffreader/src/ffmpeg-built-win")
     add_compile_definitions(USE_FFMPEG)
-    add_compile_definitions(USE_OPENCV)
+    set(USE_OPENCV OFF CACHE BOOL "Use OPENCV features" FORCE)
+    # add_compile_definitions(USE_OPENCV)
+    set(NDI_LIBRARIES "C:/Program Files/NDI/NDI 5 SDK/Lib/x64/Processing.NDI.Lib.x64.lib")
+
 else()
     set(CMAKE_FIND_LIBRARY_SUFFIXES ".so" ".a")
     add_compile_definitions(USE_FFMPEG)
     add_compile_definitions(USE_OPENCV)
+    list(APPEND SOURCE_FILES
+        src/MulticastReceiver.cpp
+    )
 endif()
 
-set(FFMPEG_FOLDER "/Users/glenne/ffmpeg-built-mac")
 # set(FFMPEG_FOLDER "/usr/local/Cellar/ffmpeg/7.0")
 
 list(INSERT CMAKE_PREFIX_PATH 0 "${FFMPEG_FOLDER}")
@@ -48,25 +72,17 @@ include_directories(
     /usr/include/ndi
     /usr/local/opt/ndi
     /Library/NDI\ SDK\ for\ Apple/include/
+    "C:/Program\ Files/NDI/NDI\ 5\ SDK/Include"
 )
 
 # Fetch nlohmann/json from GitHub
 include(FetchContent)
-FetchContent_Declare(
-  json
-  GIT_REPOSITORY https://github.com/nlohmann/json.git
-  GIT_TAG v3.10.5 # Specify the version you want to use
-)
-FetchContent_MakeAvailable(json)
-
-set(SOURCE_FILES
-    src/ctrecorder.cpp
-    src/FrameProcessor.cpp
-    src/FFRecorder.cpp
-    src/MulticastReceiver.cpp
-    src/util.cpp
-    src/NdiReader.cpp
-)
+# FetchContent_Declare(
+#   json
+#   GIT_REPOSITORY https://github.com/nlohmann/json.git
+#   GIT_TAG v3.10.5 # Specify the version you want to use
+# )
+# FetchContent_MakeAvailable(json)
 
 if (USE_OPENCV)
     add_compile_definitions(USE_OPENCV)
@@ -110,15 +126,13 @@ endif()
 add_executable(ctrecorder ${SOURCE_FILES})
 
 # Link nlohmann_json::nlohmann_json to the target
-target_link_libraries(ctrecorder PRIVATE nlohmann_json::nlohmann_json)
+# target_link_libraries(ctrecorder PRIVATE nlohmann_json::nlohmann_json)
 
-find_library(NDI_LIBRARIES ndi REQUIRED)
-
-find_library(AVFORMAT_LIBRARY avformat REQUIRED)
-find_library(AVCODEC_LIBRARY avcodec REQUIRED)
-find_library(AVUTIL_LIBRARY avutil REQUIRED)
-find_library(SWSCALE_LIBRARY swscale REQUIRED)
-find_library(SWSRESAMPLE_LIBRARY swresample REQUIRED)
+find_library(AVFORMAT_LIBRARY ${LIB_PREFIX}avformat REQUIRED)
+find_library(AVCODEC_LIBRARY ${LIB_PREFIX}avcodec REQUIRED)
+find_library(AVUTIL_LIBRARY ${LIB_PREFIX}avutil REQUIRED)
+find_library(SWSCALE_LIBRARY ${LIB_PREFIX}swscale REQUIRED)
+find_library(SWSRESAMPLE_LIBRARY ${LIB_PREFIX}swresample REQUIRED)
 
 message(STATUS "avlibs found at ${AVFORMAT_LIBRARY} ${AVCODEC_LIBRARY} ${AVUTIL_LIBRARY} ${SWSCALE_LIBRARY} ${SWSRESAMPLE_LIBRARY}")
 message(STATUS "opencv found at ${OpenCV_INCLUDE_DIRS} ${OpenCV_LIBS}")
@@ -126,8 +140,8 @@ message(STATUS "NDI found at ${NDI_LIBRARIES}")
 
 target_link_libraries(ctrecorder PRIVATE
     ${OpenCV_LIBS} ${NDI_LIBRARIES}
-    z bz2 lzma
+    ${EXTRA_LIBS}
     ${FFMPEG_FRAMEWORKS}
     ${AVFORMAT_LIBRARY} ${AVCODEC_LIBRARY} ${AVUTIL_LIBRARY} ${SWSCALE_LIBRARY} ${SWSRESAMPLE_LIBRARY}
-    pthread ${BASLER_LIBS}
+    ${BASLER_LIBS}
 )

@@ -3,6 +3,7 @@
 #include <Processing.NDI.Lib.h>
 #include <atomic>
 #include <chrono>
+#include <cstring> // strerror
 #include <iomanip>
 #include <thread>
 
@@ -117,7 +118,7 @@ void setDigitPixels(uint32_t *screen, int digit, Point &start, int xres,
       }
     }
   }
-  start.x += digitPixels[0].size() * scale + border * 2 - 2;
+  start.x += int(digitPixels[0].size() * scale + border * 2 - 2);
 }
 
 void setArea(uint32_t *screen, int xres, int startX, int startY, int width,
@@ -190,6 +191,7 @@ void overlayTime(uint32_t *screen, int xres, uint64_t ts100ns) {
   }
 }
 
+#ifndef _WIN32
 void setThreadPriority(std::thread &thread, int policy, int priority) {
   pthread_t threadID = thread.native_handle();
   sched_param sch_params;
@@ -199,6 +201,7 @@ void setThreadPriority(std::thread &thread, int policy, int priority) {
               << std::endl;
   }
 }
+#endif
 
 class NdiReader : public VideoReader {
   std::thread ndiThread;
@@ -368,7 +371,9 @@ public:
   int start() override {
     keepRunning = true;
     ndiThread = std::thread([this]() { run(); });
+#ifndef _WIN32
     setThreadPriority(ndiThread, SCHED_FIFO, 10);
+#endif
     return 0;
   };
   int stop() override {
