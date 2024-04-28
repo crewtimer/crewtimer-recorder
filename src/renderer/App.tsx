@@ -1,50 +1,150 @@
-import { MemoryRouter as Router, Routes, Route } from 'react-router-dom';
-import icon from '../../assets/icon.svg';
-import './App.css';
+import {
+  ThemeProvider,
+  useTheme,
+  Theme,
+  StyledEngineProvider,
+  createTheme,
+  styled,
+} from '@mui/material/styles';
+import { BrowserRouter } from 'react-router-dom';
+import Box from '@mui/material/Box';
+import MuiDrawer, { DrawerProps as MuiDrawerProps } from '@mui/material/Drawer';
+import MuiAppBar, { AppBarProps as MuiAppBarProps } from '@mui/material/AppBar';
+import CssBaseline from '@mui/material/CssBaseline';
+import Divider from '@mui/material/Divider';
+import IconButton from '@mui/material/IconButton';
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import SideNavMenu from './components/SideNavMenu';
+import MainPage from './pages/MainPage';
+import { drawerWidth, TopBar, useDrawerOpen } from './components/TopBar';
+import { ConfirmDialog } from './components/ConfirmDialog';
 
-function Hello() {
+createTheme();
+
+const openedMixin = (theme: Theme) => ({
+  width: drawerWidth,
+  transition: theme.transitions.create('width', {
+    easing: theme.transitions.easing.sharp,
+    duration: theme.transitions.duration.enteringScreen,
+  }),
+  overflowX: 'hidden',
+});
+
+const closedMixin = (theme: Theme) => ({
+  transition: theme.transitions.create('width', {
+    easing: theme.transitions.easing.sharp,
+    duration: theme.transitions.duration.leavingScreen,
+  }),
+  overflowX: 'hidden',
+  width: `calc(${theme.spacing(7)} + 1px)`,
+  [theme.breakpoints.up('sm')]: {
+    width: `calc(${theme.spacing(9)} + 1px)`,
+  },
+});
+
+interface DrawerProps extends MuiDrawerProps {
+  open: boolean;
+}
+const Drawer = styled(MuiDrawer, {
+  shouldForwardProp: (prop) => prop !== 'open',
+})<DrawerProps>(({ theme, open }) => ({
+  flexShrink: 0,
+  whiteSpace: 'nowrap',
+  boxSizing: 'border-box',
+  transition: theme.transitions.create('width', {
+    easing: theme.transitions.easing.sharp,
+    duration: open
+      ? theme.transitions.duration.enteringScreen
+      : theme.transitions.duration.leavingScreen,
+  }),
+  overflowX: 'hidden',
+  ...(open
+    ? { width: drawerWidth, '& .MuiDrawer-paper': openedMixin(theme) }
+    : {
+        width: `calc(${theme.spacing(7)} + 1px)`,
+        [theme.breakpoints.up('sm')]: {
+          width: `calc(${theme.spacing(9)} + 1px)`,
+        },
+        '& .MuiDrawer-paper': closedMixin(theme),
+      }),
+}));
+
+const DrawerHeader = styled('div')(({ theme }) => ({
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'flex-end',
+  padding: theme.spacing(0, 1),
+  // necessary for content to be below app bar
+  ...theme.mixins.toolbar,
+}));
+interface AppBarProps extends MuiAppBarProps {
+  open?: boolean;
+}
+const AppBar = styled(MuiAppBar, {
+  shouldForwardProp: (prop) => prop !== 'open',
+})<AppBarProps>(({ theme, open }) => ({
+  zIndex: theme.zIndex.drawer + 1,
+  transition: theme.transitions.create(['width', 'margin'], {
+    easing: theme.transitions.easing.sharp,
+    duration: theme.transitions.duration.leavingScreen,
+  }),
+  ...(open && {
+    marginLeft: drawerWidth,
+    width: `calc(100% - ${drawerWidth}px)`,
+    transition: theme.transitions.create(['width', 'margin'], {
+      easing: theme.transitions.easing.sharp,
+      duration: theme.transitions.duration.enteringScreen,
+    }),
+  }),
+}));
+
+function App() {
+  const [open, setOpen] = useDrawerOpen();
+  const theme = useTheme();
+
   return (
-    <div>
-      <div className="Hello">
-        <img width="200" alt="icon" src={icon} />
-      </div>
-      <h1>electron-react-boilerplate</h1>
-      <div className="Hello">
-        <a
-          href="https://electron-react-boilerplate.js.org/"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <button type="button">
-            <span role="img" aria-label="books">
-              📚
-            </span>
-            Read our docs
-          </button>
-        </a>
-        <a
-          href="https://github.com/sponsors/electron-react-boilerplate"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <button type="button">
-            <span role="img" aria-label="folded hands">
-              🙏
-            </span>
-            Donate
-          </button>
-        </a>
-      </div>
-    </div>
+    <StyledEngineProvider injectFirst>
+      <ThemeProvider theme={theme}>
+        <BrowserRouter>
+          <Box sx={{ display: 'flex' }}>
+            <CssBaseline />
+            <ConfirmDialog />
+            <AppBar position="fixed" open={open}>
+              <TopBar />
+            </AppBar>
+            <Drawer variant="permanent" open={open}>
+              <DrawerHeader>
+                <IconButton onClick={() => setOpen(false)}>
+                  {theme.direction === 'rtl' ? (
+                    <ChevronRightIcon />
+                  ) : (
+                    <ChevronLeftIcon />
+                  )}
+                </IconButton>
+              </DrawerHeader>
+              <Divider />
+              <SideNavMenu />
+            </Drawer>
+            <Box
+              component="main"
+              sx={{
+                flexGrow: 1,
+                p: 3,
+                display: 'flex',
+                height: '100vh',
+                flexDirection: 'column',
+                width: '100%',
+              }}
+            >
+              <DrawerHeader />
+              <MainPage />
+            </Box>
+          </Box>
+        </BrowserRouter>
+      </ThemeProvider>
+    </StyledEngineProvider>
   );
 }
 
-export default function App() {
-  return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Hello />} />
-      </Routes>
-    </Router>
-  );
-}
+export default App;
