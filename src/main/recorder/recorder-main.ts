@@ -1,5 +1,4 @@
 import { nativeVideoRecorder } from 'crewtimer_video_recorder';
-import { ipcMain } from 'electron';
 
 export function startRecording() {
   try {
