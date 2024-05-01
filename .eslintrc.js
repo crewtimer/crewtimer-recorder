@@ -16,6 +16,8 @@ module.exports = {
     'react/function-component-definition': 'off',
     'react/require-default-props': 'off',
     'no-nested-ternary': 'off',
+    'no-console': 'off',
+    'import/prefer-default-export': 'off',
   },
   parserOptions: {
     ecmaVersion: 2022,
@@ -33,5 +35,8 @@ module.exports = {
     'import/parsers': {
       '@typescript-eslint/parser': ['.ts', '.tsx'],
     },
+  },
+  globals: {
+    NodeJS: true,
   },
 };

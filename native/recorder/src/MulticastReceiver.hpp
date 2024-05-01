@@ -51,7 +51,7 @@ public:
    * Starts the listening thread to receive multicast messages.
    * If the listener is already running, this method has no effect.
    */
-  void start();
+  std::string start();
 
   /**
    * Stops the listening thread and cleans up resources.

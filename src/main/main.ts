@@ -15,8 +15,8 @@ import log from 'electron-log';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
 import './store/store';
-
-import { startRecording, stopRecording } from './recorder/recorder-main';
+import './msgbus/msgbus-main';
+import { stopRecording, initRecorder } from './recorder/recorder-main';
 
 class AppUpdater {
   constructor() {
@@ -84,6 +84,7 @@ const createWindow = async () => {
     if (!mainWindow) {
       throw new Error('"mainWindow" is not defined');
     }
+    initRecorder();
     if (process.env.START_MINIMIZED) {
       mainWindow.minimize();
     } else {
@@ -91,7 +92,11 @@ const createWindow = async () => {
     }
   });
 
-  startRecording();
+  // startRecording();
+
+  process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;

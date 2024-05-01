@@ -39,8 +39,8 @@ public:
     std::cout << "libavutil version (textual): " << av_version_info()
               << std::endl;
   }
-  int openVideoStream(std::string directory, std::string filename, int width,
-                      int height, float fps) {
+  std::string openVideoStream(std::string directory, std::string filename,
+                              int width, int height, float fps) {
     frame_index = 0;
     outputFile = filename + ".mp4";
     tmpFile = directory + "/" + "tmp-" + outputFile;
@@ -60,8 +60,9 @@ public:
                                      tmpFile.c_str());
     }
     if (!pFormatCtx) {
-      std::cerr << "Could not allocate format context" << std::endl;
-      return 1;
+      auto msg = "Could not allocate format context";
+      std::cerr << msg << std::endl;
+      return msg;
     }
 
     const AVOutputFormat *oformat = pFormatCtx->oformat;
@@ -91,21 +92,24 @@ public:
         std::cout << "Using codec " << codec->name << std::endl;
     }
     if (!codec) {
-      std::cerr << "Codec for mp4 not found" << std::endl;
-      return 1;
+      auto msg = "Codec for mp4 not found";
+      std::cerr << msg << std::endl;
+      return msg;
     }
 
     video_st = avformat_new_stream(pFormatCtx, NULL);
     if (!video_st) {
-      std::cerr << "Could not allocate video stream" << std::endl;
-      return 1;
+      auto msg = "Could not allocate video stream";
+      std::cerr << msg << std::endl;
+      return msg;
     }
     video_st->id = pFormatCtx->nb_streams - 1;
 
     pCodecCtx = avcodec_alloc_context3(codec);
     if (!pCodecCtx) {
-      std::cerr << "Could not allocate video codec context" << std::endl;
-      return 1;
+      auto msg = "Could not allocate video codec context";
+      std::cerr << msg << std::endl;
+      return msg;
     }
 
     //??c->codec_id = codec_id;
@@ -135,8 +139,9 @@ public:
     // av_dict_set(&codec_options, "profile", "main", 0);
 
     if (avcodec_open2(pCodecCtx, codec, &codec_options) < 0) {
-      std::cerr << "Could not open codec" << std::endl;
-      return 1;
+      auto msg = "Could not open codec";
+      std::cerr << msg << std::endl;
+      return msg;
     }
 
     av_dict_free(&codec_options);
@@ -147,34 +152,39 @@ public:
 
     if (!(pFormatCtx->oformat->flags & AVFMT_NOFILE)) {
       if (avio_open(&pFormatCtx->pb, tmpFile.c_str(), AVIO_FLAG_WRITE) < 0) {
-        std::cerr << "Could not open '" << tmpFile << "'" << std::endl;
-        return 1;
+        auto msg = "Could not open " + tmpFile;
+        std::cerr << msg << std::endl;
+        return msg;
       }
     }
 
     if (avformat_write_header(pFormatCtx, NULL) < 0) {
-      std::cerr << "Error occurred when opening output file" << std::endl;
-      return 1;
+      auto msg = "Error occurred when opening output file";
+      std::cerr << msg << std::endl;
+      return msg;
     }
 
     pFrame = av_frame_alloc();
     if (!pFrame) {
-      std::cerr << "Could not allocate video frame" << std::endl;
-      return 1;
+      auto msg = "Could not allocate video frame";
+      std::cerr << msg << std::endl;
+      return msg;
     }
     pFrame->format = pCodecCtx->pix_fmt;
     pFrame->width = pCodecCtx->width;
     pFrame->height = pCodecCtx->height;
     pFrame->color_range = AVCOL_RANGE_MPEG;
     if (av_frame_get_buffer(pFrame, 0) < 0) {
-      std::cerr << "Could not allocate the video frame data" << std::endl;
-      return 1;
+      auto msg = "Could not allocate the video frame data";
+      std::cerr << msg << std::endl;
+      return msg;
     }
 
     pkt = av_packet_alloc();
     if (!pkt) {
-      std::cerr << "Error allocating AVPacket" << std::endl;
-      return 1;
+      auto msg = "Error allocating AVPacket";
+      std::cerr << msg << std::endl;
+      return msg;
     }
     pkt->data = NULL;
     pkt->size = 0;
@@ -191,10 +201,10 @@ public:
                        SWS_BICUBIC, NULL, NULL, NULL);
 #endif
 
-    return 0;
+    return "";
   }
 
-  int writeVideoFrame(FramePtr video_frame) {
+  std::string writeVideoFrame(FramePtr video_frame) {
 
     // Convert the image format from NDI's format to the codec's format
 #ifdef NDI_BGRX
@@ -213,8 +223,9 @@ public:
         av_rescale_q(frame_index, pCodecCtx->time_base, video_st->time_base);
 
     if (avcodec_send_frame(pCodecCtx, pFrame) < 0) {
-      std::cerr << "Error sending a frame for encoding" << std::endl;
-      return 1;
+      auto msg = "Error sending a frame for encoding";
+      std::cerr << msg << std::endl;
+      return msg;
     }
 
     while (1) {
@@ -222,49 +233,58 @@ public:
       if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
         break;
       else if (ret < 0) {
-        std::cerr << "Error during encoding" << std::endl;
-        return 1;
+        auto msg = "Error during encoding";
+        std::cerr << msg << std::endl;
+        return msg;
       }
 
       if (av_interleaved_write_frame(pFormatCtx, pkt) < 0) {
-        std::cerr << "Error while writing video frame." << std::endl;
-        return 1;
+        auto msg = "Error while writing video frame.";
+        std::cerr << msg << std::endl;
+        return msg;
       }
       av_packet_unref(pkt);
     }
 
-    return 0;
+    return "";
   }
 
-  int stop() {
+  std::string stop() {
     if (video_st == nullptr) {
-      return 0;
+      return "";
     }
     // Flush the encoder
     if (avcodec_send_frame(pCodecCtx, NULL) < 0) {
-      std::cerr << "Error sending a frame for encoding" << std::endl;
-      return 1;
+      auto msg = "Error sending a frame for encoding";
+      std::cerr << msg << std::endl;
+      return msg;
     }
 
-    while (1) {
-      int ret = avcodec_receive_packet(pCodecCtx, pkt);
-      if (ret == AVERROR_EOF)
-        break;
-      else if (ret < 0) {
-        std::cerr << "Error during encoding" << std::endl;
-        return 1;
-      }
-      if (av_interleaved_write_frame(pFormatCtx, pkt) < 0) {
-        std::cerr << "Error while writing video frame." << std::endl;
-        return 1;
-      }
-      av_packet_unref(pkt);
-    }
-    // Properly close the output file
-    av_write_trailer(pFormatCtx);
+    // If pkt is null, it is uninitialized so we haven't read anything yet.
+    if (pkt) {
 
-    if (!(pFormatCtx->oformat->flags & AVFMT_NOFILE)) {
-      avio_closep(&pFormatCtx->pb);
+      while (1) {
+        int ret = avcodec_receive_packet(pCodecCtx, pkt);
+        if (ret == AVERROR_EOF)
+          break;
+        else if (ret < 0) {
+          auto msg = "Error during encoding";
+          std::cerr << msg << std::endl;
+          return msg;
+        }
+        if (av_interleaved_write_frame(pFormatCtx, pkt) < 0) {
+          auto msg = "Error while writing video frame.";
+          std::cerr << msg << std::endl;
+          return msg;
+        }
+        av_packet_unref(pkt);
+      }
+      // Properly close the output file
+      av_write_trailer(pFormatCtx);
+
+      if (!(pFormatCtx->oformat->flags & AVFMT_NOFILE)) {
+        avio_closep(&pFormatCtx->pb);
+      }
     }
 
     avcodec_free_context(&pCodecCtx);
@@ -280,10 +300,11 @@ public:
       //           << outputFile << std::endl;
     } else {
       // If renaming failed, print an error message
-      perror("Error renaming file");
-      return 1;
+      auto msg = "Error renaming file";
+      std::cerr << msg << std::endl;
+      return msg;
     }
-    return 0;
+    return "";
   }
   ~FFVideoRecorder() {}
 };

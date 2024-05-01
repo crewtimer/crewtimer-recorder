@@ -34,17 +34,76 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
     return ret;
   }
 
-  auto op = args.Get("op").As<Napi::String>().Utf8Value();
-  if (op == "start-recording") {
-    recorder = std::shared_ptr<VideoController>(
-        new VideoController("", "ffmpeg", "./", "CT_", 10));
-    recorder->start();
-  } else if (op == "stop-recording") {
-    if (recorder) {
-      recorder->stop();
-      recorder = nullptr;
+  try {
+    auto op = args.Get("op").As<Napi::String>().Utf8Value();
+    if (op == "start-recording") {
+      if (!args.Has("props")) {
+        Napi::TypeError::New(env, "Missing props field")
+            .ThrowAsJavaScriptException();
+        return ret;
+      }
+
+      auto props = args.Get("props").As<Napi::Object>();
+      std::vector<std::string> prop_names = {
+          "recordingFolder", "recordingPrefix", "recordingInterval"};
+      for (const auto &name : prop_names) {
+        if (!props.Has(name.c_str())) {
+          Napi::TypeError::New(env, "Missing recordingProp")
+              .ThrowAsJavaScriptException();
+          return ret;
+        }
+      }
+      auto folder = props.Get("recordingFolder").As<Napi::String>().Utf8Value();
+      auto prefix = props.Get("recordingPrefix").As<Napi::String>().Utf8Value();
+      auto interval =
+          props.Get("recordingInterval").As<Napi::Number>().Uint32Value();
+      recorder = std::shared_ptr<VideoController>(
+          new VideoController("", "ffmpeg", folder, prefix, interval));
+      auto result = recorder->start();
+      if (!result.empty()) {
+        std::cerr << "Error: " << result << std::endl;
+        ret.Set("status", Napi::String::New(env, "Fail"));
+        ret.Set("error", Napi::String::New(env, result));
+      } else {
+        std::cout << "recording started" << std::endl;
+      }
+
+      return ret;
+    } else if (op == "stop-recording") {
+      if (recorder) {
+        auto err = recorder->stop();
+        std::cerr << "Recorder stoped with status: " << err << std::endl;
+        recorder = nullptr;
+      }
+      return ret;
+    } else if (op == "recording-status") {
+      if (recorder) {
+        auto status = recorder->getStatus();
+        ret.Set("status", Napi::String::New(env, "OK"));
+        ret.Set("error", Napi::String::New(env, status.error));
+        ret.Set("recording", Napi::Boolean::New(env, status.recording));
+        ret.Set("recordingDuration",
+                Napi::Number::New(env, status.recordingDuration));
+        auto frameProcessor = Napi::Object::New(env);
+        ret.Set("frameProcessor", frameProcessor);
+        frameProcessor.Set(
+            "recording",
+            Napi::Boolean::New(env, status.frameProcessor.recording));
+        frameProcessor.Set("error",
+                           Napi::String::New(env, status.frameProcessor.error));
+        frameProcessor.Set(
+            "filename", Napi::String::New(env, status.frameProcessor.filename));
+        frameProcessor.Set("width",
+                           Napi::Number::New(env, status.frameProcessor.width));
+        frameProcessor.Set(
+            "height", Napi::Number::New(env, status.frameProcessor.height));
+        frameProcessor.Set("fps",
+                           Napi::Number::New(env, status.frameProcessor.fps));
+      } else {
+        ret.Set("status", Napi::String::New(env, "OK"));
+      }
+      return ret;
     }
-  }
 #if 0
   if (op == "closeFile") {
     if (!args.Has("file")) {
@@ -177,8 +236,16 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
     return ret;
   }
 #endif
-  Napi::TypeError::New(env, "Unrecognized op field")
-      .ThrowAsJavaScriptException();
+    Napi::TypeError::New(env, "Unrecognized op field")
+        .ThrowAsJavaScriptException();
+  } catch (const std::exception &e) {
+    // Catch standard C++ exceptions and convert them to JavaScript errors
+    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+  } catch (...) {
+    // Catch all other types of exceptions and throw a generic JavaScript error
+    Napi::Error::New(env, "An unknown error occurred")
+        .ThrowAsJavaScriptException();
+  }
 
   return ret;
 }

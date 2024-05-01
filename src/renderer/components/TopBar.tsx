@@ -3,6 +3,7 @@ import { UseDatum } from 'react-usedatum';
 import MenuIcon from '@mui/icons-material/Menu';
 import logo from '../../../assets/icons/crewtimer.svg';
 import HamburgerMenu from './HamburgerMenu';
+import RecordingStatus from '../recorder/RecordingStatus';
 
 export const drawerWidth = 240;
 export const [useDrawerOpen] = UseDatum(false);
@@ -35,15 +36,13 @@ export function TopBar() {
         height="40"
         style={{ marginLeft: 8, marginRight: 8 }}
       />
-      <Typography
-        component="h1"
-        variant="h6"
-        color="inherit"
-        noWrap
-        sx={{ flexGrow: 1, textAlign: 'center' }}
-      >
+      <Typography component="h1" variant="h6" color="inherit" noWrap>
         CrewTimer Video Recorder
       </Typography>
+      <Box sx={{ flexGrow: 1 }} />
+      <Box sx={{ alignItems: 'center' }}>
+        <RecordingStatus />
+      </Box>
       <Box
         sx={{
           width: 48 + 8 + 8,

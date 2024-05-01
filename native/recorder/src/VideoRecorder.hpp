@@ -24,10 +24,11 @@ typedef std::shared_ptr<Frame> FramePtr;
 
 class VideoRecorder {
 public:
-  virtual int openVideoStream(std::string directory, std::string filename,
-                              int width, int height, float fps) = 0;
-  virtual int writeVideoFrame(FramePtr frame) = 0;
-  virtual int stop() = 0;
+  virtual std::string openVideoStream(std::string directory,
+                                      std::string filename, int width,
+                                      int height, float fps) = 0;
+  virtual std::string writeVideoFrame(FramePtr frame) = 0;
+  virtual std::string stop() = 0;
   virtual ~VideoRecorder() {}
 };
 

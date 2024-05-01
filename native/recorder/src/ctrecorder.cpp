@@ -145,16 +145,18 @@ int main(int argc, char *argv[]) {
     } else if (arg == "-daemon" || arg == "-u") {
       args[arg] = "true";
     } else {
-      std::cerr << "Unknown or incomplete option: " << arg << std::endl;
-      return 1;
+      auto msg = "Unknown or incomplete option: " + arg;
+      std::cerr << msg << std::endl;
+      return -1;
     }
   }
 
   // Check for required arguments
   if (args.find("-encoder") == args.end() || args.find("-dir") == args.end() ||
       args.find("-prefix") == args.end() || args.find("-i") == args.end()) {
-    std::cerr << "Missing required arguments." << std::endl;
-    return 1;
+    auto msg = "Missing required arguments.";
+    std::cerr << msg << std::endl;
+    return -1;
   }
 
   if (args["-u"] == "true") {
@@ -162,7 +164,7 @@ int main(int argc, char *argv[]) {
               << "> -dir <dir> -prefix "
                  "<prefix> -i <interval secs> -ndi <name> -daemon"
               << std::endl;
-    return 0;
+    return -1;
   }
 
   if (args["-daemon"] == "true") {
@@ -183,6 +185,10 @@ int main(int argc, char *argv[]) {
 
   auto startShutdown = [recorder]() { recorder->stop(); };
   stopHandler = startShutdown;
+
+  std::this_thread::sleep_for(std::chrono::seconds(4));
+  recorder->stop();
+
   while (true) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
@@ -212,9 +218,9 @@ int main(int argc, char *argv[]) {
   testrecorder(videoRecorder);
 
   if (!videoRecorder) {
-    std::cout << "Unknown encoder: " << encoder << ". Must be " << recorders
-              << std::endl;
-    return 1;
+    auto msg = "Unknown encoder type: " + encoder;
+    std::cerr << msg << std::endl;
+    return msg;
   }
 
   // "output.mp4"; // cv::VideoWriter::fourcc('m', 'p', '4', 'v')

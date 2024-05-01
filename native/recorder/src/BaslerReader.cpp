@@ -37,7 +37,8 @@ class BaslerReader : public VideoReader, public CImageEventHandler {
 
 public:
   BaslerReader() { formatConverter.OutputPixelFormat = PixelType_BGR8packed; }
-  virtual int open(std::shared_ptr<FrameProcessor> frameProcessor) override {
+  virtual std::string
+  open(std::shared_ptr<FrameProcessor> frameProcessor) override {
     int exitCode = 0;
     PylonInitialize();
 
@@ -168,7 +169,7 @@ public:
     while (keepRunning) {
       std::this_thread::sleep_for(std::chrono::seconds(1));
     }
-    return 0;
+    return "";
   }
 
   int run1() {
@@ -215,17 +216,17 @@ public:
 
     // Releases all pylon resources.
     PylonTerminate();
-    return 0;
+    return "";
   }
-  virtual int start() override {
+  virtual std::string start() override {
     keepRunning = true;
     readerThread = std::thread([this]() { run(); });
     readerThread.join();
-    return 0;
+    return "";
   };
-  virtual int stop() override {
+  virtual std::string stop() override {
     keepRunning = false;
-    return 0;
+    return "";
   };
   virtual ~BaslerReader() {}
 };

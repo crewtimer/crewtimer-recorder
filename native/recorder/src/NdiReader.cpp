@@ -222,11 +222,11 @@ class NdiReader : public VideoReader {
     }
   };
 
-  int open(std::shared_ptr<FrameProcessor> frameProcessor) override {
+  std::string open(std::shared_ptr<FrameProcessor> frameProcessor) override {
     // Create a finder
     NDIlib_find_instance_t pNDI_find = NDIlib_find_create_v2();
     if (!pNDI_find)
-      return -1;
+      return "NDIlib_find_create_v2() failed";
 
     // Wait until there is a source
 
@@ -264,7 +264,7 @@ class NdiReader : public VideoReader {
     // We now have at least one source, so we create a receiver to look at it.
     pNDI_recv = NDIlib_recv_create_v3(&recv_create);
     if (!pNDI_recv)
-      return -1;
+      return "NDIlib_recv_create_v3() failed";
 
     std::cout << "Connecting to " << p_source->p_ndi_name << " at "
               << p_source->p_ip_address << std::endl;
@@ -277,7 +277,7 @@ class NdiReader : public VideoReader {
 
     this->frameProcessor = frameProcessor;
 
-    return 0;
+    return "";
   }
 
   void run() {
@@ -368,18 +368,18 @@ class NdiReader : public VideoReader {
 
 public:
   NdiReader(const std::string srcName) : srcName(srcName) {}
-  int start() override {
+  std::string start() override {
     keepRunning = true;
     ndiThread = std::thread([this]() { run(); });
 #ifndef _WIN32
     setThreadPriority(ndiThread, SCHED_FIFO, 10);
 #endif
-    return 0;
+    return "";
   };
-  int stop() override {
+  std::string stop() override {
     keepRunning = false;
     ndiThread.join();
-    return 0;
+    return "";
   }
 };
 

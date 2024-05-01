@@ -9,8 +9,8 @@ class OpenCVRecorder : public VideoRecorder {
   std::string tmpFile;
 
 public:
-  int openVideoStream(std::string directory, std::string filename, int width,
-                      int height, float fps) {
+  std::string openVideoStream(std::string directory, std::string filename,
+                              int width, int height, float fps) {
     outputFile = filename + ".mp4";
     tmpFile = directory + "/" + "tmp-" + outputFile;
     outputFile = directory + "/" + outputFile;
@@ -29,9 +29,9 @@ public:
                         fps, // out.mp4 60% 18MB/Min
                         cv::Size(width, height));
     active = true;
-    return 0;
+    return "";
   }
-  int writeVideoFrame(FramePtr video_frame) {
+  std::string writeVideoFrame(FramePtr video_frame) {
 
     switch (video_frame->pixelFormat) {
 
@@ -63,9 +63,9 @@ public:
     }
     }
 
-    return 0;
+    return "";
   }
-  int stop() {
+  std::string stop() {
     if (active) {
       this->video_writer.release();
       this->frame.release();
@@ -77,10 +77,11 @@ public:
       //           << outputFile << std::endl;
     } else {
       // If renaming failed, print an error message
-      perror("Error renaming file");
-      return 1;
+      auto msg = "Error renaming file";
+      std::cerr << msg << std::endl;
+      return msg;
     }
-    return 0;
+    return "";
   }
   ~OpenCVRecorder() { stop(); }
 };

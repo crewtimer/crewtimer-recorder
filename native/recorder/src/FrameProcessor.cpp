@@ -12,23 +12,26 @@ FrameProcessor::FrameProcessor(const std::string directory,
                                int durationSecs)
     : directory(directory), prefix(prefix), videoRecorder(videoRecorder),
       durationSecs(durationSecs), running(true),
-      captureThread(&FrameProcessor::captureFrames, this),
-      processThread(&FrameProcessor::processFrames, this) {}
+      processThread(&FrameProcessor::processFrames, this) {
+  errorMessage = "";
+}
 
 FrameProcessor::~FrameProcessor() { stop(); }
 
 void FrameProcessor::stop() {
   running = false;
   frameAvailable.notify_all();
-  if (captureThread.joinable())
-    captureThread.join();
+
   if (processThread.joinable())
     processThread.join();
   while (!frameQueue.empty()) {
     frameQueue.pop();
   }
 
-  videoRecorder->stop();
+  if (videoRecorder) {
+    videoRecorder->stop();
+  }
+  videoRecorder = nullptr;
 }
 
 /**
@@ -37,19 +40,19 @@ void FrameProcessor::stop() {
  */
 void FrameProcessor::splitFile() { splitRequested = true; }
 
+FrameProcessor::StatusInfo FrameProcessor::getStatus() {
+  statusInfo.recording = running;
+  statusInfo.error = errorMessage;
+  return statusInfo;
+}
+
 void FrameProcessor::addFrame(FramePtr video_frame) {
   std::unique_lock<std::mutex> lock(queueMutex);
+  if (!running) {
+    return;
+  }
   frameQueue.push(video_frame);
   frameAvailable.notify_one();
-}
-void FrameProcessor::captureFrames() {
-  while (running) {
-    std::this_thread::sleep_for(
-        std::chrono::milliseconds(1000)); // Simulate frame capture time
-    // std::unique_lock<std::mutex> lock(queueMutex);
-    // frameQueue.push(Frame(frameCounter++));
-    // frameAvailable.notify_one();
-  }
 }
 
 void FrameProcessor::processFrames() {
@@ -68,6 +71,7 @@ void FrameProcessor::processFrames() {
       lock.unlock();
       const auto fps =
           (float)video_frame->frame_rate_N / (float)video_frame->frame_rate_D;
+
       if (nextStartTime == 0) {
         uint64_t complete_periods =
             video_frame->timestamp / (durationSecs * 10000000);
@@ -112,10 +116,15 @@ void FrameProcessor::processFrames() {
         ss << prefix << std::put_time(now_tm, "%H_%M_%S");
 
         std::string filename = ss.str();
+        statusInfo.filename = filename;
+        statusInfo.fps = fps;
+        statusInfo.width = video_frame->xres;
+        statusInfo.height = video_frame->yres;
 
         const auto err = videoRecorder->openVideoStream(
             directory, filename, video_frame->xres, video_frame->yres, fps);
-        if (err) {
+        if (!err.empty()) {
+          errorMessage = err;
           running = false;
           break;
         }
@@ -141,7 +150,12 @@ void FrameProcessor::processFrames() {
         frameCount = 0;
       }
       lastTS = video_frame->timestamp;
-      videoRecorder->writeVideoFrame(video_frame);
+      auto err = videoRecorder->writeVideoFrame(video_frame);
+      if (!err.empty()) {
+        errorMessage = err;
+        running = false;
+        break;
+      }
       frameCount++;
 
       lock.lock();

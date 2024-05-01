@@ -17,6 +17,15 @@
 class FrameProcessor {
 
 public:
+  struct StatusInfo {
+    bool recording;
+    std::string error;
+    std::string filename;
+    std::uint32_t width;
+    std::uint32_t height;
+    float fps;
+  };
+
   /**
    * Constructor for FrameProcessor.
    * Initializes and starts capture and process threads.
@@ -44,7 +53,11 @@ public:
    */
   void splitFile();
 
+  StatusInfo getStatus();
+
 private:
+  StatusInfo statusInfo;
+  std::string errorMessage;
   const std::string directory;
   const std::string prefix;
   std::shared_ptr<VideoRecorder> videoRecorder;
@@ -57,8 +70,7 @@ private:
                                           ///< when frames are available.
   std::atomic<bool>
       running; ///< Atomic flag to control the running state of threads.
-  std::thread captureThread,
-      processThread; ///< Threads for capturing and processing frames.
+  std::thread processThread; ///< Threads for capturing and processing frames.
 
   /**
    * Thread function to capture frames.

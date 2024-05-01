@@ -1,5 +1,6 @@
 import { Box, FormControlLabel, Checkbox } from '@mui/material';
 import { useHello, useWorld } from '../util/UseSettings';
+import { startRecording, stopRecording } from '../recorder/RecorderApi';
 
 const HomePage = () => {
   const [hello, setHello] = useHello();
@@ -15,6 +16,9 @@ const HomePage = () => {
           <Checkbox
             checked={hello}
             onChange={() => {
+              (hello ? stopRecording : startRecording)()
+                .then((result) => console.log(JSON.stringify(result)))
+                .catch((err) => console.error(err));
               setHello((current) => !current);
             }}
           />

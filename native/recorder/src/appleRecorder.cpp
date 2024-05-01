@@ -154,8 +154,8 @@ class AppleRecorder : public VideoRecorder {
   }
 
 public:
-  int openVideoStream(std::string directory, std::string filename, int width,
-                      int height, float fps) {
+  std::string openVideoStream(std::string directory, std::string filename,
+                              int width, int height, float fps) {
     this->width = width;
     this->height = height;
     this->frameIndex = 0;
@@ -203,8 +203,9 @@ public:
     // Open the output file
     this->outputFileHandle = fopen(tmpFile.c_str(), "wb");
     if (this->outputFileHandle == NULL) {
-      printf("Failed to open output file.\n");
-      return 1;
+      auto msg = "Failed to open output file.";
+      std::cerr << msg << std::endl;
+      return msg;
     }
 
     // Start the compression session
@@ -222,9 +223,9 @@ public:
     if (b != NULL)
       CFRelease(b);
 
-    return 0;
+    return "";
   }
-  int writeVideoFrame(NDIlib_video_frame_v2_t &video_frame) {
+  std::string writeVideoFrame(NDIlib_video_frame_v2_t &video_frame) {
     std::cout << "Write Frame #" << frameIndex
               << ", l=" << video_frame.line_stride_in_bytes * video_frame.yres
               << std::endl;
@@ -247,10 +248,10 @@ public:
 
     // Release the pixel buffer
     CVPixelBufferRelease(pixelBuffer);
-    return 0;
+    return "";
   }
 
-  int closeVideoStream() {
+  std::string closeVideoStream() {
     if (active) {
 
       // Complete the compression session
@@ -271,11 +272,12 @@ public:
         //           << outputFile << std::endl;
       } else {
         // If renaming failed, print an error message
-        perror("Error renaming file");
-        return 1;
+        auto msg = "Error renaming file";
+        std::stderr << msg << std::endl;
+        return msg;
       }
     }
-    return 0;
+    return "";
   }
   ~AppleRecorder() { closeVideoStream(); }
 };

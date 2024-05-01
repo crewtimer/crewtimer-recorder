@@ -33,11 +33,12 @@ void MulticastReceiver::setMessageCallback(MessageCallback callback) {
  * Starts the listening thread for receiving multicast messages.
  * If already running, does nothing.
  */
-void MulticastReceiver::start() {
+std::string MulticastReceiver::start() {
   if (running)
-    return;
+    return "";
   running = true;
   listenerThread = std::thread(&MulticastReceiver::listen, this);
+  return "";
 }
 
 /**
