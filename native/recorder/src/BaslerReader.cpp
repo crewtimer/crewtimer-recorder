@@ -39,7 +39,7 @@ public:
   BaslerReader() { formatConverter.OutputPixelFormat = PixelType_BGR8packed; }
   virtual std::string
   open(std::shared_ptr<FrameProcessor> frameProcessor) override {
-    int exitCode = 0;
+    std::string ret = "";
     PylonInitialize();
 
     try {
@@ -107,10 +107,11 @@ public:
 
     } catch (const GenericException &e) {
       // Error handling.
-      cerr << "An exception occurred." << endl << e.GetDescription() << endl;
-      exitCode = 1;
+      auto msg = std::string("An exception occurred.") + e.GetDescription();
+      cerr << msg << endl;
+      ret = msg;
     }
-    return exitCode;
+    return ret;
   };
 
   std::chrono::steady_clock::time_point startTime;
@@ -169,7 +170,7 @@ public:
     while (keepRunning) {
       std::this_thread::sleep_for(std::chrono::seconds(1));
     }
-    return "";
+    return 0;
   }
 
   int run1() {
@@ -216,7 +217,7 @@ public:
 
     // Releases all pylon resources.
     PylonTerminate();
-    return "";
+    return 0;
   }
   virtual std::string start() override {
     keepRunning = true;

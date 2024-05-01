@@ -118,7 +118,7 @@ if(ENABLE_BASLER)
     find_package(pylon 7.3.1 REQUIRED)
     set(BASLER_LIBS pylon::pylon)
     list(APPEND SOURCE_FILES
-        BaslerReader.cpp
+        src/BaslerReader.cpp
     )
 endif()
 

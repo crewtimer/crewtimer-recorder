@@ -106,7 +106,15 @@ public:
         new FrameProcessor(dir, prefix, videoRecorder, interval));
 
     // auto reader = createBaslerReader();
+#ifdef HAVE_BASLER
+    if (srcName == "basler") { // basler camera
+      videoReader = createBaslerReader();
+    } else {
+      videoReader = createNdiReader(srcName);
+    }
+#else
     videoReader = createNdiReader(srcName);
+#endif
     retval = videoReader->open(frameProcessor);
     if (!retval.empty()) {
       return retval;

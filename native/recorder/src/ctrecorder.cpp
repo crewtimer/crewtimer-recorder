@@ -133,6 +133,7 @@ int main(int argc, char *argv[]) {
   args["-i"] = "10";
   args["-daemon"] = "false";
   args["-u"] = "false";
+  args["-basler"] = "false";
 
   // Parse command-line arguments
   for (int i = 1; i < argc; ++i) {
@@ -142,7 +143,7 @@ int main(int argc, char *argv[]) {
         i + 1 < argc) {
       args[arg] =
           argv[++i]; // Increment 'i' to skip next argument since it's a value
-    } else if (arg == "-daemon" || arg == "-u") {
+    } else if (arg == "-daemon" || arg == "-u" || arg == "-basler") {
       args[arg] = "true";
     } else {
       auto msg = "Unknown or incomplete option: " + arg;
@@ -160,10 +161,14 @@ int main(int argc, char *argv[]) {
   }
 
   if (args["-u"] == "true") {
+    std::string basler = "";
+#ifdef HAVE_BASLER
+    basler = " -basler";
+#endif
     std::cout << "Usage: -encoder <" << recorders
               << "> -dir <dir> -prefix "
                  "<prefix> -i <interval secs> -ndi <name> -daemon"
-              << std::endl;
+              << basler << std::endl;
     return -1;
   }
 
@@ -185,9 +190,6 @@ int main(int argc, char *argv[]) {
 
   auto startShutdown = [recorder]() { recorder->stop(); };
   stopHandler = startShutdown;
-
-  std::this_thread::sleep_for(std::chrono::seconds(4));
-  recorder->stop();
 
   while (true) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
