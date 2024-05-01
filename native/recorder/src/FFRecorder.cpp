@@ -24,6 +24,7 @@ class FFVideoRecorder : public VideoRecorder {
   AVStream *video_st;
   std::string outputFile;
   std::string tmpFile;
+  std::string codecName;
 
 public:
   FFVideoRecorder() {
@@ -81,20 +82,22 @@ public:
       codec = avcodec_find_encoder_by_name(
           name.c_str()); // Convert std::string to const char*
       if (codec) {
-        std::cout << "Found " << name << std::endl;
         break;
       }
     }
 
     if (!codec) {
       codec = avcodec_find_encoder(oformat->video_codec);
-      if (codec)
-        std::cout << "Using codec " << codec->name << std::endl;
     }
     if (!codec) {
       auto msg = "Codec for mp4 not found";
       std::cerr << msg << std::endl;
       return msg;
+    }
+
+    if (codecName.empty()) {
+      codecName = codec->name;
+      std::cerr << "Using codec " << codecName << std::endl;
     }
 
     video_st = avformat_new_stream(pFormatCtx, NULL);
@@ -124,6 +127,10 @@ public:
     pCodecCtx->max_b_frames = 0;
     pCodecCtx->thread_count = 2;
     pCodecCtx->gop_size = 12;
+    if (std::string("h264_videotoolbox") == codec->name) {
+      pCodecCtx->qmin = -1;
+      pCodecCtx->qmax = -1;
+    }
 
     /* Some formats want stream headers to be separate. */
     // if (oc->oformat->flags & AVFMT_GLOBALHEADER)
@@ -188,36 +195,45 @@ public:
     }
     pkt->data = NULL;
     pkt->size = 0;
-
-#ifdef NDI_BGRX
-    sws_ctx = sws_getContext(
-        pCodecCtx->width, pCodecCtx->height, AV_PIX_FMT_BGRA, pCodecCtx->width,
-        pCodecCtx->height, pCodecCtx->pix_fmt, SWS_BICUBIC, NULL, NULL, NULL);
-#else
-    sws_ctx =
-        sws_getContext(pCodecCtx->width, pCodecCtx->height, AV_PIX_FMT_UYVY422,
-                       pCodecCtx->width, pCodecCtx->height,
-                       AV_PIX_FMT_YUV420P, // YUV 4:2:0 for H.264
-                       SWS_BICUBIC, NULL, NULL, NULL);
-#endif
+    sws_ctx = nullptr;
 
     return "";
   }
 
   std::string writeVideoFrame(FramePtr video_frame) {
+    int inLinesize[1] = {2 * video_frame->xres};
+    if (sws_ctx == nullptr) {
+      auto src_fmt = AV_PIX_FMT_UYVY422;
+      switch (video_frame->pixelFormat) {
+      case Frame::PixelFormat::RGBX:
+        src_fmt = AV_PIX_FMT_RGBA;
+        inLinesize[0] = {4 * video_frame->xres};
+        break;
+      case Frame::PixelFormat::BGR:
+        src_fmt = AV_PIX_FMT_BGR24;
+        inLinesize[0] = {3 * video_frame->xres};
+        break;
+      case Frame::PixelFormat::UYVY422:
+      default:
+        // UYVY422 format, where each pixel consists
+        // of two chrominance (U and V) values and two
+        // luminance (Y) values.
+        src_fmt = AV_PIX_FMT_UYVY422;
+        break;
+      }
+      sws_ctx = sws_getContext(
+          pCodecCtx->width, pCodecCtx->height, src_fmt, pCodecCtx->width,
+          pCodecCtx->height,
+          pCodecCtx->pix_fmt, // AV_PIX_FMT_YUV420P, // YUV 4:2:0 for H.264
+          SWS_BICUBIC, NULL, NULL, NULL);
+    }
 
-    // Convert the image format from NDI's format to the codec's format
-#ifdef NDI_BGRX
+    // Convert the image format from receiver format to the codec's format
+
     uint8_t *inData[1] = {video_frame->data};
-    int inLinesize[1] = {4 * video_frame->xres}; // BGRA
     sws_scale(sws_ctx, inData, inLinesize, 0, pCodecCtx->height, pFrame->data,
               pFrame->linesize);
-#else
-    uint8_t *inData[1] = {video_frame->data};
-    int inLinesize[1] = {2 * video_frame->xres}; // 2 bytes per pixel for UYVY
-    sws_scale(sws_ctx, inData, inLinesize, 0, pCodecCtx->height, pFrame->data,
-              pFrame->linesize);
-#endif
+
     pFrame->pts = frame_index++;
     pFrame->pts =
         av_rescale_q(frame_index, pCodecCtx->time_base, video_st->time_base);
