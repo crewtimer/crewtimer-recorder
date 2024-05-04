@@ -4,6 +4,7 @@
 #include <iostream>
 #include <sstream>
 
+#include "SystemEventQueue.hpp"
 using namespace std::chrono;
 
 FrameProcessor::FrameProcessor(const std::string directory,
@@ -56,7 +57,7 @@ void FrameProcessor::addFrame(FramePtr video_frame) {
 }
 
 void FrameProcessor::processFrames() {
-  std::cout << "Starting frame processor" << std::endl;
+  SystemEventQueue::push("fproc", "Starting frame processor");
   int64_t lastTS = 0;
   int64_t frameCount = 0;
   int count = 0;
@@ -160,7 +161,8 @@ void FrameProcessor::processFrames() {
 
       lock.lock();
       if (frameQueue.size() > 500) {
-        std::cerr << "Frame queue overflow, discarding frames" << std::endl;
+        SystemEventQueue::instance().push(
+            "fproc", "Frame queue overflow, discarding frames");
         frameQueue = std::queue<FramePtr>();
       }
     }

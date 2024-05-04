@@ -19,7 +19,11 @@ export const [useRecordingStartTime, , getRecordingStartTime] = UseDatum(0);
 export const [useIsRecording, setIsRecording] = UseDatum(false);
 
 export interface RecorderMessage {
-  op: 'start-recording' | 'stop-recording' | 'recording-status';
+  op:
+    | 'start-recording'
+    | 'stop-recording'
+    | 'recording-status'
+    | 'recording-log';
 }
 
 export interface StartRecorderMessage extends RecorderMessage {
@@ -87,4 +91,19 @@ export const queryRecordingStatus = () => {
       op: 'recording-status',
     },
   );
+};
+
+export interface RecordingLogEntry {
+  tsMilli: number;
+  subsystem: string;
+  message: string;
+}
+export interface RecordingLog extends HandlerResponse {
+  list: RecordingLogEntry[];
+}
+
+export const queryRecordingLog = () => {
+  return window.msgbus.sendMessage<RecorderMessage, RecordingLog>('recorder', {
+    op: 'recording-log',
+  });
 };

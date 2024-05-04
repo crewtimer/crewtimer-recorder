@@ -27,7 +27,7 @@ class BaslerReader : public VideoReader, public CImageEventHandler {
       data = (uint8_t *)pylonImage.GetBuffer();
       xres = pylonImage.GetWidth();
       yres = pylonImage.GetHeight();
-      timestamp = resultPtr->GetTimeStamp();
+      timestamp = resultPtr->GetTimeStamp() / 100; // 100ns ticks
       frame_rate_N = 60;
       frame_rate_D = 1;
       pixelFormat = Frame::PixelFormat::BGR;
@@ -64,8 +64,14 @@ public:
            << CStringParameter(nodemap, "DeviceModelName").GetValue() << endl;
       cout << "Firmware version : "
            << CStringParameter(nodemap, "DeviceFirmwareVersion").GetValue()
-           << endl
            << endl;
+
+      // GenApi::CIntegerPtr tickFrequencyNode =
+      //     nodemap.GetNode("GevTimestampTickFrequency");
+
+      IFloatEx &frameRate = camera->AcquisitionFrameRate;
+      // Output the tick frequency
+      std::cout << "Frame rate: " << frameRate.GetValue() << " Hz" << std::endl;
 
       // // Camera settings.
       // cout << "Camera Device Settings" << endl

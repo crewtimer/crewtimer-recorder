@@ -6,6 +6,7 @@
 
 #include "FrameProcessor.hpp"
 #include "MulticastReceiver.hpp"
+#include "SystemEventQueue.hpp"
 #include "VideoReader.hpp"
 #include "VideoRecorder.hpp"
 
@@ -78,27 +79,27 @@ public:
     std::string retval = "";
 #ifdef USE_APPLE
     if (encoder == "apple") {
-      std::cout << "Using Apple VideoToolbox api." << std::endl;
+      SystemEventQueue::push("VID", "Using Apple VideoToolbox api.");
       videoRecorder = createAppleRecorder();
     }
 #endif
 
 #ifdef USE_OPENCV
     if (encoder == "opencv") {
-      std::cout << "Using opencv api." << std::endl;
+      SystemEventQueue::push("VID", "Using opencv api.");
       videoRecorder = createOpenCVRecorder();
       // default
     }
 #endif
 
     if (encoder == "ffmpeg") {
-      std::cout << "Using ffmpeg api." << std::endl;
+      SystemEventQueue::push("VID", "Using ffmpeg api.");
       videoRecorder = createFfmpegRecorder();
     }
 
     if (!videoRecorder) {
       auto msg = "Unknown encoder type: " + encoder;
-      std::cerr << msg << std::endl;
+      SystemEventQueue::push("VID", msg);
       return msg;
     }
 
@@ -133,7 +134,7 @@ public:
     mcastListener = std::shared_ptr<MulticastReceiver>(
         new MulticastReceiver("239.215.23.42", 52342));
     mcastListener->setMessageCallback([this](const json &j) {
-      std::cout << "Received JSON: " << j.dump() << std::endl;
+      // std::cerr << "Received JSON: " << j.dump() << std::endl;
       auto command = j.value<std::string>("cmd", "");
       if (command == "split-video") {
         this->frameProcessor->splitFile();
@@ -154,26 +155,26 @@ public:
     if (!frameProcessor) {
       return "";
     }
-    std::cout << "Shutting down..." << std::endl;
+    SystemEventQueue::push("VID", "Shutting down...");
 
-    std::cout << "Stopping multicast listener..." << std::endl;
+    SystemEventQueue::push("VID", "Stopping multicast listener...");
 #ifndef _WIN32
     mcastListener->stop();
     mcastListener = nullptr;
 #endif
-    std::cout << "Stopping video reader..." << std::endl;
+    SystemEventQueue::push("VID", "Stopping video reader...");
     videoReader->stop();
     videoReader = nullptr;
 
-    std::cout << "Stopping frame processor..." << std::endl;
+    SystemEventQueue::push("VID", "Stopping frame processor...");
     frameProcessor->stop();
     frameProcessor = nullptr;
 
-    std::cout << "Stopping recorder..." << std::endl;
+    SystemEventQueue::push("VID", "Stopping recorder...");
     videoRecorder->stop();
     videoRecorder = nullptr;
 
-    std::cout << "Recording finished" << std::endl;
+    SystemEventQueue::push("VID", "Recording finished");
     return "";
   }
 

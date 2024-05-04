@@ -77,7 +77,8 @@
     "queue": "cpp",
     "system_error": "cpp",
     "__string": "cpp",
-    "stop_token": "cpp"
+    "stop_token": "cpp",
+    "deque": "cpp"
   },
 
   "eslint.validate": [

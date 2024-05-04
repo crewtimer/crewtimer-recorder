@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <sstream>
 #include <vector>
 
 extern "C" {
@@ -12,6 +13,7 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
+#include "SystemEventQueue.hpp"
 #include "VideoRecorder.hpp"
 
 class FFVideoRecorder : public VideoRecorder {
@@ -31,14 +33,10 @@ public:
     // Get the version of the libavutil library
     unsigned version = avutil_version();
 
-    std::cout << "libavutil version: " << version << std::endl;
-    std::cout << "Major: " << AV_VERSION_MAJOR(version) << std::endl;
-    std::cout << "Minor: " << AV_VERSION_MINOR(version) << std::endl;
-    std::cout << "Micro: " << AV_VERSION_MICRO(version) << std::endl;
-
-    // For a textual representation
-    std::cout << "libavutil version (textual): " << av_version_info()
-              << std::endl;
+    std::stringstream ss;
+    ss << "version " << av_version_info() << " " << AV_VERSION_MAJOR(version)
+       << "." << AV_VERSION_MINOR(version) << "." << AV_VERSION_MICRO(version);
+    SystemEventQueue::instance().push("ffmpeg", ss.str());
   }
   std::string openVideoStream(std::string directory, std::string filename,
                               int width, int height, float fps) {
@@ -97,7 +95,7 @@ public:
 
     if (codecName.empty()) {
       codecName = codec->name;
-      std::cerr << "Using codec " << codecName << std::endl;
+      SystemEventQueue::instance().push("ffmpeg", "Using codec " + codecName);
     }
 
     video_st = avformat_new_stream(pFormatCtx, NULL);

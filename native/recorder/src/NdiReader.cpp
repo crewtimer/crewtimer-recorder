@@ -5,7 +5,10 @@
 #include <chrono>
 #include <cstring> // strerror
 #include <iomanip>
+#include <sstream>
 #include <thread>
+
+#include "SystemEventQueue.hpp"
 
 #ifdef _WIN32
 #ifdef _WIN64
@@ -234,8 +237,7 @@ class NdiReader : public VideoReader {
 
     // FIXME - allow passing in srcName
     while (!p_source) {
-      std::cout << "----- Looking for source " << srcName << " ...-----"
-                << std::endl;
+      SystemEventQueue::push("NDI", "Looking for source " + srcName);
       const NDIlib_source_t *p_sources = NULL;
       uint32_t no_sources = 0;
       while (!no_sources) {
@@ -245,8 +247,9 @@ class NdiReader : public VideoReader {
       }
 
       for (int src = 0; src < no_sources; src++) {
-        std::cout << "Source Found: " << p_sources[src].p_ndi_name << " at "
-                  << p_sources[src].p_ip_address << std::endl;
+        SystemEventQueue::push("NDI", std::string("Source Found: ") +
+                                          p_sources[src].p_ndi_name + " at " +
+                                          p_sources[src].p_ip_address);
         if (std::string(p_sources[src].p_ndi_name).find(srcName) == 0) {
           p_source = p_sources + src;
         }
@@ -266,8 +269,10 @@ class NdiReader : public VideoReader {
     if (!pNDI_recv)
       return "NDIlib_recv_create_v3() failed";
 
-    std::cout << "Connecting to " << p_source->p_ndi_name << " at "
-              << p_source->p_ip_address << std::endl;
+    // Connect to the source
+    SystemEventQueue::push("NDI", std::string("Connecting to ") +
+                                      p_source->p_ndi_name + " at " +
+                                      p_source->p_ip_address);
     // Connect to our sources
     NDIlib_recv_connect(pNDI_recv, p_source);
 
@@ -324,9 +329,10 @@ class NdiReader : public VideoReader {
             // Convert to tm for formatting
             std::tm *local_tm = std::localtime(&local_time_t);
 
-            std::cout << "Delta: " << delta / 10000 << "ms at "
-                      << std::put_time(local_tm, "%H:%M:%S") << " Local"
-                      << std::endl;
+            std::stringstream ss;
+            ss << "Delta: " << delta / 10000 << "ms at "
+               << std::put_time(local_tm, "%H:%M:%S") << " Local";
+            SystemEventQueue::push("NDI", ss.str());
           }
 
           lastTS = video_frame.timestamp;
