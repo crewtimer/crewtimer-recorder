@@ -78,7 +78,10 @@
     "system_error": "cpp",
     "__string": "cpp",
     "stop_token": "cpp",
-    "deque": "cpp"
+    "deque": "cpp",
+    "__errc": "cpp",
+    "cstdarg": "cpp",
+    "semaphore": "cpp"
   },
 
   "eslint.validate": [

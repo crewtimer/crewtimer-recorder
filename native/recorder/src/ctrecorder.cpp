@@ -106,21 +106,16 @@ int main(int argc, char *argv[]) {
   std::signal(SIGINT, signalHandler);
 
   bool initialConnect = true;
-  std::string recorders = "";
+  std::string recorders = "null";
 #ifdef USE_FFMPEG
-  recorders += "ffmpeg";
+  recorders += " | ffmpeg";
 #endif
 #ifdef USE_OPENCV
-  if (recorders.length() > 0) {
-    recorders += " | ";
-  }
-  recorders += "opencv";
+
+  recorders += " | opencv";
 #endif
 #ifdef USE_APPLE
-  if (recorders.length() > 0) {
-    recorders += " | ";
-  }
-  recorders += "apple";
+  recorders += " | apple";
 #endif
 
   std::map<std::string, std::string> args;
@@ -133,7 +128,6 @@ int main(int argc, char *argv[]) {
   args["-i"] = "10";
   args["-daemon"] = "false";
   args["-u"] = "false";
-  args["-basler"] = "false";
 
   // Parse command-line arguments
   for (int i = 1; i < argc; ++i) {
@@ -143,7 +137,7 @@ int main(int argc, char *argv[]) {
         i + 1 < argc) {
       args[arg] =
           argv[++i]; // Increment 'i' to skip next argument since it's a value
-    } else if (arg == "-daemon" || arg == "-u" || arg == "-basler") {
+    } else if (arg == "-daemon" || arg == "-u") {
       args[arg] = "true";
     } else {
       auto msg = "Unknown or incomplete option: " + arg;
@@ -161,14 +155,12 @@ int main(int argc, char *argv[]) {
   }
 
   if (args["-u"] == "true") {
-    std::string basler = "";
-#ifdef HAVE_BASLER
-    basler = " -basler";
-#endif
     std::cout << "Usage: -encoder <" << recorders
               << "> -dir <dir> -prefix "
                  "<prefix> -i <interval secs> -ndi <name> -daemon"
-              << basler << std::endl;
+              << std::endl;
+    std::cout << "On macos, increase the kernel UDP buffer size: " << std::endl
+              << "sudo sysctl -w net.inet.udp.maxdgram=4000000" << std::endl;
     return -1;
   }
 
@@ -194,7 +186,6 @@ int main(int argc, char *argv[]) {
   while (true) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
   }
-
 #if 0
 #ifdef USE_APPLE
   if (encoder == "apple") {
@@ -204,7 +195,7 @@ int main(int argc, char *argv[]) {
 #endif
 #ifdef USE_OPENCV
   if (encoder == "opencv") {
-    std::cout << "Using opencv api." << std::endl;
+    std::cout << "Using opencv recorder." << std::endl;
     videoRecorder = createOpenCVRecorder();
     // default
   }
@@ -212,10 +203,16 @@ int main(int argc, char *argv[]) {
 
 #if USE_FFMPEG
   if (encoder == "ffmpeg") {
-    std::cout << "Using ffmpeg api." << std::endl;
+    std::cout << "Using ffmpeg recorder." << std::endl;
     videoRecorder = createFfmpegRecorder();
   }
 #endif
+
+ if (encoder == "null") {
+    std::cout << "Using null recorder." << std::endl;
+    videoRecorder = createNullRecorder();
+  }
+
 
   testrecorder(videoRecorder);
 

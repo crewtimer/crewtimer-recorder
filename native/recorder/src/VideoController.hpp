@@ -79,22 +79,27 @@ public:
     std::string retval = "";
 #ifdef USE_APPLE
     if (encoder == "apple") {
-      SystemEventQueue::push("VID", "Using Apple VideoToolbox api.");
+      SystemEventQueue::push("VID", "Using Apple VideoToolbox encoder.");
       videoRecorder = createAppleRecorder();
     }
 #endif
 
 #ifdef USE_OPENCV
     if (encoder == "opencv") {
-      SystemEventQueue::push("VID", "Using opencv api.");
+      SystemEventQueue::push("VID", "Using opencv encoder.");
       videoRecorder = createOpenCVRecorder();
       // default
     }
 #endif
 
     if (encoder == "ffmpeg") {
-      SystemEventQueue::push("VID", "Using ffmpeg api.");
+      SystemEventQueue::push("VID", "Using ffmpeg encoder.");
       videoRecorder = createFfmpegRecorder();
+    }
+
+    if (encoder == "null") {
+      SystemEventQueue::push("VID", "Using null encoder.");
+      videoRecorder = createNullRecorder();
     }
 
     if (!videoRecorder) {

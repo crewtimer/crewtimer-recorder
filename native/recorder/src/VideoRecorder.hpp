@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string>
 
 /**
  * Class representing a single video frame.
@@ -35,4 +36,5 @@ public:
 std::shared_ptr<VideoRecorder> createOpenCVRecorder();
 std::shared_ptr<VideoRecorder> createAppleRecorder();
 std::shared_ptr<VideoRecorder> createFfmpegRecorder();
+std::shared_ptr<VideoRecorder> createNullRecorder();
 void testopencv();

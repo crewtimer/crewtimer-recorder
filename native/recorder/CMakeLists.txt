@@ -27,6 +27,7 @@ set(SOURCE_FILES
     src/FFRecorder.cpp
     src/util.cpp
     src/NdiReader.cpp
+    src/NullRecorder.cpp
 )
 
 # prefer static libs

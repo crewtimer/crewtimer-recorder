@@ -328,10 +328,14 @@ class NdiReader : public VideoReader {
 
             // Convert to tm for formatting
             std::tm *local_tm = std::localtime(&local_time_t);
-
+            auto milliseconds =
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    system_duration) %
+                1000;
             std::stringstream ss;
-            ss << "Delta: " << delta / 10000 << "ms at "
-               << std::put_time(local_tm, "%H:%M:%S") << " Local";
+            ss << "Gap: " << delta / 10000 << "ms at "
+               << std::put_time(local_tm, "%H:%M:%S") << "." << std::setw(3)
+               << std::setfill('0') << milliseconds.count() << " Local";
             SystemEventQueue::push("NDI", ss.str());
           }
 
