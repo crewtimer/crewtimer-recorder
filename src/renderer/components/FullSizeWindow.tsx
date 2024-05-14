@@ -45,7 +45,6 @@ export const FullSizeWindow: FC<FullSizeWindowProps> = ({ component }) => {
         alignItems: 'center', // Center vertically
         overflow: 'hidden', // In case the image is too big
         flexDirection: 'column',
-        background: 'green',
       }}
     >
       <Measure

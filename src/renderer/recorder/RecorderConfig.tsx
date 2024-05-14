@@ -26,8 +26,7 @@ const RecordingError = () => {
   ) : null;
 };
 const RecorderConfig: React.FC = () => {
-  const [isRecording, setIsRecording] = useIsRecording();
-  const [, setRecordingStartTime] = useRecordingStartTime();
+  const [isRecording] = useIsRecording();
   const [recordingProps, setRecordingProps] = useRecordingProps();
 
   const handleFolderChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -52,10 +51,7 @@ const RecorderConfig: React.FC = () => {
   };
 
   const toggleRecording = () => {
-    setRecordingStartTime(Date.now());
-    const newRecordingState = !isRecording;
-    setIsRecording(newRecordingState);
-    (newRecordingState ? startRecording() : stopRecording()).catch((err) =>
+    (isRecording ? stopRecording() : startRecording()).catch((err) =>
       console.error(err),
     );
   };

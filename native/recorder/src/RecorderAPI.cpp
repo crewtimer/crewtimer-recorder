@@ -190,9 +190,8 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
       if (!recorder) {
         return ret;
       }
-      std::cout << "Grabbing frame" << std::endl;
+
       auto uyvy422Frame = recorder->getLastFrame();
-      std::cout << "Got frame " << uyvy422Frame->xres << std::endl;
       if (!uyvy422Frame) {
         return ret;
       }

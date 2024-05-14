@@ -6,9 +6,16 @@ import {
   GrabFrameResponse,
   RecordingStatus,
 } from './RecorderTypes';
-import { getRecordingProps, setFrameGrab } from './RecorderData';
+import {
+  getRecordingProps,
+  setFrameGrab,
+  setIsRecording,
+  setRecordingStartTime,
+} from './RecorderData';
 
 export const startRecording = () => {
+  setRecordingStartTime(Date.now());
+  setIsRecording(true);
   return window.msgbus.sendMessage<StartRecorderMessage, HandlerResponse>(
     'recorder',
     {
@@ -18,6 +25,7 @@ export const startRecording = () => {
   );
 };
 export const stopRecording = () => {
+  setIsRecording(false);
   return window.msgbus.sendMessage<RecorderMessage, HandlerResponse>(
     'recorder',
     {

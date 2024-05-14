@@ -15,7 +15,11 @@ export const [useRecordingProps, , getRecordingProps] =
     recordingPrefix: 'CT_',
     recordingDuration: 5,
   });
-export const [useRecordingStartTime, , getRecordingStartTime] = UseDatum(0);
+export const [
+  useRecordingStartTime,
+  setRecordingStartTime,
+  getRecordingStartTime,
+] = UseDatum(0);
 export const [useIsRecording, setIsRecording] = UseDatum(false);
 
 export const [useRecordingStatus, setRecordingStatus] =

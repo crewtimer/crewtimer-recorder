@@ -15,7 +15,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   useEffect(() => {
     const timer = setInterval(() => {
       requestVideoFrame().catch((err) => console.error(err));
-    }, 1000);
+    }, 100);
     return () => clearInterval(timer);
   }, []);
 
@@ -30,7 +30,6 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       return;
     }
 
-    console.log('drawing frame');
     const { data, width, height } = frame;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -82,7 +81,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   }, [frame, divwidth, divheight]);
 
   return (
-    <Box sx={{ width: divwidth, height: divheight, background: '#8ff' }}>
+    <Box sx={{ width: divwidth, height: divheight }}>
       <canvas
         ref={canvasRef}
         style={{ width: '100%', height: '100%', border: '1px solid black' }}

@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { Stack, Typography } from '@mui/material';
 import RecordIcon from '@mui/icons-material/FiberManualRecord';
-import { queryRecordingStatus } from './RecorderApi';
+import { queryRecordingStatus, stopRecording } from './RecorderApi';
 import {
   setRecordingStatus,
   setIsRecording,
@@ -44,7 +44,11 @@ const RecordingStatus: React.FC = () => {
 
   return isRecording ? (
     <Stack direction="column">
-      <Stack direction="row" sx={{ alignItems: 'center' }}>
+      <Stack
+        direction="row"
+        sx={{ alignItems: 'center' }}
+        onClick={stopRecording}
+      >
         <RecordIcon style={{ color: '#ff0000' }} />
         <Typography variant="body2">{`${seconds}`}</Typography>
       </Stack>
