@@ -226,6 +226,12 @@ class NdiReader : public VideoReader {
   };
 
   std::string open(std::shared_ptr<FrameProcessor> frameProcessor) override {
+
+    this->frameProcessor = frameProcessor;
+    return "";
+  }
+
+  std::string connect() {
     // Create a finder
     NDIlib_find_instance_t pNDI_find = NDIlib_find_create_v2();
     if (!pNDI_find)
@@ -236,7 +242,7 @@ class NdiReader : public VideoReader {
     const NDIlib_source_t *p_source = NULL;
 
     // FIXME - allow passing in srcName
-    while (!p_source) {
+    while (!p_source && keepRunning.load()) {
       SystemEventQueue::push("NDI", "Looking for source " + srcName);
       const NDIlib_source_t *p_sources = NULL;
       uint32_t no_sources = 0;
@@ -254,6 +260,10 @@ class NdiReader : public VideoReader {
           p_source = p_sources + src;
         }
       }
+    }
+
+    if (!p_source) {
+      return ""; // stop received before ndi source found
     }
 
     NDIlib_recv_create_v3_t recv_create;
@@ -280,13 +290,12 @@ class NdiReader : public VideoReader {
     // p_sources[0]
     NDIlib_find_destroy(pNDI_find);
 
-    this->frameProcessor = frameProcessor;
-
     return "";
   }
 
   void run() {
     int64_t lastTS = 0;
+    connect();
     while (keepRunning.load()) {
       NDIlib_video_frame_v2_t video_frame;
       NDIlib_audio_frame_v3_t audio_frame;
