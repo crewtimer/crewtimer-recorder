@@ -86,7 +86,7 @@ public:
   }
 };
 
-void setDigitPixels(uint32_t *screen, int digit, Point &start, int xres,
+void setDigitPixels(uint32_t *screen, int digit, Point &start, int stride,
                     uint32_t fg, uint32_t bg) {
   std::vector<std::vector<int>> &digitPixels =
       digits[digit]; // Get the pixel representation for the digit
@@ -94,17 +94,17 @@ void setDigitPixels(uint32_t *screen, int digit, Point &start, int xres,
   const auto border = 4;
   for (size_t y = 0; y < border; y++) {
     for (size_t x = 0; x < digitPixels[0].size() * scale + border * 2; ++x) {
-      screen[(start.x + x) + (start.y + y) * xres / 2] = bg;
+      screen[(start.x + x) + (start.y + y) * stride / 4] = bg;
       screen[(start.x + x) +
-             (start.y + y + digitPixels.size() * scale + border) * xres / 2] =
+             (start.y + y + digitPixels.size() * scale + border) * stride / 4] =
           bg;
     }
   }
   for (size_t y = 0; y < digitPixels.size() * scale + 2 * border; ++y) {
     for (size_t x = 0; x < border; x++) {
-      screen[(start.x + x) + (start.y + y) * xres / 2] = bg;
+      screen[(start.x + x) + (start.y + y) * stride / 4] = bg;
       screen[(start.x + x + border + digitPixels[0].size() * scale) +
-             (start.y + y) * xres / 2] = bg;
+             (start.y + y) * stride / 4] = bg;
     }
   }
   const auto yOffset = border;
@@ -115,7 +115,7 @@ void setDigitPixels(uint32_t *screen, int digit, Point &start, int xres,
         const auto pixel = digitPixels[y][x] ? fg : bg;
         for (size_t xExpand = 0; xExpand < scale; xExpand++) {
           screen[(xOffset + start.x + x * scale + xExpand) +
-                 ((yOffset + start.y) + y * scale + yExpand) * xres / 2] =
+                 ((yOffset + start.y) + y * scale + yExpand) * stride / 4] =
               pixel;
         }
       }
@@ -124,35 +124,35 @@ void setDigitPixels(uint32_t *screen, int digit, Point &start, int xres,
   start.x += int(digitPixels[0].size() * scale + border * 2 - 2);
 }
 
-void setArea(uint32_t *screen, int xres, int startX, int startY, int width,
+void setArea(uint32_t *screen, int stride, int startX, int startY, int width,
              int height, uint32_t color) {
   for (int x = startX / 2; x < startX / 2 + width / 2; x++) {
     for (int y = startY; y < startY + height; y++) {
-      screen[x + y * xres / 2] = color;
+      screen[x + y * stride / 4] = color;
     }
   }
 }
 
-void overlayDigits(uint32_t *screen, int xres, Point &point, uint16_t value,
+void overlayDigits(uint32_t *screen, int stride, Point &point, uint16_t value,
                    int digits) {
-  // clearArea(screen, xres, point.x - scale * 2, point.y - scale * 4,
+  // clearArea(screen, stride, point.x - scale * 2, point.y - scale * 4,
   //           digits * (3 * scale + 2 * scale) + scale*4,
   //           5 * scale + scale * 6);
 
   if (digits >= 3) {
     const auto hundreds = (value / 100) % 10;
-    setDigitPixels(screen, hundreds, point, xres, timeColor, black);
+    setDigitPixels(screen, hundreds, point, stride, timeColor, black);
   }
   if (digits >= 2) {
     const auto tens = (value / 10) % 10;
-    setDigitPixels(screen, tens, point, xres, timeColor, black);
+    setDigitPixels(screen, tens, point, stride, timeColor, black);
   }
 
   const auto ones = value % 10;
-  setDigitPixels(screen, ones, point, xres, timeColor, black);
+  setDigitPixels(screen, ones, point, stride, timeColor, black);
 }
 
-void overlayTime(uint32_t *screen, int xres, uint64_t ts100ns) {
+void overlayTime(uint32_t *screen, int stride, uint64_t ts100ns) {
   const auto milli = (5000 + ts100ns) / 10000;
 
   // Convert utc milliseconds to time_point of system clock
@@ -171,13 +171,13 @@ void overlayTime(uint32_t *screen, int xres, uint64_t ts100ns) {
 
   Point point = Point(20, 40);
 
-  overlayDigits(screen, xres, point, local_hours, 2);
-  setDigitPixels(screen, 10, point, xres, timeColor, black);
-  overlayDigits(screen, xres, point, local_minutes, 2);
-  setDigitPixels(screen, 10, point, xres, timeColor, black);
-  overlayDigits(screen, xres, point, local_secs, 2);
-  setDigitPixels(screen, 11, point, xres, timeColor, black);
-  overlayDigits(screen, xres, point, milli % 1000, 3);
+  overlayDigits(screen, stride, point, local_hours, 2);
+  setDigitPixels(screen, 10, point, stride, timeColor, black);
+  overlayDigits(screen, stride, point, local_minutes, 2);
+  setDigitPixels(screen, 10, point, stride, timeColor, black);
+  overlayDigits(screen, stride, point, local_secs, 2);
+  setDigitPixels(screen, 11, point, stride, timeColor, black);
+  overlayDigits(screen, stride, point, milli % 1000, 3);
 
   // std::cout << "Current time: " << local_hours << ":" << local_minutes << ":"
   //           << local_secs << std::endl;
@@ -185,12 +185,12 @@ void overlayTime(uint32_t *screen, int xres, uint64_t ts100ns) {
   //           << (milli / (60 * 1000)) % 60 << ":" << (milli / (1000)) % 60
   //           << " m=" << milli << std::endl;
 
-  setArea(screen, xres, 0, 0, 128, 3, black);
+  setArea(screen, stride, 0, 0, 128, 3, black);
   uint64_t mask = 0x8000000000000000L;
   for (int bit = 0; bit < 64; bit++) {
     const bool val = (ts100ns & mask) != 0;
     mask >>= 1;
-    setArea(screen, xres, bit * 2, 1, 2, 1, val ? white : black);
+    setArea(screen, stride, bit * 2, 1, 2, 1, val ? white : black);
   }
 }
 
@@ -302,10 +302,13 @@ class NdiReader : public VideoReader {
         // Video data
       case NDIlib_frame_type_video: {
         if (video_frame.xres && video_frame.yres) {
+          if (video_frame.timestamp == NDIlib_recv_timestamp_undefined) {
+            std::cerr << "timestamp not supported" << std::endl;
+          }
           // std::cout << "Video data received (" << video_frame.xres << "x"
           //           << video_frame.yres << std::endl;
-          overlayTime((uint32_t *)video_frame.p_data, video_frame.xres,
-                      video_frame.timestamp);
+          overlayTime((uint32_t *)video_frame.p_data,
+                      video_frame.line_stride_in_bytes, video_frame.timestamp);
           auto delta = video_frame.timestamp - lastTS;
           if (delta == 0 || (lastTS != 0 && delta > 400000)) {
             // Convert 100ns ticks since 1970 to a duration, then to
@@ -341,8 +344,9 @@ class NdiReader : public VideoReader {
 
           lastTS = video_frame.timestamp;
           auto txframe = std::make_shared<NdiFrame>(pNDI_recv, video_frame);
-          txframe->xres = video_frame.xres;
-          txframe->yres = video_frame.yres;
+          txframe->xres = video_frame.xres & ~1; // force even
+          txframe->yres = video_frame.yres & ~1;
+          txframe->stride = video_frame.line_stride_in_bytes;
           txframe->timestamp = video_frame.timestamp;
           txframe->data = video_frame.p_data;
           txframe->frame_rate_N = video_frame.frame_rate_N;

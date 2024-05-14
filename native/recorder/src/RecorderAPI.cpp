@@ -26,14 +26,13 @@ inline uint8_t clamp(int value) {
 
 // Function to convert a UYVY422 buffer to a preallocated RGBA buffer
 void uyvyToRgba(const uint8_t *uyvyBuffer, uint8_t *rgbaBuffer, int width,
-                int height) {
+                int height, int stride) {
   // Initialize index for the RGBA buffer
   int rgbaIndex = 0;
-
   for (int y = 0; y < height; ++y) {
     for (int x = 0; x < width; x += 2) {
       // Each UYVY pixel pair contains four bytes
-      int uyvyIndex = (y * width + x) * 2;
+      int uyvyIndex = y * stride + x * 2;
       uint8_t u = uyvyBuffer[uyvyIndex];
       uint8_t y0 = uyvyBuffer[uyvyIndex + 1];
       uint8_t v = uyvyBuffer[uyvyIndex + 2];
@@ -203,7 +202,7 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
 
       auto bufferData = Napi::Buffer<uint8_t>::New(env, totalBytes);
       uyvyToRgba(uyvy422Frame->data, bufferData.Data(), uyvy422Frame->xres,
-                 uyvy422Frame->yres);
+                 uyvy422Frame->yres, uyvy422Frame->stride);
       // Napi::Buffer<uint8_t> napiBuffer = Napi::Buffer<uint8_t>::New(
       //     env, bufferData, totalBytes, FinalizeBuffer);
       // ret.Set("data", napiBuffer);

@@ -13,6 +13,7 @@ public:
   enum PixelFormat { UYVY422 = 0, RGBX = 1, BGR = 2 };
   int xres;
   int yres;
+  int stride;
   uint8_t *data;
   uint64_t timestamp;
   int frame_rate_N;

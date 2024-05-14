@@ -199,7 +199,7 @@ public:
   }
 
   std::string writeVideoFrame(FramePtr video_frame) {
-    int inLinesize[1] = {2 * video_frame->xres};
+    int inLinesize[1] = {video_frame->stride};
     if (sws_ctx == nullptr) {
       auto src_fmt = AV_PIX_FMT_UYVY422;
       switch (video_frame->pixelFormat) {
