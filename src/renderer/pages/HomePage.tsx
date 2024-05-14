@@ -1,6 +1,7 @@
 import { Box, FormControlLabel, Checkbox } from '@mui/material';
 import { useHello, useWorld } from '../util/UseSettings';
 import { startRecording, stopRecording } from '../recorder/RecorderApi';
+import RGBAImageCanvas from '../components/RGBAImageCanvas';
 
 const HomePage = () => {
   const [hello, setHello] = useHello();
@@ -36,6 +37,7 @@ const HomePage = () => {
           />
         }
       />
+      <RGBAImageCanvas />
     </Box>
   );
 };

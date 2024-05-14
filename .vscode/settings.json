@@ -105,5 +105,6 @@
     "test/**/__snapshots__": true,
     "package-lock.json": true,
     "*.{css,sass,scss}.d.ts": true
-  }
+  },
+  "cmake.sourceDirectory": "/Users/glenne/git/crewtimer-recorder/release/build/mac/ElectronReact.app/Contents/Resources/app.asar/node_modules/crewtimer_video_recorder/src/nlohmann/tests/abi/diag"
 }

@@ -55,6 +55,13 @@ public:
 
   StatusInfo getStatus();
 
+  /**
+   * @brief Get the Last Frame object received by the frame processor
+   *
+   * @return FramePtr
+   */
+  FramePtr getLastFrame();
+
 private:
   StatusInfo statusInfo;
   std::string errorMessage;
@@ -71,6 +78,7 @@ private:
   std::atomic<bool>
       running; ///< Atomic flag to control the running state of threads.
   std::thread processThread; ///< Threads for capturing and processing frames.
+  FramePtr lastFrame;
 
   /**
    * Thread function to capture frames.

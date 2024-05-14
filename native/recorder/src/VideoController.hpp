@@ -183,6 +183,13 @@ public:
     return "";
   }
 
+  FramePtr getLastFrame() {
+    if (frameProcessor) {
+      return frameProcessor->getLastFrame();
+    } else {
+      return nullptr;
+    }
+  }
   void monitorLoop() {
     while (!monitorStopRequested) {
       std::this_thread::sleep_for(std::chrono::milliseconds(1000));

@@ -1,13 +1,13 @@
 import React, { useEffect } from 'react';
 import { Stack, Typography } from '@mui/material';
 import RecordIcon from '@mui/icons-material/FiberManualRecord';
+import { queryRecordingStatus } from './RecorderApi';
 import {
-  DefaultRecordingStatus,
-  queryRecordingStatus,
-  setIsRecording,
   setRecordingStatus,
+  setIsRecording,
   useRecordingStatus,
-} from './RecorderApi';
+} from './RecorderData';
+import { DefaultRecordingStatus } from './RecorderTypes';
 
 const formatTime = (totalSeconds: number) => {
   const hours = Math.floor(totalSeconds / 3600);

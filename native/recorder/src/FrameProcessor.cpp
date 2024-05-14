@@ -49,11 +49,17 @@ FrameProcessor::StatusInfo FrameProcessor::getStatus() {
 
 void FrameProcessor::addFrame(FramePtr video_frame) {
   std::unique_lock<std::mutex> lock(queueMutex);
+  lastFrame = video_frame;
   if (!running) {
     return;
   }
   frameQueue.push(video_frame);
   frameAvailable.notify_one();
+}
+
+FramePtr FrameProcessor::getLastFrame() {
+  std::unique_lock<std::mutex> lock(queueMutex);
+  return lastFrame;
 }
 
 void FrameProcessor::processFrames() {
@@ -62,6 +68,7 @@ void FrameProcessor::processFrames() {
   int64_t frameCount = 0;
   int count = 0;
   auto start = high_resolution_clock::now();
+  auto useEmbeddedTimestamp = false;
   while (running) {
     std::unique_lock<std::mutex> lock(queueMutex);
     frameAvailable.wait(lock,
@@ -91,8 +98,10 @@ void FrameProcessor::processFrames() {
       auto elapsed = duration_cast<milliseconds>(now - start);
       auto okToSplit = elapsed.count() > 1200;
 
-      if (video_frame->timestamp >= nextStartTime ||
+      if (count == 0 ||
+          (useEmbeddedTimestamp && video_frame->timestamp >= nextStartTime) ||
           (okToSplit && splitRequested)) {
+        count++;
         if (frameCount > 0) {
           videoRecorder->stop();
         }

@@ -27,6 +27,7 @@ class BaslerReader : public VideoReader, public CImageEventHandler {
       data = (uint8_t *)pylonImage.GetBuffer();
       xres = pylonImage.GetWidth();
       yres = pylonImage.GetHeight();
+      stride = pylonImage.GetStride();
       timestamp = resultPtr->GetTimeStamp() / 100; // 100ns ticks
       frame_rate_N = 60;
       frame_rate_D = 1;
