@@ -69,6 +69,10 @@ void FrameProcessor::processFrames() {
   int count = 0;
   auto start = high_resolution_clock::now();
   auto useEmbeddedTimestamp = true;
+  int lastXres = 0;
+  int lastYres = 0;
+  float lastFPS = 0;
+
   while (running) {
     std::unique_lock<std::mutex> lock(queueMutex);
     frameAvailable.wait(lock,
@@ -85,8 +89,13 @@ void FrameProcessor::processFrames() {
       auto now = high_resolution_clock::now();
       auto elapsed = duration_cast<milliseconds>(now - start);
       auto okToSplit = elapsed.count() > 1200;
+      auto propChange = lastXres != video_frame->xres ||
+                        lastYres != video_frame->yres || lastFPS != fps;
+      lastXres = video_frame->xres;
+      lastYres = video_frame->yres;
+      lastFPS = fps;
 
-      if (count == 0 ||
+      if (propChange || count == 0 ||
           (useEmbeddedTimestamp && video_frame->timestamp >= nextStartTime) ||
           (okToSplit && splitRequested)) {
         count++;
