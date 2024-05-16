@@ -68,7 +68,7 @@ void FrameProcessor::processFrames() {
   int64_t frameCount = 0;
   int count = 0;
   auto start = high_resolution_clock::now();
-  auto useEmbeddedTimestamp = false;
+  auto useEmbeddedTimestamp = true;
   while (running) {
     std::unique_lock<std::mutex> lock(queueMutex);
     frameAvailable.wait(lock,
@@ -79,18 +79,6 @@ void FrameProcessor::processFrames() {
       lock.unlock();
       const auto fps =
           (float)video_frame->frame_rate_N / (float)video_frame->frame_rate_D;
-
-      if (nextStartTime == 0) {
-        uint64_t complete_periods =
-            video_frame->timestamp / (durationSecs * 10000000);
-
-        nextStartTime = complete_periods * durationSecs * 10000000;
-        // std::cout << video_frame->xres << "x" << video_frame->yres
-        //           << " fps=" << fps << std::endl;
-        //   printf("%d x %d, FourCC=0x%08x, UYVY=0x%08x\n", video_frame->xres,
-        //          video_frame->yres, video_frame->FourCC,
-        //          NDI_LIB_FOURCC('U', 'Y', 'V', 'Y'));
-      }
 
       // Ensure we do not split within the first second of a recording as the
       // filename will be the same when resuming after the split
@@ -106,24 +94,27 @@ void FrameProcessor::processFrames() {
           videoRecorder->stop();
         }
 
-        auto utc_milliseconds = nextStartTime / 10000;
+        const auto ts100ns = video_frame->timestamp;
+        uint64_t complete_periods = ts100ns / (durationSecs * 10000000);
+        nextStartTime = (1 + complete_periods) * durationSecs * 10000000;
+
         splitRequested = false;
         start = high_resolution_clock::now();
-        if (video_frame->timestamp >= nextStartTime) {
-          nextStartTime += durationSecs * 10000000;
-        }
-
-        auto now = system_clock::now() + milliseconds(100);
-
-        // Convert the time_point to a time_t object, representing system time
-        std::time_t now_time_t = system_clock::to_time_t(now);
-
-        // Convert time_t to tm as local time
-        std::tm *now_tm = std::localtime(&now_time_t);
 
         // Construct a filename with the time embedded
+        const auto milli = (5000 + ts100ns) / 10000;
+
+        // Convert utc milliseconds to time_point of system clock
+        time_point<system_clock> tp =
+            time_point<system_clock>(milliseconds(milli));
+
+        // Convert to system time_t for conversion to tm structure
+        std::time_t raw_time = system_clock::to_time_t(tp);
+
+        // Convert to local time
+        std::tm *local_time = std::localtime(&raw_time);
         std::stringstream ss;
-        ss << prefix << std::put_time(now_tm, "%H_%M_%S");
+        ss << prefix << std::put_time(local_time, "%H_%M_%S");
 
         std::string filename = ss.str();
         statusInfo.filename = filename;
@@ -139,26 +130,13 @@ void FrameProcessor::processFrames() {
           break;
         }
 
-        auto priorMilli = (5000 + lastTS) / 10000;
-        auto currMilli = (5000 + video_frame->timestamp) / 10000;
         std::cout << "File: " << filename << " " << video_frame->xres << "x"
                   << video_frame->yres << " fps=" << fps
-                  << " last: " << std::setw(2) << std::setfill('0')
-                  << (priorMilli / (60 * 60 * 1000)) % 24 << ":" << std::setw(2)
-                  << std::setfill('0') << (priorMilli / (60 * 1000)) % 60 << ":"
-                  << std::setw(2) << std::setfill('0')
-                  << (priorMilli / (1000)) % 60 << ":" << std::setw(3)
-                  << std::setfill('0') << priorMilli % 1000
-                  << " next: " << std::setw(2) << std::setfill('0')
-                  << (currMilli / (60 * 60 * 1000)) % 24 << ":" << std::setw(2)
-                  << std::setfill('0') << (currMilli / (60 * 1000)) % 60 << ":"
-                  << std::setw(2) << std::setfill('0')
-                  << (currMilli / (1000)) % 60 << ":" << std::setw(3)
-                  << std::setfill('0') << currMilli % 1000
-                  << " fc=" << frameCount << " Backlog=" << frameQueue.size()
-                  << std::endl;
+                  << " prior_fc=" << frameCount
+                  << " Backlog=" << frameQueue.size() << std::endl;
         frameCount = 0;
       }
+
       lastTS = video_frame->timestamp;
       auto err = videoRecorder->writeVideoFrame(video_frame);
       if (!err.empty()) {

@@ -152,22 +152,13 @@ void overlayDigits(uint32_t *screen, int stride, Point &point, uint16_t value,
   setDigitPixels(screen, ones, point, stride, timeColor, black);
 }
 
-void overlayTime(uint32_t *screen, int stride, uint64_t ts100ns) {
-  const auto milli = (5000 + ts100ns) / 10000;
-
-  // Convert utc milliseconds to time_point of system clock
-  time_point<system_clock> tp = time_point<system_clock>(milliseconds(milli));
-
-  // Convert to system time_t for conversion to tm structure
-  std::time_t raw_time = system_clock::to_time_t(tp);
-
-  // Convert to local time
-  std::tm *local_time = std::localtime(&raw_time);
-
+void overlayTime(uint32_t *screen, int stride, uint64_t ts100ns,
+                 const std::tm *local_time) {
   // Extract the local hours and minutes
   int local_hours = local_time->tm_hour;
   int local_minutes = local_time->tm_min;
   int local_secs = local_time->tm_sec;
+  const auto milli = (5000 + ts100ns) / 10000;
 
   Point point = Point(20, 40);
 
@@ -295,6 +286,7 @@ class NdiReader : public VideoReader {
 
   void run() {
     int64_t lastTS = 0;
+    int64_t frameCount = 0;
     connect();
     while (keepRunning.load()) {
       NDIlib_video_frame_v2_t video_frame;
@@ -311,43 +303,39 @@ class NdiReader : public VideoReader {
         // Video data
       case NDIlib_frame_type_video: {
         if (video_frame.xres && video_frame.yres) {
+          frameCount++;
+          if (frameCount == 1) {
+            break; // 1st frame often old frame cached from ndi sender.  Ignore.
+          }
           if (video_frame.timestamp == NDIlib_recv_timestamp_undefined) {
             std::cerr << "timestamp not supported" << std::endl;
           }
           // std::cout << "Video data received (" << video_frame.xres << "x"
           //           << video_frame.yres << std::endl;
+          auto ts100ns = video_frame.timestamp;
+          const auto milli = (5000 + ts100ns) / 10000;
+
+          // Convert utc milliseconds to time_point of system clock
+          time_point<system_clock> tp =
+              time_point<system_clock>(milliseconds(milli));
+
+          // Convert to system time_t for conversion to tm structure
+          std::time_t raw_time = system_clock::to_time_t(tp);
+
+          // Convert to local time
+          std::tm *local_time = std::localtime(&raw_time);
           overlayTime((uint32_t *)video_frame.p_data,
-                      video_frame.line_stride_in_bytes, video_frame.timestamp);
+                      video_frame.line_stride_in_bytes, video_frame.timestamp,
+                      local_time);
           auto delta = video_frame.timestamp - lastTS;
-          if (delta == 0 || (lastTS != 0 && delta > 400000)) {
-            // Convert 100ns ticks since 1970 to a duration, then to
-            // system_clock::time_point
-            auto duration_since_epoch =
-                std::chrono::duration<uint64_t, std::ratio<1, 10000000>>(
-                    video_frame.timestamp);
 
-            // Convert custom duration to system_clock::duration
-            auto system_duration =
-                std::chrono::duration_cast<std::chrono::system_clock::duration>(
-                    duration_since_epoch);
-
-            // Correctly construct a system_clock::time_point from the
-            // system_duration
-            std::chrono::system_clock::time_point time_point(system_duration);
-
-            // Convert to time_t for local time conversion
-            std::time_t local_time_t = system_clock::to_time_t(time_point);
-
-            // Convert to tm for formatting
-            std::tm *local_tm = std::localtime(&local_time_t);
-            auto milliseconds =
-                std::chrono::duration_cast<std::chrono::milliseconds>(
-                    system_duration) %
-                1000;
+          auto msPerFrame =
+              1000 * video_frame.frame_rate_D / video_frame.frame_rate_N;
+          if (delta == 0 || (lastTS != 0 && delta >= 10000 * 2 * msPerFrame)) {
             std::stringstream ss;
             ss << "Gap: " << delta / 10000 << "ms at "
-               << std::put_time(local_tm, "%H:%M:%S") << "." << std::setw(3)
-               << std::setfill('0') << milliseconds.count() << " Local";
+               << std::put_time(local_time, "%H:%M:%S") << "." << std::setw(3)
+               << std::setfill('0') << milli % 1000 << " Local";
             SystemEventQueue::push("NDI", ss.str());
           }
 
