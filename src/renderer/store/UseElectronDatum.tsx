@@ -4,7 +4,6 @@ import { notifyChange } from './StoreUtil';
 
 type DatumType = ReturnType<typeof UseDatum>;
 const datumMap = new Map<string, DatumType>();
-
 window.store.onStoredDatumUpdate(
   (_event: IpcRendererEvent, key: string, value: unknown) => {
     const datum = datumMap.get(key);

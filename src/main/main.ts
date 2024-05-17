@@ -17,6 +17,7 @@ import { resolveHtmlPath } from './util';
 import './store/store';
 import './msgbus/msgbus-main';
 import { stopRecording, initRecorder } from './recorder/recorder-main';
+import { setMainWindow } from './mainWindow';
 
 class AppUpdater {
   constructor() {
@@ -78,6 +79,8 @@ const createWindow = async () => {
     },
   });
 
+  setMainWindow(mainWindow);
+
   mainWindow.loadURL(resolveHtmlPath('index.html'));
 
   mainWindow.on('ready-to-show', () => {
@@ -100,6 +103,7 @@ const createWindow = async () => {
 
   mainWindow.on('closed', () => {
     mainWindow = null;
+    setMainWindow(null);
   });
 
   const menuBuilder = new MenuBuilder(mainWindow);

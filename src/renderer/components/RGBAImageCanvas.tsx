@@ -1,21 +1,83 @@
 import React, { useEffect, useRef } from 'react';
 import { Box } from '@mui/material';
-import { useFrameGrab } from '../recorder/RecorderData';
-import { requestVideoFrame } from '../recorder/RecorderApi';
+import {
+  useFrameGrab,
+  useGuide,
+  useIsRecording,
+} from '../recorder/RecorderData';
+import {
+  requestVideoFrame,
+  startRecording,
+  stopRecording,
+} from '../recorder/RecorderApi';
+import generateTestPattern from '../util/ImageUtils';
+import { GrabFrameResponse } from '../recorder/RecorderTypes';
+
+const drawIcon = (
+  ctx: CanvasRenderingContext2D,
+  canvasWidth: number,
+  canvasHeight: number,
+  playing: boolean,
+) => {
+  const centerX = canvasWidth / 2;
+  const centerY = canvasHeight / 2;
+  const size = 50; // Size of the icon
+  const radius = size; // Radius of the enclosing circle
+
+  // Draw enclosing circle
+  ctx.beginPath();
+  ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+  ctx.fillStyle = '#44444480';
+  ctx.fill();
+
+  // Set icon color and style
+  ctx.fillStyle = '#ffffffb0';
+  ctx.beginPath();
+  if (playing) {
+    // Draw stop icon as a square
+    ctx.rect(
+      centerX - size / 3,
+      centerY - size / 3,
+      (2 * size) / 3,
+      (2 * size) / 3,
+    );
+  } else {
+    // Draw play icon as a triangle
+    ctx.moveTo(centerX - size / 4, centerY - size / 2);
+    ctx.lineTo(centerX - size / 4, centerY + size / 2);
+    ctx.lineTo(centerX + size / 2, centerY);
+    ctx.closePath();
+  }
+  ctx.fill();
+};
 
 interface CanvasProps {
   divwidth: number;
   divheight: number;
 }
+let lastGoodFrame: GrabFrameResponse = generateTestPattern();
 
 const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
-  const [frame] = useFrameGrab();
+  let [frame] = useFrameGrab();
+  const [guide] = useGuide();
+  const [isRecording] = useIsRecording();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  if (frame?.data) {
+    lastGoodFrame = frame;
+  } else {
+    frame = lastGoodFrame;
+  }
+  const togglePlay = () => {
+    (isRecording ? stopRecording() : startRecording()).catch((err) =>
+      console.error(err),
+    );
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
       requestVideoFrame().catch((err) => console.error(err));
-    }, 100);
+    }, 200);
     return () => clearInterval(timer);
   }, []);
 
@@ -78,14 +140,23 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       scaledWidth,
       scaledHeight,
     );
-  }, [frame, divwidth, divheight]);
+    // Draw the red line
+    ctx.beginPath();
+    ctx.moveTo(offsetX + scaledWidth / 2 + guide.pt1 * scale, 0); // Horizontal center + N pixels offset, scaled
+    ctx.lineTo(
+      offsetX + scaledWidth / 2 + guide.pt2 * scale,
+      offsetY + scaledHeight,
+    );
+    ctx.strokeStyle = 'red';
+    ctx.lineWidth = 1; // Line width can be adjusted as needed
+    ctx.stroke();
+
+    drawIcon(ctx, parentWidth, scaledHeight, isRecording);
+  }, [frame, divwidth, divheight, guide, isRecording]);
 
   return (
-    <Box sx={{ width: divwidth, height: divheight }}>
-      <canvas
-        ref={canvasRef}
-        style={{ width: '100%', height: '100%', border: '1px solid black' }}
-      />
+    <Box sx={{ width: divwidth, height: divheight }} onClick={togglePlay}>
+      <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }} />
     </Box>
   );
 };

@@ -28,3 +28,5 @@ export const [useRecordingStatus, setRecordingStatus] =
 export const [useFrameGrab, setFrameGrab] = UseDatum<
   GrabFrameResponse | undefined
 >(generateTestPattern());
+
+export const [useGuide, setGuide] = UseStoredDatum('guide', { pt1: 0, pt2: 0 });

@@ -5,6 +5,7 @@ import { ipcMain, IpcMainInvokeEvent } from 'electron';
 import Store from 'electron-store';
 import { getMainWindow } from '../mainWindow';
 import { notifyChange } from '../../renderer/store/StoreUtil';
+import deepequal from 'fast-deep-equal/es6/react';
 
 /** Stored data instance for on-disk storage */
 const store = new Store();
@@ -42,7 +43,7 @@ export function setStoredValue<T>(
   main = true,
 ) {
   // console.log(`setting stored ${key} from ${main ? 'main' : 'renderer'}`);
-  const changed = memCache.get(key) !== value; // shallow compare
+  const changed = !deepequal(memCache.get(key), value);
   if (value === undefined) {
     memCache.delete(key);
     store.delete(key);
@@ -53,10 +54,9 @@ export function setStoredValue<T>(
 
   if (changed) {
     notifyChange(key);
-  }
-
-  if (main) {
-    getMainWindow()?.webContents.send('stored-datum-update', key, value);
+    if (main) {
+      getMainWindow()?.webContents.send('stored-datum-update', key, value);
+    }
   }
 }
 

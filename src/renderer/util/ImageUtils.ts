@@ -9,8 +9,8 @@ import { GrabFrameResponse } from '../recorder/RecorderTypes';
  * @returns Buffer containing the image data.
  */
 function generateTestPattern(): GrabFrameResponse {
-  const width = 320;
-  const height = 240;
+  const width = 1280;
+  const height = 720;
   const cellSize = 20; // Size of each square in the checkerboard pattern
 
   // Create a buffer to hold RGBA data for each pixel
@@ -25,17 +25,16 @@ function generateTestPattern(): GrabFrameResponse {
       const offset = (y * width + x) * 4;
 
       if (isRed) {
-        // Red square
         buffer[offset] = 255; // Red channel
-        buffer[offset + 1] = 0; // Green channel
-        buffer[offset + 2] = 0; // Blue channel
+        buffer[offset + 1] = 255; // Green channel
+        buffer[offset + 2] = 255; // Blue channel
         buffer[offset + 3] = 255; // Alpha channel (fully opaque)
       } else {
         // Blue square
         buffer[offset] = 0; // Red channel
         buffer[offset + 1] = 0; // Green channel
-        buffer[offset + 2] = 255; // Blue channel
-        buffer[offset + 3] = 255; // Alpha channel (fully opaque)
+        buffer[offset + 2] = 0; // Blue channel
+        buffer[offset + 3] = 128; // Alpha channel (fully opaque)
       }
     }
   }

@@ -8,6 +8,8 @@ import {
   useRecordingStartTime,
   useRecordingProps,
 } from './RecorderData';
+import { FullSizeWindow } from '../components/FullSizeWindow';
+import RGBAImageCanvas from '../components/RGBAImageCanvas';
 
 const RecordingError = () => {
   const [recordingStatus] = useRecordingStatus();
@@ -69,7 +71,14 @@ const RecorderConfig: React.FC = () => {
   // };
 
   return (
-    <div style={{ padding: '20px' }}>
+    <div
+      style={{
+        padding: '20px',
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+      }}
+    >
       <RecordingError />
       <TextField
         label="Recording Folder"
@@ -89,7 +98,8 @@ const RecorderConfig: React.FC = () => {
         }}
       />
       <TextField
-        label="Recording Prefix"
+        size="small"
+        label="Recording Filename Prefix"
         variant="outlined"
         fullWidth
         margin="normal"
@@ -97,7 +107,8 @@ const RecorderConfig: React.FC = () => {
         onChange={handlePrefixChange}
       />
       <TextField
-        label="Recording Interval (seconds)"
+        size="small"
+        label="Recording File Size (seconds)"
         variant="outlined"
         fullWidth
         margin="normal"
@@ -105,7 +116,7 @@ const RecorderConfig: React.FC = () => {
         onChange={handleIntervalChange}
         type="number"
       />
-      <Button
+      {/* <Button
         variant="contained"
         color="primary"
         startIcon={
@@ -115,7 +126,15 @@ const RecorderConfig: React.FC = () => {
         sx={{ marginTop: '20px' }}
       >
         {isRecording ? 'Stop Recording' : 'Start Recording'}
-      </Button>
+      </Button> */}
+      <div
+        style={{
+          marginTop: '20px',
+          flexGrow: 1,
+        }}
+      >
+        <FullSizeWindow component={RGBAImageCanvas} />
+      </div>
     </div>
   );
 };

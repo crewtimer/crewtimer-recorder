@@ -28,6 +28,8 @@ set(SOURCE_FILES
     src/util.cpp
     src/NdiReader.cpp
     src/NullRecorder.cpp
+    src/MessageShim.cpp
+    src/MulticastReceiver.cpp
 )
 
 # prefer static libs
@@ -36,9 +38,6 @@ if(APPLE)
     set(EXTRA_LIBS z bz2 lzma pthread)
     set(FFMPEG_FOLDER "/Users/glenne/ffmpeg-built-mac")
     # set(USE_OPENCV OFF CACHE BOOL "Use OPENCV features" FORCE)
-    list(APPEND SOURCE_FILES
-        src/MulticastReceiver.cpp
-    )
     find_library(NDI_LIBRARIES ndi REQUIRED)
 elseif(WIN32)
     message(STATUS "Win32 section")

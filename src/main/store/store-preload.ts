@@ -20,7 +20,11 @@ contextBridge.exposeInMainWorld('store', {
   },
   onStoredDatumUpdate: (
     callback: (_event: IpcRendererEvent, key: string, value: unknown) => void,
-  ) => ipcRenderer.on('stored-datum-update', callback),
+  ) => {
+    ipcRenderer.on('stored-datum-update', (_event, key, value) => {
+      callback(_event, key, value);
+    });
+  },
 });
 
 contextBridge.exposeInMainWorld('mem', {

@@ -14,4 +14,13 @@ declare module 'crewtimer_video_recorder' {
   export function nativeVideoRecorder(
     message: RecorderMessage,
   ): HandlerResponse;
+
+  type CallbackFunc = ({
+    sender,
+    content,
+  }: {
+    sender: string;
+    content: { [key: string]: any };
+  }) => void;
+  export function setNativeMessageCallback(func: CallbackFunc): void;
 }

@@ -81,7 +81,8 @@
     "deque": "cpp",
     "__errc": "cpp",
     "cstdarg": "cpp",
-    "semaphore": "cpp"
+    "semaphore": "cpp",
+    "regex": "cpp"
   },
 
   "eslint.validate": [

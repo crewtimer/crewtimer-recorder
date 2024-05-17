@@ -1,40 +1,55 @@
-#include <arpa/inet.h>
+#include "MulticastReceiver.hpp"
+#include "SystemEventQueue.hpp"
+#include <cstring>
 #include <iostream>
-#include <netinet/in.h>
 #include <sstream>
+#include <thread>
+
+#if defined(_WIN32) || defined(_WIN64)
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
+
+// Windows specific initialization and cleanup
+void initialize_sockets() {
+  WSADATA wsaData;
+  if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+    SystemEventQueue::push("mcast", "WSAStartup failed.");
+  }
+}
+
+void cleanup_sockets() { WSACleanup(); }
+
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "MulticastReceiver.hpp"
-#include "SystemEventQueue.hpp"
+// No initialization or cleanup required for sockets on Unix-based systems
+void initialize_sockets() {}
+void cleanup_sockets() {}
 
-/**
- * Constructor implementation for MulticastReceiver.
- * Initializes the multicast IP and port and sets the socket to an invalid
- * value.
- */
+#define closesocket close // Define closesocket as close on Unix-based systems
+
+#endif
+
 MulticastReceiver::MulticastReceiver(const std::string &multicastIP,
                                      unsigned short port)
-    : multicastIP(multicastIP), port(port), sockfd(-1), running(false) {}
+    : multicastIP(multicastIP), port(port), sockfd(-1), running(false) {
+  initialize_sockets();
+}
 
-/**
- * Destructor implementation for MulticastReceiver.
- * Ensures the receiver stops listening and resources are cleaned up.
- */
-MulticastReceiver::~MulticastReceiver() { stop(); }
+MulticastReceiver::~MulticastReceiver() {
+  stop();
+  cleanup_sockets();
+}
 
-/**
- * Sets the user-defined message callback function.
- */
 void MulticastReceiver::setMessageCallback(MessageCallback callback) {
   this->onMessageReceived = callback;
 }
 
-/**
- * Starts the listening thread for receiving multicast messages.
- * If already running, does nothing.
- */
 std::string MulticastReceiver::start() {
   if (running)
     return "";
@@ -43,18 +58,18 @@ std::string MulticastReceiver::start() {
   return "";
 }
 
-/**
- * Stops the listening thread and cleans up resources.
- * Closes the socket and joins the listener thread.
- */
 void MulticastReceiver::stop() {
   if (!running)
     return;
   running = false;
 
   if (sockfd != -1) {
+#if defined(_WIN32) || defined(_WIN64)
+    shutdown(sockfd, SD_BOTH);
+#else
     shutdown(sockfd, SHUT_RDWR);
-    close(sockfd);
+#endif
+    closesocket(sockfd);
     sockfd = -1;
   }
   if (listenerThread.joinable()) {
@@ -62,17 +77,11 @@ void MulticastReceiver::stop() {
   }
 }
 
-/**
- * The main listening loop that sets up the socket, joins the multicast group,
- * and listens for incoming messages. Upon receiving a message, it parses it as
- * JSON and triggers the user-defined callback.
- */
 void MulticastReceiver::listen() {
   sockfd = socket(AF_INET, SOCK_DGRAM, 0);
   if (sockfd < 0) {
     SystemEventQueue::push("mcast", std::string("Error opening socket: ") +
                                         strerror(errno));
-
     return;
   }
 
@@ -81,7 +90,7 @@ void MulticastReceiver::listen() {
                  sizeof(reuse)) < 0) {
     SystemEventQueue::push(
         "mcast", std::string("Setting SO_REUSEADDR error: ") + strerror(errno));
-    close(sockfd);
+    closesocket(sockfd);
     return;
   }
 
@@ -94,7 +103,7 @@ void MulticastReceiver::listen() {
   if (bind(sockfd, (struct sockaddr *)&localSock, sizeof(localSock)) < 0) {
     SystemEventQueue::push("mcast", std::string("Error binding socket: ") +
                                         strerror(errno));
-    close(sockfd);
+    closesocket(sockfd);
     return;
   }
 
@@ -106,12 +115,12 @@ void MulticastReceiver::listen() {
     SystemEventQueue::push("mcast",
                            std::string("Adding multicast group error: ") +
                                strerror(errno));
-    close(sockfd);
+    closesocket(sockfd);
     return;
   }
 
   std::stringstream ss;
-  ss << " Multicast listening on" << multicastIP << ":" << port;
+  ss << "Multicast listening on " << multicastIP << ":" << port;
   SystemEventQueue::push("mcast", ss.str());
   while (running) {
     char buffer[4096];

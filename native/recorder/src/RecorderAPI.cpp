@@ -4,7 +4,9 @@
 #include <map>
 #include <memory>
 #include <napi.h>
+#include <nlohmann/json.hpp>
 #include <node.h>
+#include <uv.h>
 
 extern "C" {
 #include <libavcodec/avcodec.h>
@@ -14,9 +16,11 @@ extern "C" {
 #include <libswscale/swscale.h>
 }
 
+#include "Message.hpp"
 #include "SystemEventQueue.hpp"
 #include "VideoController.hpp"
 
+using json = nlohmann::json;
 std::shared_ptr<VideoController> recorder;
 
 // Utility function to clamp a value between 0 and 255
@@ -228,11 +232,78 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
   return ret;
 }
 
+// Helper function to convert nlohmann::json to Napi::Object
+Napi::Object ConvertJsonToNapiObject(Napi::Env env, const json &j) {
+  Napi::Object obj = Napi::Object::New(env);
+  for (auto it = j.begin(); it != j.end(); ++it) {
+    if (it.value().is_string()) {
+      const std::string s = it.value();
+      obj.Set(it.key(), Napi::String::New(env, s));
+    } else if (it.value().is_number_integer()) {
+      obj.Set(it.key(), Napi::Number::New(env, it.value()));
+    } else if (it.value().is_number_float()) {
+      obj.Set(it.key(), Napi::Number::New(env, it.value()));
+    } else if (it.value().is_boolean()) {
+      obj.Set(it.key(), Napi::Boolean::New(env, it.value()));
+    } else if (it.value().is_object()) {
+      obj.Set(it.key(), ConvertJsonToNapiObject(env, it.value()));
+    } else if (it.value().is_array()) {
+      Napi::Array arr = Napi::Array::New(env, it.value().size());
+      size_t index = 0;
+      for (auto &el : it.value()) {
+        arr.Set(index++, ConvertJsonToNapiObject(env, el));
+      }
+      obj.Set(it.key(), arr);
+    }
+  }
+  return obj;
+}
+Napi::ThreadSafeFunction tsfn;
+
+// Function to send message to Electron main process
+void SendMessageToElectron(const std::string &sender,
+                           std::shared_ptr<json> content) {
+  uv_async_t *async = new uv_async_t;
+  uv_loop_t *loop = uv_default_loop();
+  auto *data =
+      new std::pair<std::string, std::shared_ptr<json>>(sender, content);
+  async->data = data;
+
+  uv_async_init(loop, async, [](uv_async_t *handle) {
+    auto *data = static_cast<std::pair<std::string, std::shared_ptr<json>> *>(
+        handle->data);
+    std::string sender = data->first;
+    std::shared_ptr<json> content = data->second;
+
+    napi_status status = tsfn.BlockingCall(
+        [sender, content](Napi::Env env, Napi::Function jsCallback) {
+          Napi::Object message = Napi::Object::New(env);
+          message.Set("sender", Napi::String::New(env, sender));
+          message.Set("content", ConvertJsonToNapiObject(env, *content));
+          jsCallback.Call({message});
+        });
+    delete data;
+    uv_close(reinterpret_cast<uv_handle_t *>(handle),
+             [](uv_handle_t *handle) { delete handle; });
+  });
+
+  uv_async_send(async);
+}
+
+// Initialize the ThreadSafeFunction
+Napi::Value InitThreadSafeFunction(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  Napi::Function callback = info[0].As<Napi::Function>();
+  tsfn = Napi::ThreadSafeFunction::New(env, callback, "NativeEmitter", 0, 1);
+  return env.Undefined();
+}
+
 // Initialize the addon
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set(Napi::String::New(env, "nativeVideoRecorder"),
               Napi::Function::New(env, nativeVideoRecorder));
-
+  exports.Set("setNativeMessageCallback",
+              Napi::Function::New(env, InitThreadSafeFunction));
   return exports;
 }
 
