@@ -1,5 +1,5 @@
 import { HandlerResponse } from '../../src/renderer/msgbus/MsgbusTypes';
-import { RecorderMessage } from '../../src/renderer/recorder/RecorderApi';
+import { RecorderMessage } from '../../src/renderer/recorder/RecorderTypes';
 
 /**
  * This module provides native C++ functionality as a Node.js addon,

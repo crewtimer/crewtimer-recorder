@@ -8,7 +8,8 @@ import {
   TableRow,
   Paper,
 } from '@mui/material';
-import { RecordingLogEntry, queryRecordingLog } from '../recorder/RecorderApi';
+import { queryRecordingLog } from '../recorder/RecorderApi';
+import { RecordingLogEntry } from '../recorder/RecorderTypes';
 
 const formatTime = (tsMilli: number): string => {
   const date = new Date(tsMilli);
@@ -34,12 +35,12 @@ const RecordingLogTable: React.FC = () => {
         <TableHead>
           <TableRow>
             <TableCell>Time</TableCell>
-            <TableCell>Sub System</TableCell>
+            <TableCell>System</TableCell>
             <TableCell>Message</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
-          {entries.map((entry) => (
+          {entries.reverse().map((entry) => (
             <TableRow key={`${entry.tsMilli}-${entry.message}`}>
               <TableCell>{formatTime(entry.tsMilli)}</TableCell>
               <TableCell>{entry.subsystem}</TableCell>

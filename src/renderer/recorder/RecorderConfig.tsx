@@ -1,5 +1,14 @@
 import React, { useEffect } from 'react';
-import { TextField, Typography, Grid, MenuItem } from '@mui/material';
+import {
+  TextField,
+  Typography,
+  Grid,
+  MenuItem,
+  Checkbox,
+  FormControlLabel,
+  Tooltip,
+  IconButton,
+} from '@mui/material';
 import { UseDatum } from 'react-usedatum';
 import { queryCameraList } from './RecorderApi';
 import {
@@ -9,8 +18,9 @@ import {
 } from './RecorderData';
 import { FullSizeWindow } from '../components/FullSizeWindow';
 import RGBAImageCanvas from '../components/RGBAImageCanvas';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 
-const { openDirDialog } = window.Util;
+const { openDirDialog, openFileExplorer } = window.Util;
 
 const RecordingError = () => {
   const [recordingStatus] = useRecordingStatus();
@@ -53,7 +63,7 @@ const RecorderConfig: React.FC = () => {
   }, [isRecording]);
 
   const chooseDir = () => {
-    openDirDialog('Choose Video Directory', recordingProps.recordingFolder)
+    openDirDialog('Choose Video Folder', recordingProps.recordingFolder)
       .then((result) => {
         if (!result.cancelled) {
           setRecordingProps({
@@ -67,10 +77,16 @@ const RecorderConfig: React.FC = () => {
   };
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const value =
-      event.target.value === 'First Camera Discovered'
-        ? ''
+    let value =
+      event.target.type === 'checkbox'
+        ? event.target.checked
         : event.target.value;
+
+    if (value === 'First Camera Discovered') {
+      value = '';
+    }
+
+    console.log(`Setting ${event.target.name} to ${value}`);
     setRecordingProps({
       ...recordingProps,
       [event.target.name]: value,
@@ -91,7 +107,7 @@ const RecorderConfig: React.FC = () => {
   return (
     <div
       style={{
-        padding: '20px',
+        padding: '0px 10px',
         display: 'flex',
         flexDirection: 'column',
         height: '100%',
@@ -103,9 +119,9 @@ const RecorderConfig: React.FC = () => {
           <TextField
             select
             margin="normal"
-            required
             label="Camera"
             name="networkCamera"
+            size="small"
             value={recordingProps.networkCamera || 'First Camera Discovered'}
             onChange={handleChange}
             fullWidth
@@ -117,10 +133,11 @@ const RecorderConfig: React.FC = () => {
             ))}
           </TextField>
         </Grid>
-        <Grid item xs={12}>
+        <Grid item xs={11}>
           <TextField
             label="Recording Folder"
             variant="outlined"
+            size="small"
             fullWidth
             name="recordingFolder"
             value={recordingProps.recordingFolder}
@@ -128,46 +145,66 @@ const RecorderConfig: React.FC = () => {
             onClick={chooseDir}
           />
         </Grid>
-        <Grid item xs={6}>
-          <TextField
-            size="small"
-            label="Recording Filename Prefix"
-            variant="outlined"
-            fullWidth
-            margin="normal"
-            name="recordingPrefix"
-            value={recordingProps.recordingPrefix}
-            onChange={handleChange}
-          />
+        <Grid item xs={1}>
+          <Tooltip title="Open Recording Folder">
+            <IconButton
+              color="inherit"
+              aria-label="Open Folder"
+              onClick={() => openFileExplorer(recordingProps.recordingFolder)}
+              size="medium"
+            >
+              <FolderOpenIcon />
+            </IconButton>
+          </Tooltip>
         </Grid>
-        <Grid item xs={6}>
-          <TextField
-            size="small"
-            label="Recording File Size (seconds)"
-            variant="outlined"
-            fullWidth
-            margin="normal"
-            name="recordingDuration"
-            value={String(recordingProps.recordingDuration)}
-            onChange={handleChange}
-            type="number"
-          />
+        <Grid item xs={4}>
+          <Tooltip title="A prefix added to each recording file.">
+            <TextField
+              size="small"
+              label="Filename Prefix"
+              variant="outlined"
+              fullWidth
+              margin="normal"
+              name="recordingPrefix"
+              value={recordingProps.recordingPrefix}
+              onChange={handleChange}
+            />
+          </Tooltip>
+        </Grid>
+        <Grid item xs={4}>
+          <Tooltip title="The default duration of each recording file.">
+            <TextField
+              size="small"
+              label="Recording Slice(sec)"
+              variant="outlined"
+              fullWidth
+              margin="normal"
+              name="recordingDuration"
+              value={String(recordingProps.recordingDuration)}
+              onChange={handleChange}
+              type="number"
+            />
+          </Tooltip>
+        </Grid>
+        <Grid item xs={4}>
+          <Tooltip title="If checked, finish line set by CrewTimer Connect will be shown on video preview.">
+            <FormControlLabel
+              control={
+                <Checkbox
+                  name="showFinishGuide"
+                  checked={!!recordingProps.showFinishGuide}
+                  onChange={handleChange}
+                />
+              }
+              label="Finish Line"
+              sx={{ paddingTop: '1em' }}
+            />
+          </Tooltip>
         </Grid>
       </Grid>
-      {/* <Button
-        variant="contained"
-        color="primary"
-        startIcon={
-          isRecording ? <RecordIcon style={{ color: '#ff0000' }} /> : null
-        }
-        onClick={toggleRecording}
-        sx={{ marginTop: '20px' }}
-      >
-        {isRecording ? 'Stop Recording' : 'Start Recording'}
-      </Button> */}
       <div
         style={{
-          marginTop: '20px',
+          marginTop: '10px',
           flexGrow: 1,
         }}
       >

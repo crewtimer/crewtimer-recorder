@@ -5,6 +5,7 @@ export interface RecordingProps {
   recordingPrefix: string;
   recordingDuration: number;
   networkCamera: string;
+  showFinishGuide: boolean;
 }
 
 export interface RecorderMessage {

@@ -3,9 +3,9 @@
  */
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
 import Store from 'electron-store';
+import deepequal from 'fast-deep-equal/es6/react';
 import { getMainWindow } from '../mainWindow';
 import { notifyChange } from '../../renderer/store/StoreUtil';
-import deepequal from 'fast-deep-equal/es6/react';
 
 /** Stored data instance for on-disk storage */
 const store = new Store();

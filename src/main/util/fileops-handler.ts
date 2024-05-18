@@ -1,6 +1,8 @@
 import { BrowserWindow, OpenDialogOptions, dialog, ipcMain } from 'electron';
 import { getMainWindow } from '../mainWindow';
 
+const { exec } = require('child_process');
+
 const fs = require('fs');
 
 ipcMain.handle('delete-file', async (_event, filename) => {
@@ -62,4 +64,29 @@ ipcMain.handle('get-files-in-directory', (_event, dirPath) => {
       },
     );
   });
+});
+
+function openFileExplorer(folderPath: string) {
+  const { platform } = process;
+  let command;
+
+  if (platform === 'win32') {
+    command = `explorer "${folderPath}"`;
+  } else if (platform === 'darwin') {
+    command = `open "${folderPath}"`;
+  } else if (platform === 'linux') {
+    command = `xdg-open "${folderPath}"`;
+  }
+
+  if (command) {
+    exec(command, (error: any) => {
+      if (error) {
+        console.error('Error opening file explorer:', error);
+      }
+    });
+  }
+}
+
+ipcMain.handle('open-file-explorer', (_event, dirPath) => {
+  openFileExplorer(dirPath);
 });

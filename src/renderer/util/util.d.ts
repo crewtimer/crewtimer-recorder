@@ -18,6 +18,7 @@ declare global {
       ): void;
       openFileDialog(): Promise<OpenFileReturn>;
       openDirDialog(title: string, defaultPath: string): Promise<OpenDirReturn>;
+      openFileExplorer(path: string): Promise<void>;
       getFilesInDirectory(dirPath: string): Promise<DirListReturn>;
       deleteFile(filename: string): Promise<CloseFileReturn>;
     };

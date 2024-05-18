@@ -253,6 +253,7 @@ class NdiReader : public VideoReader {
   };
 
   std::string connect() {
+    SystemEventQueue::push("NDI", "Searching for NDI sources...");
     NDIlib_source_t p_source;
     CameraInfo foundCamera;
     std::vector<CameraInfo> cameras;

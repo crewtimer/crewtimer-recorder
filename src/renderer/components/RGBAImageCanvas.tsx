@@ -4,6 +4,7 @@ import {
   useFrameGrab,
   useGuide,
   useIsRecording,
+  useRecordingProps,
 } from '../recorder/RecorderData';
 import {
   requestVideoFrame,
@@ -61,6 +62,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   let [frame] = useFrameGrab();
   const [guide] = useGuide();
   const [isRecording] = useIsRecording();
+  const [settings] = useRecordingProps();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   if (frame?.data) {
@@ -140,19 +142,28 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       scaledWidth,
       scaledHeight,
     );
-    // Draw the red line
-    ctx.beginPath();
-    ctx.moveTo(offsetX + scaledWidth / 2 + guide.pt1 * scale, 0); // Horizontal center + N pixels offset, scaled
-    ctx.lineTo(
-      offsetX + scaledWidth / 2 + guide.pt2 * scale,
-      offsetY + scaledHeight,
-    );
-    ctx.strokeStyle = 'red';
-    ctx.lineWidth = 1; // Line width can be adjusted as needed
-    ctx.stroke();
 
+    if (settings.showFinishGuide) {
+      // Draw the red line
+      ctx.beginPath();
+      ctx.moveTo(offsetX + scaledWidth / 2 + guide.pt1 * scale, 0); // Horizontal center + N pixels offset, scaled
+      ctx.lineTo(
+        offsetX + scaledWidth / 2 + guide.pt2 * scale,
+        offsetY + scaledHeight,
+      );
+      ctx.strokeStyle = 'red';
+      ctx.lineWidth = 1; // Line width can be adjusted as needed
+      ctx.stroke();
+    }
     drawIcon(ctx, parentWidth, scaledHeight, isRecording);
-  }, [frame, divwidth, divheight, guide, isRecording]);
+  }, [
+    frame,
+    divwidth,
+    divheight,
+    guide,
+    isRecording,
+    settings.showFinishGuide,
+  ]);
 
   return (
     <Box sx={{ width: divwidth, height: divheight }} onClick={togglePlay}>

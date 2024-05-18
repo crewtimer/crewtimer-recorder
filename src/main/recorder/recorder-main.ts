@@ -4,11 +4,11 @@ import {
   setNativeMessageCallback,
 } from 'crewtimer_video_recorder';
 import { msgbus } from '../msgbus/msgbus-util';
+import { setStoredValue } from '../store/store';
 import {
   RecorderMessage,
   RecorderResponse,
-} from '../../renderer/recorder/RecorderApi';
-import { setStoredValue } from '../store/store';
+} from '../../renderer/recorder/RecorderTypes';
 
 app.on('ready', () => {
   setNativeMessageCallback(({ sender, content }) => {
