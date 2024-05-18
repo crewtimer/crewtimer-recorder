@@ -1,15 +1,16 @@
-import React from 'react';
-import { Button, TextField, InputAdornment, Typography } from '@mui/material';
-import RecordIcon from '@mui/icons-material/FiberManualRecord';
-import { startRecording, stopRecording } from './RecorderApi';
+import React, { useEffect } from 'react';
+import { TextField, Typography, Grid, MenuItem } from '@mui/material';
+import { UseDatum } from 'react-usedatum';
+import { queryCameraList } from './RecorderApi';
 import {
   useRecordingStatus,
   useIsRecording,
-  useRecordingStartTime,
   useRecordingProps,
 } from './RecorderData';
 import { FullSizeWindow } from '../components/FullSizeWindow';
 import RGBAImageCanvas from '../components/RGBAImageCanvas';
+
+const { openDirDialog } = window.Util;
 
 const RecordingError = () => {
   const [recordingStatus] = useRecordingStatus();
@@ -27,48 +28,65 @@ const RecordingError = () => {
     </Typography>
   ) : null;
 };
+
+const [useCameraList, setCameraList] = UseDatum<
+  { name: string; address: string }[]
+>([]);
 const RecorderConfig: React.FC = () => {
   const [isRecording] = useIsRecording();
   const [recordingProps, setRecordingProps] = useRecordingProps();
+  const [cameraList] = useCameraList();
 
-  const handleFolderChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    if (isRecording) {
+      return () => {};
+    }
+    const timer = setInterval(() => {
+      queryCameraList()
+        .then((result) => {
+          setCameraList(result.cameras || []);
+          return null;
+        })
+        .catch((err) => console.error(err));
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [isRecording]);
+
+  const chooseDir = () => {
+    openDirDialog('Choose Video Directory', recordingProps.recordingFolder)
+      .then((result) => {
+        if (!result.cancelled) {
+          setRecordingProps({
+            ...recordingProps,
+            recordingFolder: result.path,
+          });
+        }
+        return null;
+      })
+      .catch((e) => console.error(e));
+  };
+
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value =
+      event.target.value === 'First Camera Discovered'
+        ? ''
+        : event.target.value;
     setRecordingProps({
       ...recordingProps,
-      recordingFolder: event.target.value,
+      [event.target.name]: value,
     });
   };
 
-  const handlePrefixChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setRecordingProps({
-      ...recordingProps,
-      recordingPrefix: event.target.value,
+  const cameraSelectItems = [
+    { name: 'First Camera Discovered', address: '1st' },
+    ...cameraList,
+  ];
+  if (!cameraSelectItems.find((c) => c.name === recordingProps.networkCamera)) {
+    cameraSelectItems.push({
+      name: recordingProps.networkCamera,
+      address: '',
     });
-  };
-
-  const handleIntervalChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setRecordingProps({
-      ...recordingProps,
-      recordingDuration: parseInt(event.target.value, 10),
-    });
-  };
-
-  const toggleRecording = () => {
-    (isRecording ? stopRecording() : startRecording()).catch((err) =>
-      console.error(err),
-    );
-  };
-
-  // const chooseDir = () => {
-  //   openDirDialog('Choose Video Directory', videoDir)
-  //     .then((result) => {
-  //       if (!result.cancelled) {
-  //         if (result.path !== videoDir) {
-  //           setVideoDir(result.path);
-  //         }
-  //       }
-  //     })
-  //     .catch();
-  // };
+  }
 
   return (
     <div
@@ -80,42 +98,62 @@ const RecorderConfig: React.FC = () => {
       }}
     >
       <RecordingError />
-      <TextField
-        label="Recording Folder"
-        variant="outlined"
-        fullWidth
-        value={recordingProps.recordingFolder}
-        onChange={handleFolderChange}
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <Button variant="contained" component="label">
-                Select Folder
-                <input type="file" hidden onChange={handleFolderChange} />
-              </Button>
-            </InputAdornment>
-          ),
-        }}
-      />
-      <TextField
-        size="small"
-        label="Recording Filename Prefix"
-        variant="outlined"
-        fullWidth
-        margin="normal"
-        value={recordingProps.recordingPrefix}
-        onChange={handlePrefixChange}
-      />
-      <TextField
-        size="small"
-        label="Recording File Size (seconds)"
-        variant="outlined"
-        fullWidth
-        margin="normal"
-        value={String(recordingProps.recordingDuration)}
-        onChange={handleIntervalChange}
-        type="number"
-      />
+      <Grid container spacing={2}>
+        <Grid item xs={12}>
+          <TextField
+            select
+            margin="normal"
+            required
+            label="Camera"
+            name="networkCamera"
+            value={recordingProps.networkCamera || 'First Camera Discovered'}
+            onChange={handleChange}
+            fullWidth
+          >
+            {cameraSelectItems.map((camera) => (
+              <MenuItem key={camera.name} value={camera.name}>
+                {camera.name}
+              </MenuItem>
+            ))}
+          </TextField>
+        </Grid>
+        <Grid item xs={12}>
+          <TextField
+            label="Recording Folder"
+            variant="outlined"
+            fullWidth
+            name="recordingFolder"
+            value={recordingProps.recordingFolder}
+            onChange={handleChange}
+            onClick={chooseDir}
+          />
+        </Grid>
+        <Grid item xs={6}>
+          <TextField
+            size="small"
+            label="Recording Filename Prefix"
+            variant="outlined"
+            fullWidth
+            margin="normal"
+            name="recordingPrefix"
+            value={recordingProps.recordingPrefix}
+            onChange={handleChange}
+          />
+        </Grid>
+        <Grid item xs={6}>
+          <TextField
+            size="small"
+            label="Recording File Size (seconds)"
+            variant="outlined"
+            fullWidth
+            margin="normal"
+            name="recordingDuration"
+            value={String(recordingProps.recordingDuration)}
+            onChange={handleChange}
+            type="number"
+          />
+        </Grid>
+      </Grid>
       {/* <Button
         variant="contained"
         color="primary"

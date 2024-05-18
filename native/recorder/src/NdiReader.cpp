@@ -201,8 +201,9 @@ class NdiReader : public VideoReader {
   std::thread ndiThread;
   std::atomic<bool> keepRunning;
   std::shared_ptr<FrameProcessor> frameProcessor;
-  NDIlib_recv_instance_t pNDI_recv;
-  const std::string srcName;
+  NDIlib_recv_instance_t pNDI_recv = nullptr;
+  NDIlib_find_instance_t pNDI_find = nullptr;
+  std::string srcName;
 
   class NdiFrame : public Frame {
     NDIlib_recv_instance_t pNDI_recv;
@@ -222,49 +223,57 @@ class NdiReader : public VideoReader {
     return "";
   }
 
-  std::string connect() {
+  std::vector<CameraInfo> getCameraList() override {
+    std::vector<CameraInfo> list;
     // Create a finder
-    NDIlib_find_instance_t pNDI_find = NDIlib_find_create_v2();
+    if (pNDI_find == nullptr) {
+      pNDI_find = NDIlib_find_create_v2();
+    }
+
     if (!pNDI_find)
-      return "NDIlib_find_create_v2() failed";
+      return list;
 
-    // Wait until there is a source
+    const NDIlib_source_t *p_sources = NULL;
+    uint32_t no_sources = 0;
+    while (!no_sources) {
+      // Wait until the sources on the network have changed
+      NDIlib_find_wait_for_sources(pNDI_find, 2000);
+      p_sources = NDIlib_find_get_current_sources(pNDI_find, &no_sources);
+    }
 
-    const NDIlib_source_t *p_source = NULL;
+    for (int src = 0; src < no_sources; src++) {
+      list.push_back(
+          CameraInfo(p_sources[src].p_ndi_name, p_sources[src].p_url_address));
+      // SystemEventQueue::push("NDI", std::string("Source Found: ") +
+      //                                   p_sources[src].p_ndi_name + " at " +
+      //                                   p_sources[src].p_ip_address);
+    }
 
-    // FIXME - allow passing in srcName
-    while (!p_source && keepRunning.load()) {
-      SystemEventQueue::push("NDI", "Looking for source " + srcName);
-      const NDIlib_source_t *p_sources = NULL;
-      uint32_t no_sources = 0;
-      while (!no_sources) {
-        // Wait until the sources on the network have changed
-        NDIlib_find_wait_for_sources(pNDI_find, 1000 /* One second */);
-        p_sources = NDIlib_find_get_current_sources(pNDI_find, &no_sources);
-      }
+    return list;
+  };
 
-      for (int src = 0; src < no_sources; src++) {
-        SystemEventQueue::push("NDI", std::string("Source Found: ") +
-                                          p_sources[src].p_ndi_name + " at " +
-                                          p_sources[src].p_ip_address);
-        if (std::string(p_sources[src].p_ndi_name).find(srcName) == 0) {
-          p_source = p_sources + src;
+  std::string connect() {
+    NDIlib_source_t p_source;
+    CameraInfo foundCamera;
+    std::vector<CameraInfo> cameras;
+    while (foundCamera.name == "" && keepRunning.load()) {
+      cameras = getCameraList();
+      for (auto camera : cameras) {
+        // std::cout << "Found camera: " << camera.name << std::endl;
+        if (camera.name.find(srcName) == 0) {
+          foundCamera = camera;
+          break;
         }
       }
     }
 
-    if (!p_source) {
+    if (foundCamera.name == "") {
       return ""; // stop received before ndi source found
     }
 
     NDIlib_recv_create_v3_t recv_create;
 
-#ifdef NDI_BGRX
-    recv_create.color_format =
-        NDIlib_recv_color_format_BGRX_BGRA; // NDIlib_recv_color_format_RGBX_RGBA;
-#else
     recv_create.color_format = NDIlib_recv_color_format_UYVY_BGRA;
-#endif
     // We now have at least one source, so we create a receiver to look at it.
     pNDI_recv = NDIlib_recv_create_v3(&recv_create);
     if (!pNDI_recv)
@@ -272,14 +281,14 @@ class NdiReader : public VideoReader {
 
     // Connect to the source
     SystemEventQueue::push("NDI", std::string("Connecting to ") +
-                                      p_source->p_ndi_name + " at " +
-                                      p_source->p_ip_address);
+                                      foundCamera.name + " at " +
+                                      foundCamera.address);
     // Connect to our sources
-    NDIlib_recv_connect(pNDI_recv, p_source);
-
-    // Destroy the NDI finder. We needed to have access to the pointers to
-    // p_sources[0]
-    NDIlib_find_destroy(pNDI_find);
+    p_source.p_ndi_name = foundCamera.name.c_str();
+    p_source.p_url_address = foundCamera.address.c_str();
+    NDIlib_recv_connect(pNDI_recv, &p_source);
+    foundCamera.name = "";
+    cameras.clear();
 
     return "";
   }
@@ -305,7 +314,8 @@ class NdiReader : public VideoReader {
         if (video_frame.xres && video_frame.yres) {
           frameCount++;
           if (frameCount == 1) {
-            break; // 1st frame often old frame cached from ndi sender.  Ignore.
+            break; // 1st frame often old frame cached from ndi sender.
+                   // Ignore.
           }
           if (video_frame.timestamp == NDIlib_recv_timestamp_undefined) {
             std::cerr << "timestamp not supported" << std::endl;
@@ -378,8 +388,9 @@ class NdiReader : public VideoReader {
   }
 
 public:
-  NdiReader(const std::string srcName) : srcName(srcName) {}
-  std::string start() override {
+  NdiReader() {}
+  std::string start(const std::string srcName) override {
+    this->srcName = srcName;
     keepRunning = true;
     ndiThread = std::thread([this]() { run(); });
 #ifndef _WIN32
@@ -389,11 +400,20 @@ public:
   };
   std::string stop() override {
     keepRunning = false;
-    ndiThread.join();
+    if (ndiThread.joinable()) {
+      ndiThread.join();
+    }
     return "";
   }
+  virtual ~NdiReader() override {
+    stop();
+
+    if (pNDI_find != nullptr) {
+      NDIlib_find_destroy(pNDI_find);
+    }
+  };
 };
 
-std::shared_ptr<VideoReader> createNdiReader(std::string srcName) {
-  return std::shared_ptr<NdiReader>(new NdiReader(srcName));
+std::shared_ptr<VideoReader> createNdiReader() {
+  return std::shared_ptr<NdiReader>(new NdiReader());
 }

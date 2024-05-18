@@ -14,6 +14,7 @@ export const [useRecordingProps, , getRecordingProps] =
     recordingFolder: './',
     recordingPrefix: 'CT_',
     recordingDuration: 5,
+    networkCamera: '',
   });
 export const [
   useRecordingStartTime,

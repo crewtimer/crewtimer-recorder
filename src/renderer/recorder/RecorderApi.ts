@@ -5,6 +5,7 @@ import {
   RecordingLog,
   GrabFrameResponse,
   RecordingStatus,
+  CameraListResponse,
 } from './RecorderTypes';
 import {
   getRecordingProps,
@@ -47,6 +48,15 @@ export const queryRecordingLog = () => {
   return window.msgbus.sendMessage<RecorderMessage, RecordingLog>('recorder', {
     op: 'recording-log',
   });
+};
+
+export const queryCameraList = () => {
+  return window.msgbus.sendMessage<RecorderMessage, CameraListResponse>(
+    'recorder',
+    {
+      op: 'get-camera-list',
+    },
+  );
 };
 
 export const requestVideoFrame = async () => {

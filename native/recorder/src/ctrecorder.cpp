@@ -176,9 +176,8 @@ int main(int argc, char *argv[]) {
   const auto daemon = args["-daemon"] == "true";
   const auto encoder = args["-encoder"];
 
-  auto recorder = std::shared_ptr<VideoController>(
-      new VideoController(srcName, encoder, directory, prefix, interval));
-  recorder->start();
+  auto recorder = std::shared_ptr<VideoController>(new VideoController("ndi"));
+  recorder->start(srcName, encoder, directory, prefix, interval);
 
   auto startShutdown = [recorder]() { recorder->stop(); };
   stopHandler = startShutdown;

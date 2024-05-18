@@ -4,6 +4,7 @@ export interface RecordingProps {
   recordingFolder: string;
   recordingPrefix: string;
   recordingDuration: number;
+  networkCamera: string;
 }
 
 export interface RecorderMessage {
@@ -12,7 +13,8 @@ export interface RecorderMessage {
     | 'stop-recording'
     | 'recording-status'
     | 'recording-log'
-    | 'grab-frame';
+    | 'grab-frame'
+    | 'get-camera-list';
 }
 
 export interface StartRecorderMessage extends RecorderMessage {
@@ -66,4 +68,11 @@ export interface RecordingLogEntry {
 }
 export interface RecordingLog extends HandlerResponse {
   list: RecordingLogEntry[];
+}
+
+export interface CameraListResponse extends HandlerResponse {
+  cameras: {
+    name: string;
+    address: string;
+  }[];
 }

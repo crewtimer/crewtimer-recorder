@@ -21,11 +21,11 @@ public:
   };
 
 private:
-  const std::string srcName;
-  const std::string encoder;
-  const std::string dir;
-  const std::string prefix;
-  const int interval;
+  std::string srcName;
+  std::string encoder;
+  std::string dir;
+  std::string prefix;
+  int interval;
   std::thread monitorThread;
 
   std::chrono::steady_clock::time_point startTime;
@@ -40,11 +40,18 @@ private:
   StatusInfo statusInfo;
 
 public:
-  VideoController(const std::string srcName, const std::string encoder,
-                  const std::string dir, const std::string prefix,
-                  const int interval)
-      : srcName(srcName), encoder(encoder), dir(dir), prefix(prefix),
-        interval(interval), monitorThread(&VideoController::monitorLoop, this) {
+  VideoController(const std::string camType)
+      : monitorThread(&VideoController::monitorLoop, this) {
+
+#ifdef HAVE_BASLER
+    if (camType == "basler") { // basler camera
+      videoReader = createBaslerReader();
+    } else {
+      videoReader = createNdiReader();
+    }
+#else
+    videoReader = createNdiReader();
+#endif
   }
   ~VideoController() {
     monitorStopRequested = true;
@@ -53,6 +60,15 @@ public:
       monitorThread.join();
     }
   }
+
+  std::vector<VideoReader::CameraInfo> getCameraList() {
+    std::lock_guard<std::recursive_mutex> lock(controlMutex);
+    if (videoReader) {
+      return videoReader->getCameraList();
+    }
+    return std::vector<VideoReader::CameraInfo>();
+  }
+
   StatusInfo getStatus() {
     std::lock_guard<std::recursive_mutex> lock(controlMutex);
     std::chrono::steady_clock::time_point endTime =
@@ -69,8 +85,15 @@ public:
     return statusInfo;
   }
 
-  std::string start() {
+  std::string start(const std::string srcName, const std::string encoder,
+                    const std::string dir, const std::string prefix,
+                    const int interval) {
     std::lock_guard<std::recursive_mutex> lock(controlMutex);
+    this->srcName = srcName;
+    this->encoder = encoder;
+    this->dir = dir;
+    this->prefix = prefix;
+    this->interval = interval;
     if (videoRecorder) {
       return "Video Controller already running";
     }
@@ -110,21 +133,11 @@ public:
     frameProcessor = std::shared_ptr<FrameProcessor>(
         new FrameProcessor(dir, prefix, videoRecorder, interval));
 
-    // auto reader = createBaslerReader();
-#ifdef HAVE_BASLER
-    if (srcName == "basler") { // basler camera
-      videoReader = createBaslerReader();
-    } else {
-      videoReader = createNdiReader(srcName);
-    }
-#else
-    videoReader = createNdiReader(srcName);
-#endif
     retval = videoReader->open(frameProcessor);
     if (!retval.empty()) {
       return retval;
     }
-    retval = videoReader->start();
+    retval = videoReader->start(srcName);
     if (!retval.empty()) {
       return retval;
     }
@@ -175,7 +188,7 @@ public:
 
     SystemEventQueue::push("VID", "Stopping video reader...");
     videoReader->stop();
-    videoReader = nullptr;
+    // Do not null the reader since we rely on it to query  cameras
 
     SystemEventQueue::push("VID", "Stopping frame processor...");
     frameProcessor->stop();

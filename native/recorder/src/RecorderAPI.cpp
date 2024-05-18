@@ -21,7 +21,8 @@ extern "C" {
 #include "VideoController.hpp"
 
 using json = nlohmann::json;
-std::shared_ptr<VideoController> recorder;
+std::shared_ptr<VideoController> recorder =
+    std::shared_ptr<VideoController>(new VideoController("ndi"));
 
 // Utility function to clamp a value between 0 and 255
 inline uint8_t clamp(int value) {
@@ -91,6 +92,33 @@ convertEventsToJS(const Napi::Env &env,
   return jsArray;
 }
 
+// Helper function to convert nlohmann::json to Napi::Object
+Napi::Object ConvertJsonToNapiObject(Napi::Env env, const json &j) {
+  Napi::Object obj = Napi::Object::New(env);
+  for (auto it = j.begin(); it != j.end(); ++it) {
+    if (it.value().is_string()) {
+      const std::string s = it.value();
+      obj.Set(it.key(), Napi::String::New(env, s));
+    } else if (it.value().is_number_integer()) {
+      obj.Set(it.key(), Napi::Number::New(env, it.value()));
+    } else if (it.value().is_number_float()) {
+      obj.Set(it.key(), Napi::Number::New(env, it.value()));
+    } else if (it.value().is_boolean()) {
+      obj.Set(it.key(), Napi::Boolean::New(env, it.value()));
+    } else if (it.value().is_object()) {
+      obj.Set(it.key(), ConvertJsonToNapiObject(env, it.value()));
+    } else if (it.value().is_array()) {
+      Napi::Array arr = Napi::Array::New(env, it.value().size());
+      size_t index = 0;
+      for (auto &el : it.value()) {
+        arr.Set(index++, ConvertJsonToNapiObject(env, el));
+      }
+      obj.Set(it.key(), arr);
+    }
+  }
+  return obj;
+}
+
 // Define a destructor to free uint8_t buffers
 void FinalizeBuffer(Napi::Env env, void *data) {
   // Clean up memory if necessary
@@ -135,11 +163,13 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
       }
       auto folder = props.Get("recordingFolder").As<Napi::String>().Utf8Value();
       auto prefix = props.Get("recordingPrefix").As<Napi::String>().Utf8Value();
+      auto networkCamera =
+          props.Get("networkCamera").As<Napi::String>().Utf8Value();
       auto interval =
           props.Get("recordingInterval").As<Napi::Number>().Uint32Value();
-      recorder = std::shared_ptr<VideoController>(
-          new VideoController("", "ffmpeg", folder, prefix, interval));
-      auto result = recorder->start();
+
+      auto result =
+          recorder->start(networkCamera, "ffmpeg", folder, prefix, interval);
       if (!result.empty()) {
         std::cerr << "Error: " << result << std::endl;
         ret.Set("status", Napi::String::New(env, "Fail"));
@@ -153,7 +183,26 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
       if (recorder) {
         auto err = recorder->stop();
         std::cerr << "Recorder stoped with status: " << err << std::endl;
-        recorder = nullptr;
+      }
+      return ret;
+    } else if (op == "get-camera-list") {
+
+      if (recorder) {
+        auto cameras = recorder->getCameraList();
+        Napi::Array arr = Napi::Array::New(env, cameras.size());
+        size_t index = 0;
+        for (auto &camera : cameras) {
+          auto item = Napi::Object::New(env);
+          item.Set("name", Napi::String::New(env, camera.name));
+          item.Set("address", Napi::String::New(env, camera.address));
+          arr.Set(index++, item);
+        }
+
+        ret.Set("cameras", arr);
+        ret.Set("status", Napi::String::New(env, "OK"));
+      } else {
+        ret.Set("status", Napi::String::New(env, "Fail"));
+        ret.Set("error", Napi::String::New(env, "No recorder running"));
       }
       return ret;
     } else if (op == "recording-status") {
@@ -184,8 +233,8 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
       }
       return ret;
     } else if (op == "recording-log") {
-      // TODO - perhaps avoid the copy and make friend class to access the list
-      // for serialization
+      // TODO - perhaps avoid the copy and make friend class to access the
+      // list for serialization
       auto list = SystemEventQueue::getEventList();
       ret.Set("list", convertEventsToJS(env, list));
       return ret;
@@ -232,32 +281,6 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
   return ret;
 }
 
-// Helper function to convert nlohmann::json to Napi::Object
-Napi::Object ConvertJsonToNapiObject(Napi::Env env, const json &j) {
-  Napi::Object obj = Napi::Object::New(env);
-  for (auto it = j.begin(); it != j.end(); ++it) {
-    if (it.value().is_string()) {
-      const std::string s = it.value();
-      obj.Set(it.key(), Napi::String::New(env, s));
-    } else if (it.value().is_number_integer()) {
-      obj.Set(it.key(), Napi::Number::New(env, it.value()));
-    } else if (it.value().is_number_float()) {
-      obj.Set(it.key(), Napi::Number::New(env, it.value()));
-    } else if (it.value().is_boolean()) {
-      obj.Set(it.key(), Napi::Boolean::New(env, it.value()));
-    } else if (it.value().is_object()) {
-      obj.Set(it.key(), ConvertJsonToNapiObject(env, it.value()));
-    } else if (it.value().is_array()) {
-      Napi::Array arr = Napi::Array::New(env, it.value().size());
-      size_t index = 0;
-      for (auto &el : it.value()) {
-        arr.Set(index++, ConvertJsonToNapiObject(env, el));
-      }
-      obj.Set(it.key(), arr);
-    }
-  }
-  return obj;
-}
 Napi::ThreadSafeFunction tsfn;
 
 // Function to send message to Electron main process

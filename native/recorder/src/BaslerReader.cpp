@@ -226,7 +226,7 @@ public:
     PylonTerminate();
     return 0;
   }
-  virtual std::string start() override {
+  virtual std::string const std::string srcName) override {
     keepRunning = true;
     readerThread = std::thread([this]() { run(); });
     readerThread.join();

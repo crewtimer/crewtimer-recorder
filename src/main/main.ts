@@ -18,6 +18,7 @@ import './store/store';
 import './msgbus/msgbus-main';
 import { stopRecording, initRecorder } from './recorder/recorder-main';
 import { setMainWindow } from './mainWindow';
+import './util/fileops-handler';
 
 class AppUpdater {
   constructor() {
