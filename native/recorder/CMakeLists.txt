@@ -45,7 +45,7 @@ elseif(WIN32)
     set(LIB_PREFIX lib)
     set(EXTRA_LIBS  Ws2_32 Secur32 Bcrypt mfplat
     mfuuid strmiids)
-    set(FFMPEG_FOLDER "C:/Users/glenne/git/crewtimer-connect/native/ffreader/src/ffmpeg-built-win")
+    set(FFMPEG_FOLDER "../../../../ffmpeg-built-win")
     add_compile_definitions(USE_FFMPEG)
     set(USE_OPENCV OFF CACHE BOOL "Use OPENCV features" FORCE)
     # add_compile_definitions(USE_OPENCV)

@@ -1,4 +1,10 @@
-import { BrowserWindow, OpenDialogOptions, dialog, ipcMain } from 'electron';
+import {
+  BrowserWindow,
+  OpenDialogOptions,
+  app,
+  dialog,
+  ipcMain,
+} from 'electron';
 import { getMainWindow } from '../mainWindow';
 
 const { exec } = require('child_process');
@@ -63,6 +69,12 @@ ipcMain.handle('get-files-in-directory', (_event, dirPath) => {
         }
       },
     );
+  });
+});
+
+ipcMain.handle('get-documents-folder', (/* event */) => {
+  return new Promise((resolve) => {
+    resolve(app.getPath('documents'));
   });
 });
 

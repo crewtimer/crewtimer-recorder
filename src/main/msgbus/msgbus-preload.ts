@@ -4,6 +4,9 @@ contextBridge.exposeInMainWorld('msgbus', {
   sendMessage<T>(dest: string, message: T) {
     // expect a response, use invoke
     // console.log('sendMessage', dest, message);
+    // return new Promise<any>((resolve) => {
+    //   resolve({ status: 'OK' });
+    // });
     return ipcRenderer.invoke('msgbus:send', dest, message);
   },
   // onMessageRx: (

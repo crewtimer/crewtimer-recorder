@@ -62,6 +62,14 @@ export const DefaultRecordingStatus: RecordingStatus = {
   },
 };
 
+export const DefaultRecordingProps: RecordingProps = {
+  recordingFolder: './',
+  recordingPrefix: 'CT_',
+  recordingDuration: 300,
+  networkCamera: '',
+  showFinishGuide: true,
+};
+
 export interface RecordingLogEntry {
   tsMilli: number;
   subsystem: string;

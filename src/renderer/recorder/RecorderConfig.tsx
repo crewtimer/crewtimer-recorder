@@ -10,6 +10,8 @@ import {
   IconButton,
 } from '@mui/material';
 import { UseDatum } from 'react-usedatum';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { queryCameraList } from './RecorderApi';
 import {
   useRecordingStatus,
@@ -18,7 +20,7 @@ import {
 } from './RecorderData';
 import { FullSizeWindow } from '../components/FullSizeWindow';
 import RGBAImageCanvas from '../components/RGBAImageCanvas';
-import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import { showErrorDialog } from '../components/ErrorDialog';
 
 const { openDirDialog, openFileExplorer } = window.Util;
 
@@ -57,7 +59,7 @@ const RecorderConfig: React.FC = () => {
           setCameraList(result.cameras || []);
           return null;
         })
-        .catch((err) => console.error(err));
+        .catch(showErrorDialog);
     }, 5000);
     return () => clearInterval(timer);
   }, [isRecording]);
@@ -73,7 +75,7 @@ const RecorderConfig: React.FC = () => {
         }
         return null;
       })
-      .catch((e) => console.error(e));
+      .catch(showErrorDialog);
   };
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -133,7 +135,7 @@ const RecorderConfig: React.FC = () => {
             ))}
           </TextField>
         </Grid>
-        <Grid item xs={11}>
+        <Grid item xs={10}>
           <TextField
             label="Recording Folder"
             variant="outlined"
@@ -146,14 +148,26 @@ const RecorderConfig: React.FC = () => {
           />
         </Grid>
         <Grid item xs={1}>
-          <Tooltip title="Open Recording Folder">
+          <Tooltip title="Select Recording Folder">
+            <IconButton
+              color="inherit"
+              aria-label="Open Folder"
+              onClick={chooseDir}
+              size="medium"
+            >
+              <FolderOpenIcon />
+            </IconButton>
+          </Tooltip>
+        </Grid>
+        <Grid item xs={1}>
+          <Tooltip title="Explore Recording Folder">
             <IconButton
               color="inherit"
               aria-label="Open Folder"
               onClick={() => openFileExplorer(recordingProps.recordingFolder)}
               size="medium"
             >
-              <FolderOpenIcon />
+              <OpenInNewIcon />
             </IconButton>
           </Tooltip>
         </Grid>
@@ -208,7 +222,7 @@ const RecorderConfig: React.FC = () => {
           flexGrow: 1,
         }}
       >
-        <FullSizeWindow component={RGBAImageCanvas} />
+        {/* <FullSizeWindow component={RGBAImageCanvas} /> */}
       </div>
     </div>
   );

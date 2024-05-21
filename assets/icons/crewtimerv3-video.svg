@@ -3,7 +3,7 @@
    inkscape:export-ydpi="96"
    inkscape:export-xdpi="96"
    inkscape:export-filename="1024x1024.png"
-   sodipodi:docname="crewtimerv3-video-white.svg"
+   sodipodi:docname="crewtimerv3-video.svg"
    inkscape:version="1.2.2 (b0a8486, 2022-12-01)"
    version="1.1"
    id="svg2"
@@ -282,7 +282,7 @@
        mask="url(#mask3961)" />
   </g>
   <g
-     style="display:none"
+     style="display:inline"
      inkscape:label="WhiteBackground"
      id="layer9"
      inkscape:groupmode="layer">
@@ -306,7 +306,7 @@
   </g>
   <g
      sodipodi:insensitive="true"
-     style="display:none"
+     style="display:inline"
      mask="url(#mask3961)"
      inkscape:label="Background"
      id="layer7"

@@ -6,6 +6,7 @@ import {
   GrabFrameResponse,
   RecordingStatus,
   CameraListResponse,
+  DefaultRecordingProps,
 } from './RecorderTypes';
 import {
   getRecordingProps,
@@ -13,15 +14,19 @@ import {
   setIsRecording,
   setRecordingStartTime,
 } from './RecorderData';
+import { showErrorDialog } from '../components/ErrorDialog';
 
 export const startRecording = () => {
   setRecordingStartTime(Date.now());
   setIsRecording(true);
+  // console.log(`recording props: ${JSON.stringify(getRecordingProps())}`);
+  const recordingProps = { ...DefaultRecordingProps, ...getRecordingProps() };
+  recordingProps.recordingDuration = Number(recordingProps.recordingDuration);
   return window.msgbus.sendMessage<StartRecorderMessage, HandlerResponse>(
     'recorder',
     {
       op: 'start-recording',
-      props: getRecordingProps(),
+      props: recordingProps,
     },
   );
 };
@@ -72,8 +77,5 @@ export const requestVideoFrame = async () => {
       }
       return frame;
     })
-    .catch((err) => {
-      console.error(err);
-      return undefined;
-    });
+    .catch(showErrorDialog);
 };

@@ -10,6 +10,7 @@ import {
 } from '@mui/material';
 import { queryRecordingLog } from '../recorder/RecorderApi';
 import { RecordingLogEntry } from '../recorder/RecorderTypes';
+import { showErrorDialog } from '../components/ErrorDialog';
 
 const formatTime = (tsMilli: number): string => {
   const date = new Date(tsMilli);
@@ -27,7 +28,7 @@ const RecordingLogTable: React.FC = () => {
   useEffect(() => {
     queryRecordingLog()
       .then((result) => setEntries(result.list || []))
-      .catch(console.error);
+      .catch(showErrorDialog);
   }, []);
   return (
     <TableContainer component={Paper}>
