@@ -31,7 +31,7 @@ The following cameras support 1920x1080 or better but when streaming 1280x720 wo
 | Price | Zoom    | PTZ | FPS | Weather | Verified | Model                                                                                                                    |
 | ----- | ------- | --- | --- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
 | $1450 | 20X     | Yes | 120 |         | Yes      | [AIDA PTZ-NDI3-X20](https://usbroadcast.co/product/aida-imaging-ptz-ndi3-x20b-full-hd-ndihx2-ptz-camera-20x-zoom-black/) |
-| $1075 | 30X     |     | 60  |         |          | [AIDA UHD-NDI3-X30](https://usbroadcast.co/product/aida-imaging-uhd-ndihx3-ip-srt-hdmi-poe-30x-zoom-pov-camera/)         |
+| $1075 | 30X     |     | 60  |         | Yes      | [AIDA UHD-NDI3-X30](https://usbroadcast.co/product/aida-imaging-uhd-ndihx3-ip-srt-hdmi-poe-30x-zoom-pov-camera/)         |
 | $775  | 1X C/CS |     | 120 | IP67    |          | [AIDA HD-NDI3-IP67](https://usbroadcast.co/product/aida-imaging-ndihx3-ip67-weatherproof-pov-camera/)                    |
 | $799  | 30X     | Yes | 60  |         | Yes      | [AVKANS NDI PTZ Camera](https://a.co/d/1FIcJW9)                                                                          |
 | $719  | 30X     | Yes | 60  |         | Yes      | [SMTAV BX30N](https://www.smtav.com/collections/ndi/products/smtav-ai-tracking-ndi-ptz-camera-30x-optics-zoom)           |

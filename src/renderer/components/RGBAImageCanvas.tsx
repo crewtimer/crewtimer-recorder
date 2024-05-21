@@ -13,6 +13,7 @@ import {
 } from '../recorder/RecorderApi';
 import generateTestPattern from '../util/ImageUtils';
 import { GrabFrameResponse } from '../recorder/RecorderTypes';
+import { showErrorDialog } from './ErrorDialog';
 
 const drawIcon = (
   ctx: CanvasRenderingContext2D,
@@ -71,14 +72,12 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     frame = lastGoodFrame;
   }
   const togglePlay = () => {
-    (isRecording ? stopRecording() : startRecording()).catch((err) =>
-      console.error(err),
-    );
+    (isRecording ? stopRecording() : startRecording()).catch(showErrorDialog);
   };
 
   useEffect(() => {
     const timer = setInterval(() => {
-      requestVideoFrame().catch((err) => console.error(err));
+      requestVideoFrame().catch(showErrorDialog);
     }, 200);
     return () => clearInterval(timer);
   }, []);

@@ -8,6 +8,7 @@ import {
   useRecordingStatus,
 } from './RecorderData';
 import { DefaultRecordingStatus } from './RecorderTypes';
+import { showErrorDialog } from '../components/ErrorDialog';
 
 const formatTime = (totalSeconds: number) => {
   const hours = Math.floor(totalSeconds / 3600);
@@ -25,7 +26,7 @@ const checkStatus = () => {
       setIsRecording(status.recording);
       return result;
     })
-    .catch((err) => console.error(err));
+    .catch(showErrorDialog);
 };
 
 const RecordingStatus: React.FC = () => {

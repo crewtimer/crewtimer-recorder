@@ -3,20 +3,28 @@ import { UseDatum } from 'react-usedatum';
 import { UseStoredDatum } from '../store/UseElectronDatum';
 import generateTestPattern from '../util/ImageUtils';
 import {
+  DefaultRecordingProps,
   DefaultRecordingStatus,
   GrabFrameResponse,
   RecordingProps,
   RecordingStatus,
 } from './RecorderTypes';
 
-export const [useRecordingProps, , getRecordingProps] =
-  UseStoredDatum<RecordingProps>('recording', {
-    recordingFolder: './',
-    recordingPrefix: 'CT_',
-    recordingDuration: 5,
-    networkCamera: '',
-    showFinishGuide: true,
-  });
+export const [useRecordingProps, _setRecordingProps, getRecordingProps] =
+  UseStoredDatum<RecordingProps>('recording', DefaultRecordingProps);
+
+window.Util.getDocumentsFolder()
+  .then((folder) => {
+    if (DefaultRecordingProps.recordingFolder === './') {
+      DefaultRecordingProps.recordingFolder = folder;
+    }
+    const recordingProps = getRecordingProps();
+    if (recordingProps.recordingFolder === './') {
+      _setRecordingProps({ ...recordingProps, recordingFolder: folder });
+    }
+    return '';
+  })
+  .catch(() => {});
 export const [
   useRecordingStartTime,
   setRecordingStartTime,

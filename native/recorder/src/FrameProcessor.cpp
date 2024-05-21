@@ -33,6 +33,7 @@ void FrameProcessor::stop() {
     videoRecorder->stop();
   }
   videoRecorder = nullptr;
+  lastFrame = nullptr;
 }
 
 /**
@@ -123,7 +124,7 @@ void FrameProcessor::processFrames() {
         // Convert to local time
         std::tm *local_time = std::localtime(&raw_time);
         std::stringstream ss;
-        ss << prefix << std::put_time(local_time, "%H_%M_%S");
+        ss << prefix << std::put_time(local_time, "%Y%m%d_%H%M%S");
 
         std::string filename = ss.str();
         statusInfo.filename = filename;

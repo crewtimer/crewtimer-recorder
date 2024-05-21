@@ -21,6 +21,7 @@ declare global {
       openFileExplorer(path: string): Promise<void>;
       getFilesInDirectory(dirPath: string): Promise<DirListReturn>;
       deleteFile(filename: string): Promise<CloseFileReturn>;
+      getDocumentsFolder(): Promise<string>;
     };
     platform: {
       platform: string;

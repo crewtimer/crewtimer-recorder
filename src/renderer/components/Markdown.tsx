@@ -92,6 +92,12 @@ const renderers: Components = {
   h4: headingResolver,
   h5: headingResolver,
   h6: headingResolver,
+  a: ({ _node, ...props }) => (
+    // eslint-disable-next-line react/jsx-props-no-spreading
+    <a {...props} target="_blank" rel="noopener noreferrer">
+      {props.children}
+    </a>
+  ),
 };
 
 export interface MarkdownProps {
@@ -101,6 +107,7 @@ export interface MarkdownProps {
   url?: string;
   /** A google doc id form which to load markdown content */
   docId?: string;
+  newWindowLinks?: boolean;
 }
 
 /**
@@ -119,7 +126,7 @@ export interface MarkdownProps {
  * However, current versions of react-markdown choke on a space before = so
  * the workaround is to use %20=100 or %20=100x200 instead.
  */
-const Markdown: FC<MarkdownProps> = ({ url, md, docId }) => {
+const Markdown: FC<MarkdownProps> = ({ url, md, docId, newWindowLinks }) => {
   const [content, setContent] = useState('');
 
   useEffect(() => {
@@ -166,10 +173,18 @@ const Markdown: FC<MarkdownProps> = ({ url, md, docId }) => {
     .replace(/ =([0-9]+)(x[0-9]+)?\)/, '%20=$1$2)')
     .replace('screen>', 'screen></iframe>');
 
+  const renderersToUse = { ...renderers };
+  if (!newWindowLinks) {
+    delete renderersToUse.a;
+  }
+
   // https://github.com/remarkjs/react-markdown/blob/main/changelog.md#remove-buggy-html-in-markdown-parser
   return (
     <div style={{ flex: 1, margin: 16 }} className="markdown-body">
-      <ReactMarkdown rehypePlugins={[rehypeRaw, gfm]} components={renderers}>
+      <ReactMarkdown
+        rehypePlugins={[rehypeRaw, gfm]}
+        components={renderersToUse}
+      >
         {mdcontent}
       </ReactMarkdown>
     </div>

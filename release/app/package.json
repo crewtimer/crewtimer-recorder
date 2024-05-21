@@ -1,20 +1,23 @@
 {
-  "name": "electron-react-boilerplate",
-  "version": "4.6.0",
-  "description": "A foundation for scalable desktop apps",
+  "name": "crewtimer-video-recorder",
+  "version": "1.0.0",
+  "description": "A video recorder for use with CrewTimer Connect",
   "license": "MIT",
   "author": {
-    "name": "Electron React Boilerplate Maintainers",
-    "email": "electronreactboilerplate@gmail.com",
-    "url": "https://github.com/electron-react-boilerplate"
+    "name": "CrewTimer Regatta Timing",
+    "email": "info@crewtimer.com",
+    "url": "https://crewtimer.com/about"
   },
   "main": "./dist/main/main.js",
   "scripts": {
     "rebuild": "node -r ts-node/register ../../.erb/scripts/electron-rebuild.js",
-    "postinstall": "npm run rebuild && npm run link-modules",
+    "xpostinstall": "npm run rebuild && npm run link-modules",
     "link-modules": "node -r ts-node/register ../../.erb/scripts/link-modules.ts"
   },
   "dependencies": {
     "crewtimer_video_recorder": "../../native/recorder/"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.6.0"
   }
 }

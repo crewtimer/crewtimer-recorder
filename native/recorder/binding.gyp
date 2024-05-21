@@ -7,6 +7,7 @@
                   "src/FrameProcessor.cpp",
                   "src/MulticastReceiver.cpp",
                   "src/NdiReader.cpp",
+                  "src/NullRecorder.cpp",
                   "src/util.cpp"],
       "defines": [ "USE_FFMPEG" ],
       "include_dirs": [
@@ -49,17 +50,20 @@
 
       ['OS=="win"', {
         "include_dirs": [
-          "/Users/glenne/ffmpeg-built-win/include",
+          "y:/ffmpeg-built-win/include",
+          "C:/Program Files/NDI/NDI 5 SDK/Include"
         ],
         "link_settings": {
             "libraries": [
-                "/Users/glenne/ffmpeg-built-win/lib/libavcodec.a",
-                "/Users/glenne/ffmpeg-built-win/lib/libavformat.a",
-                "/Users/glenne/ffmpeg-built-win/lib/libavutil.a",
-                "/Users/glenne/ffmpeg-built-win/lib/libswscale.a",
+                "y:/ffmpeg-built-win/lib/libavcodec.a",
+                "y:/ffmpeg-built-win/lib/libavformat.a",
+                "y:/ffmpeg-built-win/lib/libavutil.a",
+                "y:/ffmpeg-built-win/lib/libswscale.a",
+                "y:/ffmpeg-built-win/lib/libswresample.a",
+                "Processing.NDI.Lib.x64.lib",
                 "Bcrypt.lib", "Mfuuid.lib", "Strmiids.lib"
             ],
-          'library_dirs': ['/Users/glenne/ffmpeg-built-win/lib']
+          'library_dirs': ['y:/ffmpeg-built-win/lib', "C:/Program Files/NDI/NDI 5 SDK/lib/x64"]
           }
         }],
       ],

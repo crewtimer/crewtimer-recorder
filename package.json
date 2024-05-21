@@ -190,14 +190,15 @@
     "webpack-merge": "^5.9.0"
   },
   "build": {
-    "productName": "ElectronReact",
-    "appId": "org.erb.ElectronReact",
+    "productName": "CrewTimer Video Recorder",
+    "appId": "net.entazza.CrewTimerVideoRecorder",
     "asar": true,
     "asarUnpack": "**\\*.{node,dll,dylib}",
     "files": [
       "dist",
-      "node_modules",
-      "package.json"
+      "package.json",
+      "node_modules/**/*.node",
+      "node_modules/**/package.json"
     ],
     "afterSign": ".erb/scripts/notarize.js",
     "mac": {
@@ -240,6 +241,12 @@
     "win": {
       "target": [
         "nsis"
+      ],
+      "extraFiles": [
+        {
+          "from": "resources/Processing.NDI.Lib.x64.dll",
+          "to": "Processing.NDI.Lib.x64.dll"
+        }
       ]
     },
     "linux": {
@@ -258,8 +265,8 @@
     ],
     "publish": {
       "provider": "github",
-      "owner": "electron-react-boilerplate",
-      "repo": "electron-react-boilerplate"
+      "owner": "crewtimer-recorder",
+      "repo": "crewtimer-recorder"
     }
   },
   "collective": {

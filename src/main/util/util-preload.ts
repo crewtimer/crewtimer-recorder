@@ -77,6 +77,15 @@ export function getFilesInDirectory(dirPath: string): Promise<DirListReturn> {
   });
 }
 
+export function getDocumentsFolder(): Promise<string> {
+  return new Promise((resolve) => {
+    ipcRenderer
+      .invoke('get-documents-folder')
+      .then((result) => resolve(result))
+      .catch(() => resolve(''));
+  });
+}
+
 contextBridge.exposeInMainWorld('Util', {
   onUserMessage: (
     callback: (_event: IpcRendererEvent, level: string, msg: string) => void,
@@ -86,6 +95,7 @@ contextBridge.exposeInMainWorld('Util', {
   openDirDialog,
   openFileExplorer,
   deleteFile,
+  getDocumentsFolder,
 });
 
 const appVersion = require('../../../release/app/package.json').version;

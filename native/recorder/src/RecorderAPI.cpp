@@ -6,6 +6,7 @@
 #include <napi.h>
 #include <nlohmann/json.hpp>
 #include <node.h>
+#include <sstream>
 #include <uv.h>
 
 extern "C" {
@@ -57,7 +58,11 @@ void uyvyToRgba(const uint8_t *uyvyBuffer, uint8_t *rgbaBuffer, int width,
       };
 
       // First pixel (y0)
-      auto [r0, g0, b0] = convertYuvToRgb(y0, u, v);
+      auto pixels = convertYuvToRgb(y0, u, v);
+      auto r0 = std::get<0>(pixels);
+      auto g0 = std::get<1>(pixels);
+      auto b0 = std::get<2>(pixels);
+
       rgbaBuffer[rgbaIndex] = r0;
       rgbaBuffer[rgbaIndex + 1] = g0;
       rgbaBuffer[rgbaIndex + 2] = b0;
@@ -65,7 +70,11 @@ void uyvyToRgba(const uint8_t *uyvyBuffer, uint8_t *rgbaBuffer, int width,
       rgbaIndex += 4;
 
       // Second pixel (y1)
-      auto [r1, g1, b1] = convertYuvToRgb(y1, u, v);
+      pixels = convertYuvToRgb(y1, u, v);
+      auto r1 = std::get<0>(pixels);
+      auto g1 = std::get<1>(pixels);
+      auto b1 = std::get<2>(pixels);
+
       rgbaBuffer[rgbaIndex] = r1;
       rgbaBuffer[rgbaIndex + 1] = g1;
       rgbaBuffer[rgbaIndex + 2] = b1;
@@ -153,11 +162,13 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
 
       auto props = args.Get("props").As<Napi::Object>();
       std::vector<std::string> prop_names = {
-          "recordingFolder", "recordingPrefix", "recordingInterval"};
+          "recordingFolder", "recordingPrefix", "recordingDuration",
+          "networkCamera"};
       for (const auto &name : prop_names) {
         if (!props.Has(name.c_str())) {
-          Napi::TypeError::New(env, "Missing recordingProp")
-              .ThrowAsJavaScriptException();
+          std::stringstream ss;
+          ss << "Missing recordingProp: " << name;
+          Napi::TypeError::New(env, ss.str()).ThrowAsJavaScriptException();
           return ret;
         }
       }
@@ -166,7 +177,7 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
       auto networkCamera =
           props.Get("networkCamera").As<Napi::String>().Utf8Value();
       auto interval =
-          props.Get("recordingInterval").As<Napi::Number>().Uint32Value();
+          props.Get("recordingDuration").As<Napi::Number>().Uint32Value();
 
       auto result =
           recorder->start(networkCamera, "ffmpeg", folder, prefix, interval);

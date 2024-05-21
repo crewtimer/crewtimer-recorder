@@ -213,7 +213,9 @@ class NdiReader : public VideoReader {
     NdiFrame(NDIlib_recv_instance_t pNDI_recv, NDIlib_video_frame_v2_t ndiFrame)
         : pNDI_recv(pNDI_recv), ndiFrame(ndiFrame){};
     virtual ~NdiFrame() override {
-      NDIlib_recv_free_video_v2(pNDI_recv, &ndiFrame);
+      if (pNDI_recv) {
+        NDIlib_recv_free_video_v2(pNDI_recv, &ndiFrame);
+      }
     }
   };
 
@@ -383,9 +385,7 @@ class NdiReader : public VideoReader {
 
     // Destroy the receiver
     NDIlib_recv_destroy(pNDI_recv);
-
-    // Not required, but nice
-    NDIlib_destroy();
+    pNDI_find = nullptr;
   }
 
 public:
@@ -407,11 +407,18 @@ public:
     return "";
   }
   virtual ~NdiReader() override {
-    stop();
 
+    stop();
+    if (frameProcessor) {
+      frameProcessor = nullptr;
+    }
     if (pNDI_find != nullptr) {
       NDIlib_find_destroy(pNDI_find);
+      pNDI_find = nullptr;
     }
+
+    // Not required, but nice
+    NDIlib_destroy();
   };
 };
 
