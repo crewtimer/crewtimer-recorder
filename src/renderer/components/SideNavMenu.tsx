@@ -5,31 +5,39 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import { List, Tooltip } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
+import { useSelectedPage } from '../pages/MainPage';
 
 function SideNavMenu() {
-  const navigate = useNavigate();
+  const [, setSelectedPage] = useSelectedPage();
   return (
     <List>
-      <Tooltip title="Settings">
+      <Tooltip title="Settings" placement="right">
         <ListItem>
-          <ListItemIcon onClick={() => navigate('/home')}>
+          <ListItemIcon onClick={() => setSelectedPage('/home')}>
             <SettingsIcon />
           </ListItemIcon>
           <ListItemText primary="Settings" />
         </ListItem>
       </Tooltip>
-      <Tooltip title="Video">
+      <Tooltip title="Video" placement="right">
         <ListItem>
-          <ListItemIcon onClick={() => navigate('/video')}>
+          <ListItemIcon
+            onClick={() => {
+              setSelectedPage('/video');
+            }}
+          >
             <VideocamOutlinedIcon />
           </ListItemIcon>
           <ListItemText primary="Video" />
         </ListItem>
       </Tooltip>
-      <Tooltip title="Event Log">
+      <Tooltip title="Event Log" placement="right">
         <ListItem>
-          <ListItemIcon onClick={() => navigate('/log')}>
+          <ListItemIcon
+            onClick={() => {
+              setSelectedPage('/log');
+            }}
+          >
             <ListAltIcon />
           </ListItemIcon>
           <ListItemText primary="Event Log" />

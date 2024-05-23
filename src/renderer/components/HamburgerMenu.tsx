@@ -1,14 +1,13 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-
 import * as React from 'react';
 import MenuIcon from '@mui/icons-material/Menu';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import { IconButton } from '@mui/material';
+import { useSelectedPage } from '../pages/MainPage';
 
 const HamburgerMenu = () => {
-  const navigate = useNavigate();
+  const [, setSelectedPage] = useSelectedPage();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -20,7 +19,7 @@ const HamburgerMenu = () => {
 
   const closeAndGo = (path: string) => () => {
     setAnchorEl(null);
-    navigate(path);
+    setSelectedPage(path);
   };
 
   return (

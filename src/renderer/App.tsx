@@ -6,7 +6,6 @@ import {
   createTheme,
   styled,
 } from '@mui/material/styles';
-import { BrowserRouter } from 'react-router-dom';
 import Box from '@mui/material/Box';
 import MuiDrawer, { DrawerProps as MuiDrawerProps } from '@mui/material/Drawer';
 import MuiAppBar, { AppBarProps as MuiAppBarProps } from '@mui/material/AppBar';
@@ -106,42 +105,40 @@ function App() {
   return (
     <StyledEngineProvider injectFirst>
       <ThemeProvider theme={theme}>
-        <BrowserRouter>
-          <Box sx={{ display: 'flex' }}>
-            <CssBaseline />
-            <ConfirmDialog />
-            <AppBar position="fixed" open={open}>
-              <TopBar />
-            </AppBar>
-            <Drawer variant="permanent" open={open}>
-              <DrawerHeader>
-                <IconButton onClick={() => setOpen(false)}>
-                  {theme.direction === 'rtl' ? (
-                    <ChevronRightIcon />
-                  ) : (
-                    <ChevronLeftIcon />
-                  )}
-                </IconButton>
-              </DrawerHeader>
-              <Divider />
-              <SideNavMenu />
-            </Drawer>
-            <Box
-              component="main"
-              sx={{
-                flexGrow: 1,
-                p: 3,
-                display: 'flex',
-                height: '100vh',
-                flexDirection: 'column',
-                width: '100%',
-              }}
-            >
-              <DrawerHeader />
-              <MainPage />
-            </Box>
+        <Box sx={{ display: 'flex' }}>
+          <CssBaseline />
+          <ConfirmDialog />
+          <AppBar position="fixed" open={open}>
+            <TopBar />
+          </AppBar>
+          <Drawer variant="permanent" open={open}>
+            <DrawerHeader>
+              <IconButton onClick={() => setOpen(false)}>
+                {theme.direction === 'rtl' ? (
+                  <ChevronRightIcon />
+                ) : (
+                  <ChevronLeftIcon />
+                )}
+              </IconButton>
+            </DrawerHeader>
+            <Divider />
+            <SideNavMenu />
+          </Drawer>
+          <Box
+            component="main"
+            sx={{
+              flexGrow: 1,
+              p: 3,
+              display: 'flex',
+              height: '100vh',
+              flexDirection: 'column',
+              width: '100%',
+            }}
+          >
+            <DrawerHeader />
+            <MainPage />
           </Box>
-        </BrowserRouter>
+        </Box>
       </ThemeProvider>
     </StyledEngineProvider>
   );

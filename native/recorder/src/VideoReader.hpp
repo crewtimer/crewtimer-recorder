@@ -14,8 +14,8 @@ public:
         : name(name), address(address) {}
   } CameraInfo;
 
-  virtual std::string open(std::shared_ptr<FrameProcessor> frameProcessor) = 0;
-  virtual std::string start(const std::string srcName) = 0;
+  virtual std::string start(const std::string srcName,
+                            std::shared_ptr<FrameProcessor> frameProcessor) = 0;
   virtual std::string stop() = 0;
   virtual std::vector<CameraInfo> getCameraList() {
     return std::vector<CameraInfo>();

@@ -18,12 +18,12 @@ extern "C" {
 
 class FFVideoRecorder : public VideoRecorder {
   int frame_index;
-  AVFrame *pFrame;
-  AVPacket *pkt;
-  struct SwsContext *sws_ctx;
-  AVFormatContext *pFormatCtx;
-  AVCodecContext *pCodecCtx;
-  AVStream *video_st;
+  AVFrame *pFrame = nullptr;
+  AVPacket *pkt = nullptr;
+  struct SwsContext *sws_ctx = nullptr;
+  AVFormatContext *pFormatCtx = nullptr;
+  AVCodecContext *pCodecCtx = nullptr;
+  AVStream *video_st = nullptr;
   std::string outputFile;
   std::string tmpFile;
   std::string codecName;
@@ -264,19 +264,18 @@ public:
   }
 
   std::string stop() {
-    if (video_st == nullptr) {
-      return "";
-    }
-    // Flush the encoder
-    if (avcodec_send_frame(pCodecCtx, NULL) < 0) {
-      auto msg = "Error sending a frame for encoding";
-      std::cerr << msg << std::endl;
-      return msg;
+    std::string retval = "";
+    if (pCodecCtx) {
+      // Flush the encoder
+      if (avcodec_send_frame(pCodecCtx, NULL) < 0) {
+        auto msg = "Error sending a frame for encoding";
+        std::cerr << msg << std::endl;
+        retval = msg;
+      }
     }
 
     // If pkt is null, it is uninitialized so we haven't read anything yet.
     if (pkt) {
-
       while (1) {
         int ret = avcodec_receive_packet(pCodecCtx, pkt);
         if (ret == AVERROR_EOF)
@@ -284,12 +283,14 @@ public:
         else if (ret < 0) {
           auto msg = "Error during encoding";
           std::cerr << msg << std::endl;
-          return msg;
+          retval = msg;
+          break;
         }
         if (av_interleaved_write_frame(pFormatCtx, pkt) < 0) {
           auto msg = "Error while writing video frame.";
           std::cerr << msg << std::endl;
-          return msg;
+          retval = msg;
+          break;
         }
         av_packet_unref(pkt);
       }
@@ -301,24 +302,43 @@ public:
       }
     }
 
-    avcodec_free_context(&pCodecCtx);
-    avformat_free_context(pFormatCtx);
-    av_frame_free(&pFrame);
-    av_packet_free(&pkt);
-    sws_freeContext(sws_ctx);
+    if (pCodecCtx) {
+      avcodec_free_context(&pCodecCtx);
+    }
+    if (pFormatCtx) {
+      avformat_free_context(pFormatCtx);
+    }
+    if (pFrame) {
+      av_frame_free(&pFrame);
+    }
+    if (pkt) {
+      av_packet_free(&pkt);
+    }
+    if (sws_ctx) {
+      sws_freeContext(sws_ctx);
+    }
+
+    pCodecCtx = nullptr;
+    pFormatCtx = nullptr;
+    pFrame = nullptr;
+    pkt = nullptr;
+    sws_ctx = nullptr;
     video_st = nullptr;
 
-    // Attempt to rename the file
-    if (std::rename(tmpFile.c_str(), outputFile.c_str()) == 0) {
-      // std::cout << "File successfully renamed from " << tmpFile << " to "
-      //           << outputFile << std::endl;
-    } else {
-      // If renaming failed, print an error message
-      auto msg = "Error renaming file";
-      std::cerr << msg << std::endl;
-      return msg;
+    if (tmpFile.length() > 0) {
+      // Attempt to rename the file
+      if (std::rename(tmpFile.c_str(), outputFile.c_str()) == 0) {
+        // std::cout << "File successfully renamed from " << tmpFile << " to "
+        //           << outputFile << std::endl;
+      } else {
+        // If renaming failed, print an error message
+        auto msg = "Error renaming file";
+        std::cerr << msg << std::endl;
+        retval = msg;
+      }
+      tmpFile = "";
     }
-    return "";
+    return retval;
   }
   ~FFVideoRecorder() {}
 };

@@ -39,7 +39,8 @@ class BaslerReader : public VideoReader, public CImageEventHandler {
 public:
   BaslerReader() { formatConverter.OutputPixelFormat = PixelType_BGR8packed; }
   virtual std::string
-  open(std::shared_ptr<FrameProcessor> frameProcessor) override {
+  start(std::string srcName,
+        std::shared_ptr<FrameProcessor> frameProcessor) override {
     std::string ret = "";
     PylonInitialize();
 

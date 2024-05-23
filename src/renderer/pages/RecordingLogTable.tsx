@@ -27,7 +27,7 @@ const RecordingLogTable: React.FC = () => {
 
   useEffect(() => {
     queryRecordingLog()
-      .then((result) => setEntries(result.list || []))
+      .then((result) => setEntries(result?.list || []))
       .catch(showErrorDialog);
   }, []);
   return (

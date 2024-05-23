@@ -56,7 +56,7 @@ const RecorderConfig: React.FC = () => {
     const timer = setInterval(() => {
       queryCameraList()
         .then((result) => {
-          setCameraList(result.cameras || []);
+          setCameraList(result?.cameras || []);
           return null;
         })
         .catch(showErrorDialog);
@@ -88,7 +88,6 @@ const RecorderConfig: React.FC = () => {
       value = '';
     }
 
-    console.log(`Setting ${event.target.name} to ${value}`);
     setRecordingProps({
       ...recordingProps,
       [event.target.name]: value,
@@ -99,7 +98,10 @@ const RecorderConfig: React.FC = () => {
     { name: 'First Camera Discovered', address: '1st' },
     ...cameraList,
   ];
-  if (!cameraSelectItems.find((c) => c.name === recordingProps.networkCamera)) {
+  if (
+    recordingProps.networkCamera &&
+    !cameraSelectItems.find((c) => c.name === recordingProps.networkCamera)
+  ) {
     cameraSelectItems.push({
       name: recordingProps.networkCamera,
       address: '',
@@ -222,7 +224,7 @@ const RecorderConfig: React.FC = () => {
           flexGrow: 1,
         }}
       >
-        {/* <FullSizeWindow component={RGBAImageCanvas} /> */}
+        <FullSizeWindow component={RGBAImageCanvas} />
       </div>
     </div>
   );

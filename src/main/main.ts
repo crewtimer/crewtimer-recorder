@@ -10,8 +10,6 @@
  */
 import path from 'path';
 import { app, BrowserWindow, shell } from 'electron';
-import { autoUpdater } from 'electron-updater';
-import log from 'electron-log';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
 import './store/store';
@@ -19,14 +17,6 @@ import './msgbus/msgbus-main';
 import { stopRecording, initRecorder } from './recorder/recorder-main';
 import { setMainWindow } from './mainWindow';
 import './util/fileops-handler';
-
-class AppUpdater {
-  constructor() {
-    log.transports.file.level = 'info';
-    autoUpdater.logger = log;
-    autoUpdater.checkForUpdatesAndNotify();
-  }
-}
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -41,6 +31,26 @@ const isDebug =
 if (isDebug) {
   require('electron-debug')();
 }
+
+// Create a write stream (in append mode)
+const logFilePath = path.join(app.getPath('userData'), 'applog.txt');
+const logStream = require('fs').createWriteStream(logFilePath, { flags: 'a' });
+
+// Redirect console.log to the log file
+console.log = (...args) => {
+  const msg = `${args.map((x) => String(x)).join(' ')}\n`;
+  logStream.write(msg);
+  process.stdout.write(msg);
+};
+
+// Redirect console.error to the log file
+console.error = (...args) => {
+  const msg = `${args.map((x) => String(x)).join(' ')}\n`;
+  logStream.write(msg);
+  process.stderr.write(msg);
+};
+
+console.log('Starting app...');
 
 const installExtensions = async () => {
   const installer = require('electron-devtools-installer');
@@ -94,7 +104,7 @@ const createWindow = async () => {
     } else {
       mainWindow.show();
 
-      // mainWindow.webContents.toggleDevTools();
+      mainWindow.webContents.toggleDevTools();
     }
   });
 
@@ -120,7 +130,7 @@ const createWindow = async () => {
 
   // Remove this if your app does not use auto updates
   // eslint-disable-next-line
-  new AppUpdater();
+  // new AppUpdater();
 };
 
 /**
@@ -134,6 +144,7 @@ app.on('window-all-closed', () => {
   // if (process.platform !== 'darwin') {
   //   app.quit();
   // }
+  console.log('Window all closed handler calling stopRecording');
   stopRecording();
   app.quit();
 });

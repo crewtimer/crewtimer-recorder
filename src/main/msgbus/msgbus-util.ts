@@ -25,7 +25,6 @@ class MessageBus {
     const handler = this.subscribers[dest];
     if (handler) {
       const result = await handler(dest, msg as any);
-      // console.log(`Message sent to ${dest} with status: ${result.status}`);
       return result;
     }
     console.log(`No subscriber for destination: ${dest}`);

@@ -24,6 +24,7 @@ export interface StartRecorderMessage extends RecorderMessage {
     recordingFolder: string;
     recordingPrefix: string;
     recordingDuration: number;
+    networkCamera: string;
   };
 }
 export interface RecorderResponse extends HandlerResponse {}
@@ -85,3 +86,12 @@ export interface CameraListResponse extends HandlerResponse {
     address: string;
   }[];
 }
+
+export type RecorderMessageTypes = StartRecorderMessage | RecorderMessage;
+export type RecorderMessageResponseType =
+  | HandlerResponse
+  | RecorderResponse
+  | GrabFrameResponse
+  | CameraListResponse
+  | RecordingStatus
+  | RecordingLog;

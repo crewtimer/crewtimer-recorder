@@ -1,5 +1,7 @@
-import { HandlerResponse } from '../../src/renderer/msgbus/MsgbusTypes';
-import { RecorderMessage } from '../../src/renderer/recorder/RecorderTypes';
+import {
+  RecorderMessageResponseType,
+  RecorderMessageTypes,
+} from '../../src/renderer/recorder/RecorderTypes';
 
 /**
  * This module provides native C++ functionality as a Node.js addon,
@@ -8,12 +10,8 @@ import { RecorderMessage } from '../../src/renderer/recorder/RecorderTypes';
  */
 declare module 'crewtimer_video_recorder' {
   export function nativeVideoRecorder(
-    message: RecorderMessage,
-  ): HandlerResponse;
-
-  export function nativeVideoRecorder(
-    message: RecorderMessage,
-  ): HandlerResponse;
+    message: RecorderMessageTypes,
+  ): RecorderMessageResponseType;
 
   type CallbackFunc = ({
     sender,
@@ -23,4 +21,5 @@ declare module 'crewtimer_video_recorder' {
     content: { [key: string]: any };
   }) => void;
   export function setNativeMessageCallback(func: CallbackFunc): void;
+  export function shutdownRecorder(): void;
 }

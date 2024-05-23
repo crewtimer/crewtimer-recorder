@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cstdint>
+#include <fstream>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -7,6 +8,7 @@
 #include <nlohmann/json.hpp>
 #include <node.h>
 #include <sstream>
+#include <streambuf>
 #include <uv.h>
 
 extern "C" {
@@ -22,8 +24,7 @@ extern "C" {
 #include "VideoController.hpp"
 
 using json = nlohmann::json;
-std::shared_ptr<VideoController> recorder =
-    std::shared_ptr<VideoController>(new VideoController("ndi"));
+std::shared_ptr<VideoController> recorder;
 
 // Utility function to clamp a value between 0 and 255
 inline uint8_t clamp(int value) {
@@ -134,7 +135,6 @@ void FinalizeBuffer(Napi::Env env, void *data) {
   delete[] static_cast<uint8_t *>(data);
 }
 Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
-  // std::cerr << "nativeVideoRecorder add-on" << std::endl;
 
   Napi::Env env = info.Env();
   Napi::Object ret = Napi::Object::New(env);
@@ -153,6 +153,9 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
 
   try {
     auto op = args.Get("op").As<Napi::String>().Utf8Value();
+    if (!recorder) {
+      recorder = std::shared_ptr<VideoController>(new VideoController("ndi"));
+    }
     if (op == "start-recording") {
       if (!args.Has("props")) {
         Napi::TypeError::New(env, "Missing props field")
@@ -200,6 +203,7 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
 
       if (recorder) {
         auto cameras = recorder->getCameraList();
+
         Napi::Array arr = Napi::Array::New(env, cameras.size());
         size_t index = 0;
         for (auto &camera : cameras) {
@@ -309,7 +313,7 @@ void SendMessageToElectron(const std::string &sender,
     std::string sender = data->first;
     std::shared_ptr<json> content = data->second;
 
-    napi_status status = tsfn.BlockingCall(
+    tsfn.BlockingCall(
         [sender, content](Napi::Env env, Napi::Function jsCallback) {
           Napi::Object message = Napi::Object::New(env);
           message.Set("sender", Napi::String::New(env, sender));
@@ -332,12 +336,27 @@ Napi::Value InitThreadSafeFunction(const Napi::CallbackInfo &info) {
   return env.Undefined();
 }
 
+Napi::Value shutdownRecorder(const Napi::CallbackInfo &info) {
+  std::cerr << "shutdownRecorder called" << std::endl;
+  Napi::Env env = info.Env();
+  recorder = nullptr;
+  tsfn = Napi::ThreadSafeFunction();
+  return env.Undefined();
+}
+
+std::ofstream logFile("log.txt");
 // Initialize the addon
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set(Napi::String::New(env, "nativeVideoRecorder"),
               Napi::Function::New(env, nativeVideoRecorder));
   exports.Set("setNativeMessageCallback",
               Napi::Function::New(env, InitThreadSafeFunction));
+
+  exports.Set("shutdownRecorder", Napi::Function::New(env, shutdownRecorder));
+
+  // Redirect cout and cerr to the log file
+  std::cout.rdbuf(logFile.rdbuf());
+  std::cerr.rdbuf(logFile.rdbuf());
   return exports;
 }
 

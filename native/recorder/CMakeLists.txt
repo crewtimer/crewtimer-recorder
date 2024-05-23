@@ -18,6 +18,12 @@ option(USE_FFMPEG "Use OpenCV features" ON)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    target_compile_options(${TARGET_NAME} PRIVATE -Wall -Wextra -Wpedantic)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(${TARGET_NAME} PRIVATE /W4)
+endif()
+
 message(STATUS "${CMAKE_PREFIX_PATH}")
 message(STATUS "updated:${CMAKE_PREFIX_PATH}")
 

@@ -27,9 +27,9 @@ private:
   std::string prefix;
   int interval;
   std::thread monitorThread;
+  std::atomic<bool> monitorStopRequested;
 
   std::chrono::steady_clock::time_point startTime;
-  std::atomic<bool> monitorStopRequested;
   std::string status;
   std::recursive_mutex
       controlMutex; ///< Mutex for synchronizing access to start/stop actions.
@@ -40,8 +40,7 @@ private:
   StatusInfo statusInfo;
 
 public:
-  VideoController(const std::string camType)
-      : monitorThread(&VideoController::monitorLoop, this) {
+  VideoController(const std::string camType) {
 
 #ifdef HAVE_BASLER
     if (camType == "basler") { // basler camera
@@ -54,11 +53,8 @@ public:
 #endif
   }
   ~VideoController() {
-    monitorStopRequested = true;
     stop();
-    if (monitorThread.joinable()) {
-      monitorThread.join();
-    }
+    videoReader = nullptr;
   }
 
   std::vector<VideoReader::CameraInfo> getCameraList() {
@@ -133,11 +129,7 @@ public:
     frameProcessor = std::shared_ptr<FrameProcessor>(
         new FrameProcessor(dir, prefix, videoRecorder, interval));
 
-    retval = videoReader->open(frameProcessor);
-    if (!retval.empty()) {
-      return retval;
-    }
-    retval = videoReader->start(srcName);
+    retval = videoReader->start(srcName, frameProcessor);
     if (!retval.empty()) {
       return retval;
     }
@@ -170,19 +162,25 @@ public:
       return retval;
     }
 
+    monitorStopRequested = false;
+    monitorThread = std::thread(&VideoController::monitorLoop, this);
     startTime = std::chrono::steady_clock::now();
     return "";
   }
 
   std::string stop() {
-    std::lock_guard<std::recursive_mutex> lock(controlMutex);
+    monitorStopRequested = true;
     if (!frameProcessor) {
       return "";
     }
     SystemEventQueue::push("VID", "Shutting down...");
 
-    SystemEventQueue::push("VID", "Stopping multicast listener...");
+    if (monitorThread.joinable()) {
+      SystemEventQueue::push("VID", "Stopping monitor thread...");
+      monitorThread.join();
+    }
 
+    SystemEventQueue::push("VID", "Stopping multicast listener...");
     mcastListener->stop();
     mcastListener = nullptr;
 
@@ -198,7 +196,7 @@ public:
     videoRecorder->stop();
     videoRecorder = nullptr;
 
-    SystemEventQueue::push("VID", "Recording finished");
+    SystemEventQueue::push("VID", "VideoController stopped");
     return "";
   }
 

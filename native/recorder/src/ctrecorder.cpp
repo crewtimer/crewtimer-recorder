@@ -22,7 +22,7 @@
 #include "util.hpp"
 
 using namespace std::chrono;
-
+bool running;
 #ifdef _WIN32
 void daemonize() {}
 #else
@@ -66,6 +66,7 @@ void signalHandler(int signal) {
     if (stopHandler) {
       std::cout << std::endl << "Calling stop handler" << std::endl;
       stopHandler();
+      std::cout << std::endl << "Exiting program" << std::endl;
       exit(0);
     } else {
       exit(0);
@@ -101,6 +102,7 @@ void testrecorder(std::shared_ptr<VideoRecorder> recorder) {
   std::cout << "testrecorder end" << std::endl;
 }
 
+std::shared_ptr<VideoController> recorder;
 int main(int argc, char *argv[]) {
   std::shared_ptr<VideoRecorder> videoRecorder;
   std::signal(SIGINT, signalHandler);
@@ -176,16 +178,23 @@ int main(int argc, char *argv[]) {
   const auto daemon = args["-daemon"] == "true";
   const auto encoder = args["-encoder"];
 
-  auto recorder = std::shared_ptr<VideoController>(new VideoController("ndi"));
+  recorder = std::shared_ptr<VideoController>(new VideoController("ndi"));
   recorder->start(srcName, encoder, directory, prefix, interval);
 
-  auto startShutdown = [recorder]() { recorder->stop(); };
+  auto startShutdown = []() {
+    recorder->stop();
+    recorder = nullptr;
+    running = false;
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+  };
   stopHandler = startShutdown;
 
-  while (true) {
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+  running = true;
+  while (running) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
   }
 
+  std::cout << "Main thread exiting." << std::endl;
   // Finished
   return 0;
 }

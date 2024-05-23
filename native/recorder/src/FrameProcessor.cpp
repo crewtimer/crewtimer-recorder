@@ -29,11 +29,8 @@ void FrameProcessor::stop() {
     frameQueue.pop();
   }
 
-  if (videoRecorder) {
-    videoRecorder->stop();
-  }
-  videoRecorder = nullptr;
   lastFrame = nullptr;
+  videoRecorder = nullptr;
 }
 
 /**
@@ -50,10 +47,10 @@ FrameProcessor::StatusInfo FrameProcessor::getStatus() {
 
 void FrameProcessor::addFrame(FramePtr video_frame) {
   std::unique_lock<std::mutex> lock(queueMutex);
-  lastFrame = video_frame;
   if (!running) {
     return;
   }
+  lastFrame = video_frame;
   frameQueue.push(video_frame);
   frameAvailable.notify_one();
 }
@@ -65,7 +62,6 @@ FramePtr FrameProcessor::getLastFrame() {
 
 void FrameProcessor::processFrames() {
   SystemEventQueue::push("fproc", "Starting frame processor");
-  int64_t lastTS = 0;
   int64_t frameCount = 0;
   int count = 0;
   auto start = high_resolution_clock::now();
@@ -147,7 +143,6 @@ void FrameProcessor::processFrames() {
         frameCount = 0;
       }
 
-      lastTS = video_frame->timestamp;
       auto err = videoRecorder->writeVideoFrame(video_frame);
       if (!err.empty()) {
         errorMessage = err;
