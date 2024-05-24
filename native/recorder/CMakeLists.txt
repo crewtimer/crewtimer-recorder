@@ -18,19 +18,12 @@ option(USE_FFMPEG "Use OpenCV features" ON)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    target_compile_options(${TARGET_NAME} PRIVATE -Wall -Wextra -Wpedantic)
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
-    target_compile_options(${TARGET_NAME} PRIVATE /W4)
-endif()
-
 message(STATUS "${CMAKE_PREFIX_PATH}")
 message(STATUS "updated:${CMAKE_PREFIX_PATH}")
 
 set(SOURCE_FILES
     src/ctrecorder.cpp
     src/FrameProcessor.cpp
-    src/FFRecorder.cpp
     src/util.cpp
     src/NdiReader.cpp
     src/NullRecorder.cpp
@@ -116,6 +109,16 @@ if (USE_FFMPEG)
             "-framework CoreServices"
             "-framework CoreFoundation")
     endif()
+    find_library(AVFORMAT_LIBRARY ${LIB_PREFIX}avformat REQUIRED)
+    find_library(AVCODEC_LIBRARY ${LIB_PREFIX}avcodec REQUIRED)
+    find_library(AVUTIL_LIBRARY ${LIB_PREFIX}avutil REQUIRED)
+    find_library(SWSCALE_LIBRARY ${LIB_PREFIX}swscale REQUIRED)
+    find_library(SWSRESAMPLE_LIBRARY ${LIB_PREFIX}swresample REQUIRED)
+    set(FFMPEG_LIBS ${AVFORMAT_LIBRARY} ${AVCODEC_LIBRARY} ${AVUTIL_LIBRARY} ${SWSCALE_LIBRARY} ${SWSRESAMPLE_LIBRARY})
+
+    message(STATUS "avlibs found at ${FFMPEG_LIBS}")
+else()
+    set(FFMPEG_LIBS "")
 endif()
 
 if(ENABLE_BASLER)
@@ -130,17 +133,14 @@ endif()
 
 # Define the executable
 add_executable(ctrecorder ${SOURCE_FILES})
-
+# if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+#     target_compile_options(ctrecorder PRIVATE -Wall -Wextra -Wpedantic)
+# elseif(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+#     target_compile_options(ctrecorder PRIVATE /W4)
+# endif()
 # Link nlohmann_json::nlohmann_json to the target
 # target_link_libraries(ctrecorder PRIVATE nlohmann_json::nlohmann_json)
 
-find_library(AVFORMAT_LIBRARY ${LIB_PREFIX}avformat REQUIRED)
-find_library(AVCODEC_LIBRARY ${LIB_PREFIX}avcodec REQUIRED)
-find_library(AVUTIL_LIBRARY ${LIB_PREFIX}avutil REQUIRED)
-find_library(SWSCALE_LIBRARY ${LIB_PREFIX}swscale REQUIRED)
-find_library(SWSRESAMPLE_LIBRARY ${LIB_PREFIX}swresample REQUIRED)
-
-message(STATUS "avlibs found at ${AVFORMAT_LIBRARY} ${AVCODEC_LIBRARY} ${AVUTIL_LIBRARY} ${SWSCALE_LIBRARY} ${SWSRESAMPLE_LIBRARY}")
 message(STATUS "opencv found at ${OpenCV_INCLUDE_DIRS} ${OpenCV_LIBS}")
 message(STATUS "NDI found at ${NDI_LIBRARIES}")
 
@@ -148,6 +148,6 @@ target_link_libraries(ctrecorder PRIVATE
     ${OpenCV_LIBS} ${NDI_LIBRARIES}
     ${EXTRA_LIBS}
     ${FFMPEG_FRAMEWORKS}
-    ${AVFORMAT_LIBRARY} ${AVCODEC_LIBRARY} ${AVUTIL_LIBRARY} ${SWSCALE_LIBRARY} ${SWSRESAMPLE_LIBRARY}
+    ${FFMPEG_LIBS}
     ${BASLER_LIBS}
 )

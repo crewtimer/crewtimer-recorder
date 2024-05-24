@@ -230,7 +230,9 @@ public:
   virtual std::string const std::string srcName) override {
     keepRunning = true;
     readerThread = std::thread([this]() { run(); });
-    readerThread.join();
+    if (readerThread.joinable()) {
+      readerThread.join();
+    }
     return "";
   };
   virtual std::string stop() override {

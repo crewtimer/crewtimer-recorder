@@ -107,35 +107,46 @@ int main(int argc, char *argv[]) {
   std::shared_ptr<VideoRecorder> videoRecorder;
   std::signal(SIGINT, signalHandler);
 
-  bool initialConnect = true;
   std::string recorders = "null";
-#ifdef USE_FFMPEG
-  recorders += " | ffmpeg";
-#endif
-#ifdef USE_OPENCV
-
-  recorders += " | opencv";
-#endif
-#ifdef USE_APPLE
-  recorders += " | apple";
-#endif
 
   std::map<std::string, std::string> args;
 
   // Default values for optional parameters
   args["-ndi"] = "";
-  args["-encoder"] = "ffmpeg";
   args["-dir"] = ".";
   args["-prefix"] = "CT";
   args["-i"] = "10";
   args["-daemon"] = "false";
   args["-u"] = "false";
+  args["-timeout"] = "0";
+
+  std::string defaultRecorder = "null";
+#ifdef USE_FFMPEG
+  recorders += " | ffmpeg";
+  if (defaultRecorder == "null") {
+    defaultRecorder = "ffmpeg";
+  }
+#endif
+#ifdef USE_OPENCV
+  if (defaultRecorder == "null") {
+    defaultRecorder = "opencv";
+  }
+  recorders += " | opencv";
+#endif
+#ifdef USE_APPLE
+  if (defaultRecorder == "null") {
+    defaultRecorder = "apple";
+  }
+  recorders += " | apple";
+#endif
+
+  args["-encoder"] = defaultRecorder;
 
   // Parse command-line arguments
   for (int i = 1; i < argc; ++i) {
     std::string arg = argv[i];
     if ((arg == "-encoder" || arg == "-dir" || arg == "-prefix" ||
-         arg == "-i" || arg == "-ndi") &&
+         arg == "-i" || arg == "-ndi" || arg == "-timeout") &&
         i + 1 < argc) {
       args[arg] =
           argv[++i]; // Increment 'i' to skip next argument since it's a value
@@ -159,7 +170,7 @@ int main(int argc, char *argv[]) {
   if (args["-u"] == "true") {
     std::cout << "Usage: -encoder <" << recorders
               << "> -dir <dir> -prefix "
-                 "<prefix> -i <interval secs> -ndi <name> -daemon"
+                 "<prefix> -i <interval secs> -ndi <name> -timeout <secs>"
               << std::endl;
     std::cout << "On macos, increase the kernel UDP buffer size: " << std::endl
               << "sudo sysctl -w net.inet.udp.maxdgram=4000000" << std::endl;
@@ -177,6 +188,7 @@ int main(int argc, char *argv[]) {
   const auto srcName = args["-ndi"];
   const auto daemon = args["-daemon"] == "true";
   const auto encoder = args["-encoder"];
+  const auto timeout = std::stoi(args["-timeout"]);
 
   recorder = std::shared_ptr<VideoController>(new VideoController("ndi"));
   recorder->start(srcName, encoder, directory, prefix, interval);
@@ -190,8 +202,17 @@ int main(int argc, char *argv[]) {
   stopHandler = startShutdown;
 
   running = true;
+
+  int count = 0;
   while (running) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    if (timeout != 0) {
+      count += 1;
+      if (count >= timeout) {
+        startShutdown();
+        break;
+      }
+    }
   }
 
   std::cout << "Main thread exiting." << std::endl;

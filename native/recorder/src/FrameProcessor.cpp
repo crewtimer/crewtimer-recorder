@@ -20,6 +20,7 @@ FrameProcessor::FrameProcessor(const std::string directory,
 FrameProcessor::~FrameProcessor() { stop(); }
 
 void FrameProcessor::stop() {
+  errorMessage = "";
   running = false;
   frameAvailable.notify_all();
 

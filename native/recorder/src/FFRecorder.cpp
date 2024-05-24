@@ -36,7 +36,7 @@ public:
     std::stringstream ss;
     ss << "version " << av_version_info() << " " << AV_VERSION_MAJOR(version)
        << "." << AV_VERSION_MINOR(version) << "." << AV_VERSION_MICRO(version);
-    SystemEventQueue::instance().push("ffmpeg", ss.str());
+    SystemEventQueue::push("ffmpeg", ss.str());
   }
   std::string openVideoStream(std::string directory, std::string filename,
                               int width, int height, float fps) {
@@ -52,15 +52,15 @@ public:
     /* allocate the output media context */
     avformat_alloc_output_context2(&pFormatCtx, NULL, NULL, tmpFile.c_str());
     if (!pFormatCtx) {
-      std::cerr
-          << "Could not deduce output format from file extension: using MPEG."
-          << std::endl;
+      const auto msg = "Could not deduce output format from file extension: "
+                       "using MPEG.";
+      SystemEventQueue::push("ffmpeg", msg);
       avformat_alloc_output_context2(&pFormatCtx, NULL, "mpeg",
                                      tmpFile.c_str());
     }
     if (!pFormatCtx) {
       auto msg = "Could not allocate format context";
-      std::cerr << msg << std::endl;
+      SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
 
@@ -89,19 +89,19 @@ public:
     }
     if (!codec) {
       auto msg = "Codec for mp4 not found";
-      std::cerr << msg << std::endl;
+      SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
 
     if (codecName.empty()) {
       codecName = codec->name;
-      SystemEventQueue::instance().push("ffmpeg", "Using codec " + codecName);
+      SystemEventQueue::push("ffmpeg", "Using codec " + codecName);
     }
 
     video_st = avformat_new_stream(pFormatCtx, NULL);
     if (!video_st) {
       auto msg = "Could not allocate video stream";
-      std::cerr << msg << std::endl;
+      SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
     video_st->id = pFormatCtx->nb_streams - 1;
@@ -109,7 +109,7 @@ public:
     pCodecCtx = avcodec_alloc_context3(codec);
     if (!pCodecCtx) {
       auto msg = "Could not allocate video codec context";
-      std::cerr << msg << std::endl;
+      SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
 
@@ -138,41 +138,43 @@ public:
     // 'profile' sets the feature set available to a decoder and thus limits
     // encoding options.  'preset' controls conmpression speed.  Slower speed
     // means more compression generally.
-    av_dict_set(&codec_options, "preset", "medium", 0); // 120% cpu 60MB/min
+    av_dict_set(&codec_options, "preset", "medium", 0);
     // av_dict_set(&codec_options, "profile", "high", 0);
     // av_dict_set(&codec_options, "preset", "slow", 0); // 80% cpu 90MB/min
     // av_dict_set(&codec_options, "profile", "main", 0);
 
     if (avcodec_open2(pCodecCtx, codec, &codec_options) < 0) {
       auto msg = "Could not open codec";
-      std::cerr << msg << std::endl;
+      SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
 
     av_dict_free(&codec_options);
 
     if (avcodec_parameters_from_context(video_st->codecpar, pCodecCtx) < 0) {
-      std::cerr << "Could not copy codec parameters" << std::endl;
+      const auto msg = "Could not copy codec parameters";
+      SystemEventQueue::push("ffmpeg", msg);
+      SystemEventQueue::push("ffmpeg", msg);
     }
 
     if (!(pFormatCtx->oformat->flags & AVFMT_NOFILE)) {
       if (avio_open(&pFormatCtx->pb, tmpFile.c_str(), AVIO_FLAG_WRITE) < 0) {
         auto msg = "Could not open " + tmpFile;
-        std::cerr << msg << std::endl;
+        SystemEventQueue::push("ffmpeg", msg);
         return msg;
       }
     }
 
     if (avformat_write_header(pFormatCtx, NULL) < 0) {
       auto msg = "Error occurred when opening output file";
-      std::cerr << msg << std::endl;
+      SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
 
     pFrame = av_frame_alloc();
     if (!pFrame) {
       auto msg = "Could not allocate video frame";
-      std::cerr << msg << std::endl;
+      SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
     pFrame->format = pCodecCtx->pix_fmt;
@@ -181,14 +183,14 @@ public:
     pFrame->color_range = AVCOL_RANGE_MPEG;
     if (av_frame_get_buffer(pFrame, 0) < 0) {
       auto msg = "Could not allocate the video frame data";
-      std::cerr << msg << std::endl;
+      SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
 
     pkt = av_packet_alloc();
     if (!pkt) {
       auto msg = "Error allocating AVPacket";
-      std::cerr << msg << std::endl;
+      SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
     pkt->data = NULL;
@@ -238,7 +240,7 @@ public:
 
     if (avcodec_send_frame(pCodecCtx, pFrame) < 0) {
       auto msg = "Error sending a frame for encoding";
-      std::cerr << msg << std::endl;
+      SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
 
@@ -248,13 +250,13 @@ public:
         break;
       else if (ret < 0) {
         auto msg = "Error during encoding";
-        std::cerr << msg << std::endl;
+        SystemEventQueue::push("ffmpeg", msg);
         return msg;
       }
 
       if (av_interleaved_write_frame(pFormatCtx, pkt) < 0) {
         auto msg = "Error while writing video frame.";
-        std::cerr << msg << std::endl;
+        SystemEventQueue::push("ffmpeg", msg);
         return msg;
       }
       av_packet_unref(pkt);
@@ -269,7 +271,7 @@ public:
       // Flush the encoder
       if (avcodec_send_frame(pCodecCtx, NULL) < 0) {
         auto msg = "Error sending a frame for encoding";
-        std::cerr << msg << std::endl;
+        SystemEventQueue::push("ffmpeg", msg);
         retval = msg;
       }
     }
@@ -282,13 +284,13 @@ public:
           break;
         else if (ret < 0) {
           auto msg = "Error during encoding";
-          std::cerr << msg << std::endl;
+          SystemEventQueue::push("ffmpeg", msg);
           retval = msg;
           break;
         }
         if (av_interleaved_write_frame(pFormatCtx, pkt) < 0) {
           auto msg = "Error while writing video frame.";
-          std::cerr << msg << std::endl;
+          SystemEventQueue::push("ffmpeg", msg);
           retval = msg;
           break;
         }
@@ -333,7 +335,7 @@ public:
       } else {
         // If renaming failed, print an error message
         auto msg = "Error renaming file";
-        std::cerr << msg << std::endl;
+        SystemEventQueue::push("ffmpeg", msg);
         retval = msg;
       }
       tmpFile = "";

@@ -196,7 +196,7 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
     } else if (op == "stop-recording") {
       if (recorder) {
         auto err = recorder->stop();
-        std::cerr << "Recorder stoped with status: " << err << std::endl;
+        std::cerr << "Recorder stopped with status: " << err << std::endl;
       }
       return ret;
     } else if (op == "get-camera-list") {
@@ -336,15 +336,26 @@ Napi::Value InitThreadSafeFunction(const Napi::CallbackInfo &info) {
   return env.Undefined();
 }
 
+std::ofstream logFile;
+
 Napi::Value shutdownRecorder(const Napi::CallbackInfo &info) {
-  std::cerr << "shutdownRecorder called" << std::endl;
   Napi::Env env = info.Env();
   recorder = nullptr;
   tsfn = Napi::ThreadSafeFunction();
+  logFile.close();
   return env.Undefined();
 }
 
-std::ofstream logFile("log.txt");
+Napi::Value setLogFile(const Napi::CallbackInfo &info) {
+  Napi::Env env = info.Env();
+  std::string logFilename = info[0].As<Napi::String>();
+  logFile = std::ofstream(logFilename.c_str(), std::ios::app);
+  // Redirect cout and cerr to the log file
+  std::cout.rdbuf(logFile.rdbuf());
+  std::cerr.rdbuf(logFile.rdbuf());
+  return env.Undefined();
+}
+
 // Initialize the addon
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set(Napi::String::New(env, "nativeVideoRecorder"),
@@ -352,11 +363,9 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
   exports.Set("setNativeMessageCallback",
               Napi::Function::New(env, InitThreadSafeFunction));
 
+  exports.Set("setLogFile", Napi::Function::New(env, setLogFile));
   exports.Set("shutdownRecorder", Napi::Function::New(env, shutdownRecorder));
 
-  // Redirect cout and cerr to the log file
-  std::cout.rdbuf(logFile.rdbuf());
-  std::cerr.rdbuf(logFile.rdbuf());
   return exports;
 }
 

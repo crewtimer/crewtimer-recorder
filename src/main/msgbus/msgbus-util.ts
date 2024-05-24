@@ -34,30 +34,3 @@ class MessageBus {
 
 // Example usage:
 export const msgbus = new MessageBus();
-
-// Subscribing with a specific extended return type
-msgbus.addSubscriber<string, { status: string; processedAt?: Date }>(
-  'channel1',
-  async (dest: string, msg: string) => {
-    console.log(`Received message on channel1: ${msg}`);
-    return { status: 'Processed', processedAt: new Date() };
-  },
-);
-
-// Sending a message and handling the response
-msgbus
-  .sendMessage<string, { status: string; processedAt?: Date }>(
-    'channel1',
-    'Hello, World!',
-  )
-  .then((response) => {
-    if (response) {
-      console.log(
-        `Response received with status: ${response.status} and processed at: ${response.processedAt}`,
-      );
-    }
-    return '';
-  })
-  .catch((err) => {
-    console.error(err);
-  });

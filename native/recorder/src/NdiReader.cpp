@@ -91,16 +91,17 @@ void setDigitPixels(uint32_t *screen, int digit, Point &start, int stride,
   std::vector<std::vector<int>> &digitPixels =
       digits[digit]; // Get the pixel representation for the digit
 
-  const auto border = 4;
+  const size_t border = 4;
   for (size_t y = 0; y < border; y++) {
-    for (size_t x = 0; x < digitPixels[0].size() * scale + border * 2; ++x) {
+    for (size_t x = 0; x < size_t(digitPixels[0].size() * scale + border * 2);
+         ++x) {
       screen[(start.x + x) + (start.y + y) * stride / 4] = bg;
       screen[(start.x + x) +
              (start.y + y + digitPixels.size() * scale + border) * stride / 4] =
           bg;
     }
   }
-  for (size_t y = 0; y < digitPixels.size() * scale + 2 * border; ++y) {
+  for (size_t y = 0; y < size_t(digitPixels.size() * scale + 2 * border); ++y) {
     for (size_t x = 0; x < border; x++) {
       screen[(start.x + x) + (start.y + y) * stride / 4] = bg;
       screen[(start.x + x + border + digitPixels[0].size() * scale) +
@@ -109,11 +110,11 @@ void setDigitPixels(uint32_t *screen, int digit, Point &start, int stride,
   }
   const auto yOffset = border;
   const auto xOffset = border;
-  for (auto y = 0; y < digitPixels.size(); ++y) {
-    for (auto yExpand = 0; yExpand < scale; yExpand++) {
-      for (auto x = 0; x < digitPixels[y].size(); ++x) {
+  for (size_t y = 0; y < digitPixels.size(); ++y) {
+    for (int yExpand = 0; yExpand < scale; yExpand++) {
+      for (size_t x = 0; x < digitPixels[y].size(); ++x) {
         const auto pixel = digitPixels[y][x] ? fg : bg;
-        for (auto xExpand = 0; xExpand < scale; xExpand++) {
+        for (int xExpand = 0; xExpand < scale; xExpand++) {
           screen[(xOffset + start.x + x * scale + xExpand) +
                  ((yOffset + start.y) + y * scale + yExpand) * stride / 4] =
               pixel;
@@ -216,7 +217,9 @@ class NdiReader : public VideoReader {
 
   public:
     NdiFrame(NDIlib_recv_instance_t pNDI_recv, NDIlib_video_frame_v2_t ndiFrame)
-        : pNDI_recv(pNDI_recv), ndiFrame(ndiFrame){};
+        : pNDI_recv(pNDI_recv), ndiFrame(ndiFrame){
+
+                                };
     virtual ~NdiFrame() override {
       if (pNDI_recv) {
         NDIlib_recv_free_video_v2(pNDI_recv, &ndiFrame);
@@ -229,6 +232,12 @@ class NdiReader : public VideoReader {
     return camList;
   }
 
+  /**
+   * @brief Search for NDI Sources.  This should always be called from the same
+   * thread or defuct threads may cause issues when the program terminates.
+   *
+   * @return std::vector<CameraInfo>
+   */
   std::vector<CameraInfo> findCameras() {
     std::vector<CameraInfo> list;
     // Create a finder
@@ -257,6 +266,7 @@ class NdiReader : public VideoReader {
   };
 
   void scanLoop() {
+    std::cout << "Scan loop started" << std::endl;
     while (scanEnabled) {
       auto list = findCameras();
       {
@@ -266,6 +276,11 @@ class NdiReader : public VideoReader {
 
       std::this_thread::sleep_for(std::chrono::milliseconds(3000));
     }
+    if (pNDI_find != nullptr) {
+      NDIlib_find_destroy(pNDI_find);
+      pNDI_find = nullptr;
+    }
+    std::cout << "Scan loop stopped" << std::endl;
   }
 
   std::string connect() {
@@ -274,7 +289,8 @@ class NdiReader : public VideoReader {
     CameraInfo foundCamera;
     std::vector<CameraInfo> cameras;
     while (foundCamera.name == "" && keepRunning) {
-      cameras = findCameras();
+      std::unique_lock<std::mutex> lock(scanMutex);
+      cameras = camList;
       for (auto camera : cameras) {
         // std::cout << "Found camera: " << camera.name << std::endl;
         if (camera.name.find(srcName) == 0) {
@@ -397,13 +413,14 @@ class NdiReader : public VideoReader {
         break;
       }
     }
-    std::cerr << "NDI Rx Thread Exit" << std::endl;
   }
 
 public:
   NdiReader() {
     scanEnabled = true;
     scanThread = std::thread(&NdiReader::scanLoop, this);
+    auto *version = NDIlib_version();
+    std::cout << "NDI SDK Version: " << version << std::endl;
   }
   std::string start(const std::string srcName,
                     std::shared_ptr<FrameProcessor> frameProcessor) override {
@@ -427,7 +444,6 @@ public:
 
     // Destroy the receiver
     if (pNDI_recv) {
-      std::cerr << "Freeing NDI receiver" << std::endl;
       NDIlib_recv_connect(pNDI_recv, nullptr);
       // disconnect
       NDIlib_recv_destroy(pNDI_recv);
@@ -436,22 +452,14 @@ public:
     return "";
   }
   virtual ~NdiReader() override {
-
     stop();
     scanEnabled = false;
     if (scanThread.joinable()) {
       scanThread.join();
     }
 
-    if (pNDI_find != nullptr) {
-      NDIlib_find_destroy(pNDI_find);
-      pNDI_find = nullptr;
-    }
-
     // Not required, but nice
     NDIlib_destroy();
-
-    std::cerr << "NDIReader dtor" << std::endl;
   };
 };
 

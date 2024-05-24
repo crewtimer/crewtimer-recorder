@@ -6,6 +6,10 @@
 *.ttf   binary
 *.woff  binary
 *.woff2 binary
+*.lib   binary
+*.dylib binary
+*.dll   binary
+*.a     binary
 # - Include binary diff in patches instead of "binary files differ."
 *.sln     -text diff
 *.suo     -text diff

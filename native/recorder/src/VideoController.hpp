@@ -40,7 +40,7 @@ private:
   StatusInfo statusInfo;
 
 public:
-  VideoController(const std::string camType) {
+  VideoController(const std::string _camType) {
 
 #ifdef HAVE_BASLER
     if (camType == "basler") { // basler camera
@@ -51,10 +51,17 @@ public:
 #else
     videoReader = createNdiReader();
 #endif
+
+    monitorStopRequested = false;
+    monitorThread = std::thread(&VideoController::monitorLoop, this);
   }
   ~VideoController() {
+    monitorStopRequested = true;
     stop();
     videoReader = nullptr;
+    if (monitorThread.joinable()) {
+      monitorThread.join();
+    }
   }
 
   std::vector<VideoReader::CameraInfo> getCameraList() {
@@ -90,6 +97,8 @@ public:
     this->dir = dir;
     this->prefix = prefix;
     this->interval = interval;
+    statusInfo.error = "";
+    statusInfo.frameProcessor.error = "";
     if (videoRecorder) {
       return "Video Controller already running";
     }
@@ -162,23 +171,16 @@ public:
       return retval;
     }
 
-    monitorStopRequested = false;
-    monitorThread = std::thread(&VideoController::monitorLoop, this);
     startTime = std::chrono::steady_clock::now();
     return "";
   }
 
   std::string stop() {
-    monitorStopRequested = true;
+    statusInfo.recording = false;
     if (!frameProcessor) {
       return "";
     }
     SystemEventQueue::push("VID", "Shutting down...");
-
-    if (monitorThread.joinable()) {
-      SystemEventQueue::push("VID", "Stopping monitor thread...");
-      monitorThread.join();
-    }
 
     SystemEventQueue::push("VID", "Stopping multicast listener...");
     mcastListener->stop();
@@ -215,6 +217,7 @@ public:
         statusInfo.frameProcessor = frameProcessor->getStatus();
         if (!statusInfo.frameProcessor.error.empty()) {
           statusInfo.error = statusInfo.frameProcessor.error;
+          SystemEventQueue::push("system", statusInfo.error);
           stop();
         }
       }

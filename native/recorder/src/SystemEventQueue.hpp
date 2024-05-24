@@ -2,6 +2,7 @@
 #include <chrono>
 #include <deque>
 #include <iostream>
+#include <memory>
 #include <string>
 
 #include "EventQueue.hpp"

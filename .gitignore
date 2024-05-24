@@ -30,3 +30,4 @@ npm-debug.log.*
 *.mp4
 query.json
 log.txt
+assets/Thumbs.db

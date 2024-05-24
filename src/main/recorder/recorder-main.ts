@@ -29,12 +29,15 @@ export function initRecorder() {
   );
 }
 
-export function stopRecording() {
+export function stopRecorder() {
   try {
-    const ret = nativeVideoRecorder({ op: 'stop-recording' });
+    console.log('Calling shutdown recorder');
     shutdownRecorder();
-    return ret;
+    console.log('Post shutdown recorder');
+    return { status: 'OK' };
   } catch (err) {
-    return { status: `${err instanceof Error ? err.message : err}` };
+    const message = `${err instanceof Error ? err.message : err}`;
+    console.error(message);
+    return { status: message };
   }
 }

@@ -10,11 +10,12 @@
  */
 import path from 'path';
 import { app, BrowserWindow, shell } from 'electron';
+import { setLogFile } from 'crewtimer_video_recorder';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
 import './store/store';
 import './msgbus/msgbus-main';
-import { stopRecording, initRecorder } from './recorder/recorder-main';
+import { stopRecorder, initRecorder } from './recorder/recorder-main';
 import { setMainWindow } from './mainWindow';
 import './util/fileops-handler';
 
@@ -34,7 +35,8 @@ if (isDebug) {
 
 // Create a write stream (in append mode)
 const logFilePath = path.join(app.getPath('userData'), 'applog.txt');
-const logStream = require('fs').createWriteStream(logFilePath, { flags: 'a' });
+console.log(`Logging to ${logFilePath}`);
+const logStream = require('fs').createWriteStream(logFilePath);
 
 // Redirect console.log to the log file
 console.log = (...args) => {
@@ -50,6 +52,7 @@ console.error = (...args) => {
   process.stderr.write(msg);
 };
 
+setLogFile(logFilePath);
 console.log('Starting app...');
 
 const installExtensions = async () => {
@@ -103,8 +106,6 @@ const createWindow = async () => {
       mainWindow.minimize();
     } else {
       mainWindow.show();
-
-      mainWindow.webContents.toggleDevTools();
     }
   });
 
@@ -144,8 +145,9 @@ app.on('window-all-closed', () => {
   // if (process.platform !== 'darwin') {
   //   app.quit();
   // }
-  console.log('Window all closed handler calling stopRecording');
-  stopRecording();
+  console.log('Window all closed handler calling stopRecorder');
+  stopRecorder();
+  console.log('Recording stopped, app quit pending');
   app.quit();
 });
 
