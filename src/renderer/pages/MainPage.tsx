@@ -20,9 +20,9 @@ const MainPage = () => {
     case '/video':
       return <FullSizeWindow component={RGBAImageCanvas} />;
     case '/privacy':
-      return <Markdown md={PrivacyMarkdown} newWindowLinks />;
+      return <Markdown md={PrivacyMarkdown} />;
     case '/help':
-      return <Markdown md={CrewTimerVideoRecorder} newWindowLinks />;
+      return <Markdown md={CrewTimerVideoRecorder} />;
     case '/index.html':
       return <RecorderConfig />;
     default:

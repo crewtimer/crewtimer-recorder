@@ -26,9 +26,18 @@ const RecordingLogTable: React.FC = () => {
   const [entries, setEntries] = useState<RecordingLogEntry[]>([]);
 
   useEffect(() => {
-    queryRecordingLog()
-      .then((result) => setEntries(result?.list || []))
-      .catch(showErrorDialog);
+    const queryLogs = () => {
+      queryRecordingLog()
+        .then((result) => setEntries(result?.list || []))
+        .catch(showErrorDialog);
+    };
+    queryLogs();
+    const interval = setInterval(() => {
+      queryLogs();
+    }, 5000);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, []);
   return (
     <TableContainer component={Paper}>

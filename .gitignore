@@ -31,3 +31,4 @@ npm-debug.log.*
 query.json
 log.txt
 assets/Thumbs.db
+.env

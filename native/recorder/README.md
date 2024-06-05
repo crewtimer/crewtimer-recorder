@@ -26,15 +26,17 @@ Increase kernel udp buffer size: ```sudo sysctl -w net.inet.udp.maxdgram=4000000
 
 ## NDI Cameras
 
-The following cameras support 1920x1080 or better but when streaming 1280x720 works most reliably.
+The following NDI capable cameras are good candidates for use with CrewTimer Video Recorder.  The ones marked as *Verified* are known to stream continuously without issue.  The others are untested by CrewTimer.  If you find an NDI camera that works well for you please let me know so I can add it to the list.
 
-| Price | Zoom    | PTZ | FPS | Weather | Verified | Model                                                                                                                    |
-| ----- | ------- | --- | --- | ------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
-| $1450 | 20X     | Yes | 120 |         | Yes      | [AIDA PTZ-NDI3-X20](https://usbroadcast.co/product/aida-imaging-ptz-ndi3-x20b-full-hd-ndihx2-ptz-camera-20x-zoom-black/) |
-| $1075 | 30X     |     | 60  |         | Yes      | [AIDA UHD-NDI3-X30](https://usbroadcast.co/product/aida-imaging-uhd-ndihx3-ip-srt-hdmi-poe-30x-zoom-pov-camera/)         |
-| $775  | 1X C/CS |     | 120 | IP67    |          | [AIDA HD-NDI3-IP67](https://usbroadcast.co/product/aida-imaging-ndihx3-ip67-weatherproof-pov-camera/)                    |
-| $799  | 30X     | Yes | 60  |         | Yes      | [AVKANS NDI PTZ Camera](https://a.co/d/1FIcJW9)                                                                          |
-| $719  | 30X     | Yes | 60  |         | Yes      | [SMTAV BX30N](https://www.smtav.com/collections/ndi/products/smtav-ai-tracking-ndi-ptz-camera-30x-optics-zoom)           |
-| $669  | 20X     | Yes | 60  |         |          | [SMTAV BX20N](https://www.smtav.com/collections/ndi/products/smtav-20x-optics-zoom-ai-tracking-ndi-ptz-camera-bx20n-w)   |
+| Price | Zoom    | PTZ | FPS | Weather | Verified | Model                                                                                                                         |
+| ----- | ------- | --- | --- | ------- | -------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| $1450 | 20X     | Yes | 120 |         | **Yes**  | [AIDA PTZ-NDI3-X20](https://usbroadcast.co/product/aida-imaging-ptz-ndi3-x20b-full-hd-ndihx2-ptz-camera-20x-zoom-black/)      |
+| $1075 | 30X     |     | 60  |         | **Yes**  | [AIDA UHD-NDI3-X30](https://usbroadcast.co/product/aida-imaging-uhd-ndihx3-ip-srt-hdmi-poe-30x-zoom-pov-camera/)              |
+| $799  | 30X     | Yes | 60  |         | **Yes**  | [AVKANS NDI PTZ Camera](https://a.co/d/1FIcJW9)                                                                               |
+| $719  | 30X     | Yes | 60  |         | **Yes**  | [SMTAV BX30N](https://www.smtav.com/collections/ndi/products/smtav-ai-tracking-ndi-ptz-camera-30x-optics-zoom)                |
+| $775  | 1X C/CS |     | 120 | IP67    |          | [AIDA HD-NDI3-IP67](https://usbroadcast.co/product/aida-imaging-ndihx3-ip67-weatherproof-pov-camera/)                         |
+| $669  | 20X     | Yes | 60  |         |          | [SMTAV BX20N](https://www.smtav.com/collections/ndi/products/smtav-20x-optics-zoom-ai-tracking-ndi-ptz-camera-bx20n-w)        |
+| $1295 | 20X     |     | 60  |         |          | [Birddog Maki Ultra 4K](https://www.bhphotovideo.com/c/product/1820220-REG/birddog_bdpmku20xw_birddog_maki_ultra_white.html/) |
+| $1295 | 30x     | Yes | 60  |         |          | [BirdDog Eyes P200](https://www.bhphotovideo.com/c/product/1434646-REG/birddog_bdp200b_eyes_p200_1080p_full.html)             |
 
-All cameras needed software upgrades to operate properly.  The SMTAV BA series had unreliable NDI timestamps.
+ **Note**:Cameras often needed software upgrades to operate properly.  Be sure to update software as soon as you purchase one.  The SMTAV BA series had unreliable NDI timestamps and are not recommended.
