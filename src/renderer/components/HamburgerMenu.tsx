@@ -1,10 +1,16 @@
 import { useState } from 'react';
 import * as React from 'react';
 import MenuIcon from '@mui/icons-material/Menu';
+import InfoIcon from '@mui/icons-material/Info';
+import HelpIcon from '@mui/icons-material/Help';
+import SecurityIcon from '@mui/icons-material/Security';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
-import { IconButton } from '@mui/material';
+import { IconButton, ListItemIcon, ListItemText } from '@mui/material';
 import { useSelectedPage } from '../pages/MainPage';
+import { setToast } from './Toast';
+
+const AboutText = `CrewTimer Video Recorder ${window.platform.appVersion}`;
 
 const HamburgerMenu = () => {
   const [, setSelectedPage] = useSelectedPage();
@@ -42,8 +48,30 @@ const HamburgerMenu = () => {
           'aria-labelledby': 'basic-button',
         }}
       >
-        <MenuItem onClick={closeAndGo('/help')}>Help</MenuItem>
-        <MenuItem onClick={closeAndGo('/privacy')}>Privacy Policy</MenuItem>
+        <MenuItem onClick={closeAndGo('/help')}>
+          {' '}
+          <ListItemIcon>
+            <HelpIcon />
+          </ListItemIcon>
+          <ListItemText>Help</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={closeAndGo('/privacy')}>
+          <ListItemIcon>
+            <SecurityIcon />
+          </ListItemIcon>
+          <ListItemText>Privacy Policy</ListItemText>
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            handleClose();
+            setToast({ severity: 'info', msg: AboutText });
+          }}
+        >
+          <ListItemIcon>
+            <InfoIcon />
+          </ListItemIcon>
+          <ListItemText primary="About" />
+        </MenuItem>
       </Menu>
     </div>
   );

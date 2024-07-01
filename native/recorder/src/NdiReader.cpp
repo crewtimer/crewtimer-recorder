@@ -156,20 +156,20 @@ void overlayDigits(uint32_t *screen, int stride, Point &point, uint16_t value,
 void overlayTime(uint32_t *screen, int stride, uint64_t ts100ns,
                  const std::tm *local_time) {
   // Extract the local hours and minutes
-  int local_hours = local_time->tm_hour;
-  int local_minutes = local_time->tm_min;
-  int local_secs = local_time->tm_sec;
-  const auto milli = (5000 + ts100ns) / 10000;
+  // int local_hours = local_time->tm_hour;
+  // int local_minutes = local_time->tm_min;
+  // int local_secs = local_time->tm_sec;
+  // const auto milli = (5000 + ts100ns) / 10000;
 
-  Point point = Point(20, 40);
+  // Point point = Point(20, 40);
 
-  overlayDigits(screen, stride, point, local_hours, 2);
-  setDigitPixels(screen, 10, point, stride, timeColor, black);
-  overlayDigits(screen, stride, point, local_minutes, 2);
-  setDigitPixels(screen, 10, point, stride, timeColor, black);
-  overlayDigits(screen, stride, point, local_secs, 2);
-  setDigitPixels(screen, 11, point, stride, timeColor, black);
-  overlayDigits(screen, stride, point, milli % 1000, 3);
+  // overlayDigits(screen, stride, point, local_hours, 2);
+  // setDigitPixels(screen, 10, point, stride, timeColor, black);
+  // overlayDigits(screen, stride, point, local_minutes, 2);
+  // setDigitPixels(screen, 10, point, stride, timeColor, black);
+  // overlayDigits(screen, stride, point, local_secs, 2);
+  // setDigitPixels(screen, 11, point, stride, timeColor, black);
+  // overlayDigits(screen, stride, point, milli % 1000, 3);
 
   // std::cout << "Current time: " << local_hours << ":" << local_minutes << ":"
   //           << local_secs << std::endl;
@@ -356,6 +356,7 @@ class NdiReader : public VideoReader {
           }
           // std::cout << "Video data received (" << video_frame.xres << "x"
           //           << video_frame.yres << std::endl;
+
           auto ts100ns = video_frame.timestamp;
           const auto milli = (5000 + ts100ns) / 10000;
 

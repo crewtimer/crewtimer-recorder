@@ -18,6 +18,7 @@ import SideNavMenu from './components/SideNavMenu';
 import MainPage from './pages/MainPage';
 import { drawerWidth, TopBar, useDrawerOpen } from './components/TopBar';
 import { ConfirmDialog } from './components/ConfirmDialog';
+import Toast from './components/Toast';
 
 createTheme();
 
@@ -108,6 +109,7 @@ function App() {
         <Box sx={{ display: 'flex' }}>
           <CssBaseline />
           <ConfirmDialog />
+          <Toast />
           <AppBar position="fixed" open={open}>
             <TopBar />
           </AppBar>

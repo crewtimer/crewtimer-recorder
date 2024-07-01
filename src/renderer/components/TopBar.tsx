@@ -1,16 +1,43 @@
-import { Toolbar, IconButton, Typography, Box } from '@mui/material';
+import {
+  Toolbar,
+  IconButton,
+  Typography,
+  Box,
+  Button,
+  Stack,
+  Link,
+} from '@mui/material';
 import { UseDatum } from 'react-usedatum';
 import MenuIcon from '@mui/icons-material/Menu';
 import logo from '../../../assets/icons/crewtimer.svg';
 import HamburgerMenu from './HamburgerMenu';
 import RecordingStatus from '../recorder/RecordingStatus';
+import { useFirebaseDatum } from '../util/UseFirebase';
+import { setDialogConfig } from './ConfirmDialog';
 
 export const drawerWidth = 240;
 export const [useDrawerOpen] = UseDatum(false);
 
+const versionAsNumber = (version: string) => {
+  const parts = version.split('.');
+  return Number(parts[0]) * 100 + Number(parts[1]) * 10 + Number(parts[2]);
+};
+
 export function TopBar() {
   const [open, setOpen] = useDrawerOpen();
+  const latestVersion =
+    useFirebaseDatum<string, string>(
+      '/global/config/video-recorder/latestVersion',
+    ) || '0.0.0';
+  const latestText =
+    useFirebaseDatum<string, string>(
+      '/global/config/video-recorder/latestText',
+    ) || '';
+  const updateAvailable =
+    versionAsNumber(latestVersion) >
+    versionAsNumber(window.platform.appVersion);
 
+  console.log(`Latest version: ${latestVersion}`);
   return (
     <Toolbar
       sx={{
@@ -40,6 +67,34 @@ export function TopBar() {
         CrewTimer Video Recorder
       </Typography>
       <Box sx={{ flexGrow: 1 }} />
+      {updateAvailable && (
+        <Button
+          variant="outlined"
+          color="inherit"
+          onClick={() =>
+            setDialogConfig({
+              title: 'Software Update Available',
+              body: (
+                <Stack>
+                  <Typography>
+                    Version: {latestVersion}: {latestText}.
+                  </Typography>
+                  <Link
+                    href="https://crewtimer.com/help/downloads"
+                    target="_blank"
+                  >
+                    https://crewtimer.com/help/downloads
+                  </Link>
+                </Stack>
+              ),
+              button: 'OK',
+              showCancel: false,
+            })
+          }
+        >
+          Update
+        </Button>
+      )}
       <Box sx={{ alignItems: 'center' }}>
         <RecordingStatus />
       </Box>
