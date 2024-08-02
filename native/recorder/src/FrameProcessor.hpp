@@ -80,6 +80,12 @@ private:
   std::thread processThread; ///< Threads for capturing and processing frames.
   FramePtr lastFrame;
 
+  // JSON file props
+  int64_t frameCount = 0;
+  uint64_t startTs;
+  uint64_t lastTs;
+  std::string jsonFilename;
+
   /**
    * Thread function to capture frames.
    * Simulates capturing video frames and storing them in a queue.
@@ -91,4 +97,9 @@ private:
    * Simulates processing video frames from a queue.
    */
   void processFrames();
+
+  /**
+   * @brief Write a JSON file with meta data about the video file
+   */
+  void writeJsonSidecarFile();
 };

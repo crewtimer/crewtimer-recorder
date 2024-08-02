@@ -24,6 +24,28 @@ make
 
 Increase kernel udp buffer size: ```sudo sysctl -w net.inet.udp.maxdgram=4000000```
 
+## Making a new prebuilt on windows
+
+First, ensure that ffmpeg has been built by following the prior section instructions.
+
+Open a shell via C:\cygwin64\Cygwin.bat.  Alternatively, open a Visual Studio 2022 x64 Native Tools Command Prompt.
+
+```bash
+cd c:/Users/glenne/git/crewtimer-recorder/native/recorder
+rm -rf node_modules build # start from scratch
+rm yarn.lock # removes an error about stringWidth libraries
+yarn install # The final step of the install will fail where it tries to get prebuilt binaries.  We'll build our own next
+yarn prebuild # This will likely fail on the final step where it tries to upload to github releases
+```
+
+If you get an error about a stringWidth require, do the following: `rm -rf node_modules yarn.lock && yarn install`.  A conflict exists between two string packages and an install without a yarn.lock will succeed.
+
+The result is placed into a file such as prebuilds/crewtimer_recorder-v1.0.2-napi-v6-win32-x64.tar.gz.  It will also attempt to upload it to github releases.  This file can also be copied to a similar directory on a mac and uploaded from there via `yarn uploadall`.
+
+If it creates a file with something like v94 instead of v6, this is not what you want and a script got the wrong napi version.  Try also removing the build directory - `rm -rf node_modules yarn.lock build && yarn install`.
+
+Uploading requires a GITHUB_TOKEN env variable to be set to grant permission.
+
 ## NDI Cameras
 
 The following NDI capable cameras are good candidates for use with CrewTimer Video Recorder.  The ones marked as *Verified* are known to stream continuously without issue.  The others are untested by CrewTimer.  If you find an NDI camera that works well for you please let me know so I can add it to the list.

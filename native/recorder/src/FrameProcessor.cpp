@@ -1,5 +1,6 @@
 #include "FrameProcessor.hpp"
 #include <chrono>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -61,15 +62,38 @@ FramePtr FrameProcessor::getLastFrame() {
   return lastFrame;
 }
 
+void FrameProcessor::writeJsonSidecarFile() {
+  if (frameCount == 0) {
+    return;
+  }
+
+  std::ofstream jsonFile(jsonFilename);
+  if (!jsonFile) {
+    errorMessage =
+        "Error: Could not open the file '" + jsonFilename + "' for writing.";
+    running = false;
+    return;
+  }
+  std::string text = "Hello, world! This is a sample text.";
+  jsonFile << std::fixed << std::setprecision(7) << "{\n"
+           << "  \"file\": {\n"
+           << "    \"startTs\": \"" << startTs / 1e7 << "\",\n"
+           << "    \"stopTs\": \"" << lastTs / 1e7 << "\",\n"
+           << "    \"numFrames\": " << frameCount << "\n"
+           << "  }\n"
+           << "}\n";
+  jsonFile.close();
+}
+
 void FrameProcessor::processFrames() {
   SystemEventQueue::push("fproc", "Starting frame processor");
-  int64_t frameCount = 0;
   int count = 0;
   auto start = high_resolution_clock::now();
   auto useEmbeddedTimestamp = true;
   int lastXres = 0;
   int lastYres = 0;
   float lastFPS = 0;
+  frameCount = 0;
 
   while (running) {
     std::unique_lock<std::mutex> lock(queueMutex);
@@ -98,10 +122,12 @@ void FrameProcessor::processFrames() {
           (okToSplit && splitRequested)) {
         count++;
         if (frameCount > 0) {
+          writeJsonSidecarFile();
           videoRecorder->stop();
         }
 
         const auto ts100ns = video_frame->timestamp;
+        startTs = ts100ns;
         uint64_t complete_periods = ts100ns / (durationSecs * 10000000);
         nextStartTime = (1 + complete_periods) * durationSecs * 10000000;
 
@@ -124,6 +150,7 @@ void FrameProcessor::processFrames() {
         ss << prefix << std::put_time(local_time, "%Y%m%d_%H%M%S");
 
         std::string filename = ss.str();
+        jsonFilename = directory + "/" + filename + ".json";
         statusInfo.filename = filename;
         statusInfo.fps = fps;
         statusInfo.width = video_frame->xres;
@@ -134,6 +161,7 @@ void FrameProcessor::processFrames() {
         if (!err.empty()) {
           errorMessage = err;
           running = false;
+          frameCount = 0;
           break;
         }
 
@@ -148,8 +176,10 @@ void FrameProcessor::processFrames() {
       if (!err.empty()) {
         errorMessage = err;
         running = false;
+        frameCount = 0;
         break;
       }
+      lastTs = video_frame->timestamp;
       frameCount++;
 
       lock.lock();
@@ -159,5 +189,10 @@ void FrameProcessor::processFrames() {
         frameQueue = std::queue<FramePtr>();
       }
     }
+  }
+
+  if (frameCount > 0) {
+    writeJsonSidecarFile();
+    videoRecorder->stop();
   }
 }

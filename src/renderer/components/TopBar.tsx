@@ -37,7 +37,6 @@ export function TopBar() {
     versionAsNumber(latestVersion) >
     versionAsNumber(window.platform.appVersion);
 
-  console.log(`Latest version: ${latestVersion}`);
   return (
     <Toolbar
       sx={{
@@ -71,6 +70,7 @@ export function TopBar() {
         <Button
           variant="outlined"
           color="inherit"
+          size="small"
           onClick={() =>
             setDialogConfig({
               title: 'Software Update Available',
