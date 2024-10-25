@@ -9,6 +9,7 @@ import {
   DefaultRecordingProps,
 } from './RecorderTypes';
 import {
+  getFrameGrab,
   getRecordingProps,
   setFrameGrab,
   setIsRecording,
@@ -22,11 +23,19 @@ export const startRecording = () => {
   // console.log(`recording props: ${JSON.stringify(getRecordingProps())}`);
   const recordingProps = { ...DefaultRecordingProps, ...getRecordingProps() };
   recordingProps.recordingDuration = Number(recordingProps.recordingDuration);
+  const frame = getFrameGrab();
+  // temp - pass as px instead of pct to c++
+  const cropArea = { ...recordingProps.cropArea };
+  cropArea.x = Math.round((cropArea.x * (frame?.width || 1)) / 4) * 4;
+  cropArea.y = Math.round((cropArea.y * (frame?.height || 1)) / 4) * 4;
+  cropArea.width = Math.round((cropArea.width * (frame?.width || 1)) / 4) * 4;
+  cropArea.height =
+    Math.round((cropArea.height * (frame?.height || 1)) / 4) * 4;
   return window.msgbus.sendMessage<StartRecorderMessage, HandlerResponse>(
     'recorder',
     {
       op: 'start-recording',
-      props: recordingProps,
+      props: { ...recordingProps, cropArea },
     },
   );
 };
@@ -70,11 +79,12 @@ export const requestVideoFrame = async () => {
       op: 'grab-frame',
     })
     .then((frame) => {
-      if (frame.status === 'OK') {
+      if (frame.status === 'OK' && frame.data) {
         setFrameGrab(frame);
-      } else {
-        setFrameGrab(undefined);
       }
+      // else {
+      //   setFrameGrab(undefined);
+      // }
       return frame;
     })
     .catch(showErrorDialog);

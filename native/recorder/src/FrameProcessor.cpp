@@ -6,14 +6,15 @@
 #include <sstream>
 
 #include "SystemEventQueue.hpp"
+#include "VideoUtils.hpp"
 using namespace std::chrono;
 
 FrameProcessor::FrameProcessor(const std::string directory,
                                const std::string prefix,
                                std::shared_ptr<VideoRecorder> videoRecorder,
-                               int durationSecs)
+                               int durationSecs, Rectangle cropArea)
     : directory(directory), prefix(prefix), videoRecorder(videoRecorder),
-      durationSecs(durationSecs), running(true),
+      durationSecs(durationSecs), cropArea(cropArea), running(true),
       processThread(&FrameProcessor::processFrames, this) {
   errorMessage = "";
 }
@@ -74,12 +75,15 @@ void FrameProcessor::writeJsonSidecarFile() {
     running = false;
     return;
   }
-  std::string text = "Hello, world! This is a sample text.";
   jsonFile << std::fixed << std::setprecision(7) << "{\n"
            << "  \"file\": {\n"
            << "    \"startTs\": \"" << startTs / 1e7 << "\",\n"
            << "    \"stopTs\": \"" << lastTs / 1e7 << "\",\n"
            << "    \"numFrames\": " << frameCount << "\n"
+           << "  },\n"
+           << "  \"source\": {\n"
+           << "    \"width\": " << (cropArea.width || lastXres) << ",\n"
+           << "    \"height\": " << (cropArea.height || lastYres) << "\n"
            << "  }\n"
            << "}\n";
   jsonFile.close();
@@ -90,9 +94,9 @@ void FrameProcessor::processFrames() {
   int count = 0;
   auto start = high_resolution_clock::now();
   auto useEmbeddedTimestamp = true;
-  int lastXres = 0;
-  int lastYres = 0;
-  float lastFPS = 0;
+  lastXres = 0;
+  lastYres = 0;
+  lastFPS = 0;
   frameCount = 0;
 
   while (running) {
@@ -157,7 +161,9 @@ void FrameProcessor::processFrames() {
         statusInfo.height = video_frame->yres;
 
         const auto err = videoRecorder->openVideoStream(
-            directory, filename, video_frame->xres, video_frame->yres, fps);
+            directory, filename,
+            cropArea.width ? cropArea.width : video_frame->xres,
+            cropArea.height ? cropArea.height : video_frame->yres, fps);
         if (!err.empty()) {
           errorMessage = err;
           running = false;
@@ -165,14 +171,30 @@ void FrameProcessor::processFrames() {
           break;
         }
 
-        std::cout << "File: " << filename << " " << video_frame->xres << "x"
+        std::cerr << "File: " << filename << " " << video_frame->xres << "x"
                   << video_frame->yres << " fps=" << fps
                   << " prior_fc=" << frameCount
                   << " Backlog=" << frameQueue.size() << std::endl;
         frameCount = 0;
       }
 
-      auto err = videoRecorder->writeVideoFrame(video_frame);
+      auto cropped = video_frame;
+      // std::cerr << "vstride: " << std::dec << video_frame->stride
+      //           << "ptr: " << std::hex << (void *)(video_frame->data)
+      //           << std::endl;
+      if (cropArea.width && cropArea.height) {
+        // std::cout << "Cropping frame (" << cropArea.x << "," << cropArea.y
+        //           << ")" << cropArea.width << "x" << cropArea.height
+        //           << std::endl;
+        cropped = cropFrame(video_frame, cropArea.x, cropArea.y, cropArea.width,
+                            cropArea.height);
+
+        // std::cerr << " stride: " << std::dec << cropped->stride
+        //           << "ptr: " << std::hex << (void *)(cropped->data)
+        //           << std::endl;
+        encodeTimestamp(cropped->data, cropped->stride, video_frame->timestamp);
+      }
+      auto err = videoRecorder->writeVideoFrame(cropped);
       if (!err.empty()) {
         errorMessage = err;
         running = false;

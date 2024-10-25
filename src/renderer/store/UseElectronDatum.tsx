@@ -22,6 +22,10 @@ window.mem.onDatumUpdate(
   },
 );
 
+function isKeyMap(ref: any): ref is Record<string, unknown> {
+  return ref !== null && typeof ref === 'object' && !Array.isArray(ref);
+}
+
 export function UseStoredDatum<T>(
   key: string,
   initialValue: T,
@@ -43,7 +47,11 @@ export function UseStoredDatum<T>(
 
   // Query initial value
   setTimeout(async () => {
-    const value: T = (await window.store.get(key, initialValue)) as T;
+    let value: T = (await window.store.get(key, initialValue)) as T;
+    if (isKeyMap(initialValue) && isKeyMap(value)) {
+      // Merge initial value with persisted value
+      value = { ...initialValue, ...value };
+    }
     datum[1](value);
   }, 10);
   return datum;
@@ -70,7 +78,11 @@ export function UseMemDatum<T>(
 
   // Query initial value
   setTimeout(async () => {
-    const value: T = (await window.mem.get(key, initialValue)) as T;
+    let value: T = (await window.mem.get(key, initialValue)) as T;
+    if (isKeyMap(initialValue) && isKeyMap(value)) {
+      // Merge initial value with persisted value
+      value = { ...initialValue, ...value };
+    }
     datum[1](value);
   }, 10);
   return datum;

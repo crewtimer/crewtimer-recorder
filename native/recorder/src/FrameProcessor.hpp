@@ -10,6 +10,7 @@
 #include <thread>
 
 #include "VideoRecorder.hpp"
+#include "VideoUtils.hpp"
 
 /**
  * Class responsible for processing video frames.
@@ -26,13 +27,22 @@ public:
     float fps;
   };
 
+  struct Rectangle {
+    int x;
+    int y;
+    int width;
+    int height;
+    Rectangle(int x, int y, int width, int height)
+        : x(x), y(y), width(width), height(height) {}
+  };
+
   /**
    * Constructor for FrameProcessor.
    * Initializes and starts capture and process threads.
    */
   FrameProcessor(const std::string directory, const std::string prefix,
-                 std::shared_ptr<VideoRecorder> videoRecorder,
-                 int durationSecs);
+                 std::shared_ptr<VideoRecorder> videoRecorder, int durationSecs,
+                 Rectangle cropArea);
 
   void addFrame(FramePtr frame);
 
@@ -67,6 +77,7 @@ private:
   std::string errorMessage;
   const std::string directory;
   const std::string prefix;
+  Rectangle cropArea;
   std::shared_ptr<VideoRecorder> videoRecorder;
   uint64_t durationSecs;
   uint64_t nextStartTime = 0;
@@ -84,6 +95,9 @@ private:
   int64_t frameCount = 0;
   uint64_t startTs;
   uint64_t lastTs;
+  int lastXres = 0;
+  int lastYres = 0;
+  float lastFPS = 0;
   std::string jsonFilename;
 
   /**

@@ -1,12 +1,15 @@
 
 #include "VideoReader.hpp"
 #include <Processing.NDI.Lib.h>
+#include <algorithm> // For std::min and std::max
 #include <atomic>
 #include <chrono>
-#include <cstring> // strerror
+#include <cstring> // For memcpy, strerror
 #include <iomanip>
+#include <iostream>
 #include <sstream>
 #include <thread>
+#include <vector>
 
 #include "SystemEventQueue.hpp"
 
@@ -23,6 +26,64 @@ using namespace std::chrono;
 // 64% cpu rx uyuv422, convert to bgr, save to disk
 // 68% cpu bgrx to bgr save to disk
 // 208% cpu bgrx to bgr save as mkv X264
+
+/**
+ * Crops a region from a UYVY422 frame buffer.
+ *
+ * @param uyvyBuffer   The pointer to the original UYVY422 frame buffer.
+ * @param frameWidth   The width of the original frame in pixels.
+ * @param frameHeight  The height of the original frame in pixels.
+ * @param x            The x-coordinate of the top-left corner of the crop
+ * region.
+ * @param y            The y-coordinate of the top-left corner of the crop
+ * region.
+ * @param width        The width of the crop region in pixels.
+ * @param height       The height of the crop region in pixels.
+ * @param lineStride   The number of bytes in each row of the original frame
+ * buffer.
+ * @return             A vector containing the cropped frame buffer in UYVY422
+ * format. If the crop region is invalid, returns an empty vector.
+ */
+std::vector<uint8_t> cropUYVY422Frame(const uint8_t *uyvyBuffer, int frameWidth,
+                                      int frameHeight, int x, int y, int width,
+                                      int height, int lineStride) {
+  int bytesPerPixel =
+      2; // Each pixel in UYVY422 is 2 bytes (4 bytes for 2 pixels)
+
+  // Adjust the width and height to ensure they are within frame bounds
+  int maxWidth = frameWidth - x;
+  int maxHeight = frameHeight - y;
+  width = std::max(0, std::min(width, maxWidth));
+  height = std::max(0, std::min(height, maxHeight));
+
+  // Check if the requested region is valid
+  if (width <= 0 || height <= 0 || x < 0 || y < 0 || x >= frameWidth ||
+      y >= frameHeight) {
+    std::cerr << "Invalid crop region." << std::endl;
+    return {};
+  }
+
+  // Create a buffer for the cropped frame
+  std::vector<uint8_t> croppedBuffer(width * height * bytesPerPixel);
+
+  // Iterate over the rows in the cropping region
+  for (int row = 0; row < height; ++row) {
+    // Calculate the source position
+    int srcY = y + row;
+    int srcX = x * bytesPerPixel;
+
+    // Calculate the source offset in the original buffer with the lineStride
+    const uint8_t *srcPtr = uyvyBuffer + srcY * lineStride + srcX;
+
+    // Calculate the destination position in the cropped buffer
+    uint8_t *destPtr = croppedBuffer.data() + row * width * bytesPerPixel;
+
+    // Copy the row into the cropped buffer
+    std::memcpy(destPtr, srcPtr, width * bytesPerPixel);
+  }
+
+  return croppedBuffer;
+}
 
 uint32_t uyvy422(uint8_t r, uint8_t g, uint8_t b) {
   // https://github.com/lplassman/V4L2-to-NDI/blob/4dd5e9594acc4f154658283ee52718fa58018ac9/PixelFormatConverter.cpp

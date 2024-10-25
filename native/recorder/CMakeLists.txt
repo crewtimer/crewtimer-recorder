@@ -22,7 +22,9 @@ message(STATUS "${CMAKE_PREFIX_PATH}")
 message(STATUS "updated:${CMAKE_PREFIX_PATH}")
 
 set(SOURCE_FILES
+    # If files are added to this list, also add to binding.gyp!
     src/ctrecorder.cpp
+    src/VideoUtils.cpp
     src/FrameProcessor.cpp
     src/util.cpp
     src/NdiReader.cpp

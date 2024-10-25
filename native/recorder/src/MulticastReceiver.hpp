@@ -1,12 +1,12 @@
 /**
- * @file
  * @brief Multicast Receiver class for receiving UDP multicast messages and
  * parsing them as JSON.
  */
 #include <functional>
-#include <nlohmann/json.hpp>
 #include <string>
 #include <thread>
+
+#include "nlohmann/json.hpp"
 
 using json = nlohmann::json;
 

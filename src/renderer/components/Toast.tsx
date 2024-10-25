@@ -8,7 +8,6 @@ export const [useToast, setToast] = UseDatum<{
 const Toast = () => {
   const [toast, setToastContent] = useToast();
   const handleClose = () => setToastContent({ severity: 'info', msg: '' });
-  console.log('rendering toast', `${toast.msg} ${toast.severity}`);
   return (
     <Snackbar
       open={Boolean(toast.msg)}

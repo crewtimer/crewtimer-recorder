@@ -8,6 +8,7 @@
                   "src/MulticastReceiver.cpp",
                   "src/NdiReader.cpp",
                   "src/NullRecorder.cpp",
+                  "src/VideoUtils.cpp",
                   "src/util.cpp"],
       "defines": [ "USE_FFMPEG" ],
       "include_dirs": [

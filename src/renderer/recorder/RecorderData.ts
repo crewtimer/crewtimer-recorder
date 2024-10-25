@@ -35,7 +35,7 @@ export const [useIsRecording, setIsRecording] = UseDatum(false);
 export const [useRecordingStatus, setRecordingStatus] =
   UseDatum<RecordingStatus>(DefaultRecordingStatus);
 
-export const [useFrameGrab, setFrameGrab] = UseDatum<
+export const [useFrameGrab, setFrameGrab, getFrameGrab] = UseDatum<
   GrabFrameResponse | undefined
 >(generateTestPattern());
 

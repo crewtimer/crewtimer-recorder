@@ -1,11 +1,19 @@
 import { HandlerResponse } from '../msgbus/MsgbusTypes';
 
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export interface RecordingProps {
   recordingFolder: string;
   recordingPrefix: string;
   recordingDuration: number;
   networkCamera: string;
   showFinishGuide: boolean;
+  cropArea: Rect;
 }
 
 export interface RecorderMessage {
@@ -25,6 +33,7 @@ export interface StartRecorderMessage extends RecorderMessage {
     recordingPrefix: string;
     recordingDuration: number;
     networkCamera: string;
+    cropArea: Rect;
   };
 }
 export interface RecorderResponse extends HandlerResponse {}
@@ -66,9 +75,10 @@ export const DefaultRecordingStatus: RecordingStatus = {
 export const DefaultRecordingProps: RecordingProps = {
   recordingFolder: './',
   recordingPrefix: 'CT_',
-  recordingDuration: 300,
+  recordingDuration: 120,
   networkCamera: '',
   showFinishGuide: true,
+  cropArea: { x: 0, y: 0, width: 1, height: 1 },
 };
 
 export interface RecordingLogEntry {

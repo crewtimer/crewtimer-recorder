@@ -138,8 +138,8 @@ public:
     // 'profile' sets the feature set available to a decoder and thus limits
     // encoding options.  'preset' controls conmpression speed.  Slower speed
     // means more compression generally.
-    av_dict_set(&codec_options, "preset", "medium", 0);
-    // av_dict_set(&codec_options, "profile", "high", 0);
+    // av_dict_set(&codec_options, "preset", "medium", 0);
+    av_dict_set(&codec_options, "profile", "high", 0);
     // av_dict_set(&codec_options, "preset", "slow", 0); // 80% cpu 90MB/min
     // av_dict_set(&codec_options, "profile", "main", 0);
 

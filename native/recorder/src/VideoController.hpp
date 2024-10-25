@@ -1,3 +1,4 @@
+#pragma once
 #include <chrono>
 #include <mutex>
 #include <string>
@@ -90,7 +91,8 @@ public:
 
   std::string start(const std::string srcName, const std::string encoder,
                     const std::string dir, const std::string prefix,
-                    const int interval) {
+                    const int interval,
+                    const FrameProcessor::Rectangle cropArea) {
     std::lock_guard<std::recursive_mutex> lock(controlMutex);
     this->srcName = srcName;
     this->encoder = encoder;
@@ -136,7 +138,7 @@ public:
     }
 
     frameProcessor = std::shared_ptr<FrameProcessor>(
-        new FrameProcessor(dir, prefix, videoRecorder, interval));
+        new FrameProcessor(dir, prefix, videoRecorder, interval, cropArea));
 
     retval = videoReader->start(srcName, frameProcessor);
     if (!retval.empty()) {

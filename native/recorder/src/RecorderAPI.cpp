@@ -5,7 +5,6 @@
 #include <map>
 #include <memory>
 #include <napi.h>
-#include <nlohmann/json.hpp>
 #include <node.h>
 #include <sstream>
 #include <streambuf>
@@ -22,6 +21,7 @@ extern "C" {
 #include "Message.hpp"
 #include "SystemEventQueue.hpp"
 #include "VideoController.hpp"
+#include "nlohmann/json.hpp"
 
 using json = nlohmann::json;
 std::shared_ptr<VideoController> recorder;
@@ -166,7 +166,7 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
       auto props = args.Get("props").As<Napi::Object>();
       std::vector<std::string> prop_names = {
           "recordingFolder", "recordingPrefix", "recordingDuration",
-          "networkCamera"};
+          "networkCamera", "cropArea"};
       for (const auto &name : prop_names) {
         if (!props.Has(name.c_str())) {
           std::stringstream ss;
@@ -181,9 +181,20 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
           props.Get("networkCamera").As<Napi::String>().Utf8Value();
       auto interval =
           props.Get("recordingDuration").As<Napi::Number>().Uint32Value();
+      auto cropArea = props.Get("cropArea").As<Napi::Object>();
 
-      auto result =
-          recorder->start(networkCamera, "ffmpeg", folder, prefix, interval);
+      auto cropRect = FrameProcessor::Rectangle{0, 0, 0, 0};
+      if (cropArea.Has("x") && cropArea.Has("y") && cropArea.Has("width") &&
+          cropArea.Has("height")) {
+        cropRect = FrameProcessor::Rectangle{
+            cropArea.Get("x").As<Napi::Number>().Int32Value(),
+            cropArea.Get("y").As<Napi::Number>().Int32Value(),
+            cropArea.Get("width").As<Napi::Number>().Int32Value(),
+            cropArea.Get("height").As<Napi::Number>().Int32Value()};
+      }
+
+      auto result = recorder->start(networkCamera, "ffmpeg", folder, prefix,
+                                    interval, cropRect);
       if (!result.empty()) {
         std::cerr << "Error: " << result << std::endl;
         ret.Set("status", Napi::String::New(env, "Fail"));

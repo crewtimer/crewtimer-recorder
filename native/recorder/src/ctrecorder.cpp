@@ -191,7 +191,8 @@ int main(int argc, char *argv[]) {
   const auto timeout = std::stoi(args["-timeout"]);
 
   recorder = std::shared_ptr<VideoController>(new VideoController("ndi"));
-  recorder->start(srcName, encoder, directory, prefix, interval);
+  recorder->start(srcName, encoder, directory, prefix, interval,
+                  {1280 / 4, 720 / 4, 1280 / 2, 720 / 2});
 
   auto startShutdown = []() {
     recorder->stop();

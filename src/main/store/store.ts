@@ -8,7 +8,9 @@ import { getMainWindow } from '../mainWindow';
 import { notifyChange } from '../../renderer/store/StoreUtil';
 
 /** Stored data instance for on-disk storage */
-const store = new Store();
+const store = new Store({
+  name: 'ct-recorder', // this will create 'ct-recorder.json'
+});
 
 /** In-memory cache for settings */
 const memCache = new Map<string, unknown>();

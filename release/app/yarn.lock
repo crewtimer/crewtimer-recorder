@@ -330,7 +330,7 @@ console-control-strings@^1.1.0:
   integrity sha512-ty/fTekppD2fIwRvnZAVdeOiGd1c7YXEixbgJTNzqcxJWKQnjJ/V1bNEEE6hygpM3WjwHFUVK6HTjWSzV4a8sQ==
 
 crewtimer_video_recorder@../../native/recorder/:
-  version "1.0.1"
+  version "1.0.4"
   dependencies:
     bindings "^1.5.0"
     prebuild-install "^7.1.1"
