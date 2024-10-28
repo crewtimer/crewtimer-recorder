@@ -1,6 +1,9 @@
 /* eslint-disable no-bitwise */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Box } from '@mui/material';
+import EditIcon from '@mui/icons-material/Edit';
+import CheckIcon from '@mui/icons-material/Check';
+import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import {
   useFrameGrab,
   useGuide,
@@ -15,6 +18,7 @@ import {
 import generateTestPattern from '../util/ImageUtils';
 import { GrabFrameResponse, Rect } from '../recorder/RecorderTypes';
 import { showErrorDialog } from './ErrorDialog';
+import CanvasIcon from './CanvasIcon';
 
 /**
  * Convert a timestamp in milliseconds to a string formatted as HH:MM:SS.MMM
@@ -87,6 +91,19 @@ function extractTimestampFromFrame(
   return Number(number); // Convert the BigInt number to a regular number
 }
 
+const drawSvgIcon = (
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement | null,
+  x: number,
+  y: number,
+) => {
+  if (image) {
+    ctx.fillStyle = 'rgba(50, 50, 50, 0.7)'; // '#99999980';
+    ctx.fillRect(x, y, image.width, image.height);
+    ctx.drawImage(image, x, y, image.width, image.height);
+  }
+};
+
 const drawPlayIcon = (
   ctx: CanvasRenderingContext2D,
   canvasWidth: number,
@@ -142,6 +159,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   const [recordingProps, setRecordingProps] = useRecordingProps();
 
   const [clip, setClip] = useState<Rect>(recordingProps.cropArea);
+  const draggingCornerRef = useRef<string | null>(null);
   const [draggingCorner, setDraggingCorner] = useState<string | null>(null);
   const [isRectangleVisible, setIsRectangleVisible] = useState(false);
   const ignoreClick = useRef(false);
@@ -152,6 +170,14 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     scaledHeight: 720,
     scale: 1,
   });
+  const [editImage, setEditImage] = useState<HTMLImageElement | null>(null);
+  const [checkImage, setCheckImage] = useState<HTMLImageElement | null>(null);
+  const [fullscreenImage, setFullscreenImage] =
+    useState<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    draggingCornerRef.current = draggingCorner;
+  }, [draggingCorner]);
 
   if (frame?.data) {
     lastGoodFrame = frame;
@@ -188,7 +214,15 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       ignoreClick.current = false;
       return;
     }
-    (isRecording ? stopRecording() : startRecording()).catch(showErrorDialog);
+    if (isRecording) {
+      stopRecording().catch(showErrorDialog);
+    } else {
+      if (isRectangleVisible) {
+        setRecordingProps((prior) => ({ ...prior, cropArea: clip }));
+        setIsRectangleVisible(false);
+      }
+      startRecording().catch(showErrorDialog);
+    }
   };
 
   // Check if the point is within a rectangle corner
@@ -209,28 +243,30 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         y <= corner.y + cornerSize,
     );
   };
-  const handleIconClick = (icon: 'toggle' | 'maxSize') => {
-    if (icon === 'toggle') {
-      setIsRectangleVisible((prev) => {
-        if (prev) {
-          setRecordingProps((prior) => ({ ...prior, cropArea: clip }));
-        } else {
-          setClip(recordingProps.cropArea);
-        }
-        return !prev;
-      });
-    } else if (icon === 'maxSize') {
-      if (canvasRef.current) {
-        const maxClip = {
-          x: 0,
-          y: 0,
-          width: 1,
-          height: 1,
-        };
-        setClip(maxClip);
-        setRecordingProps((prior) => ({ ...prior, cropArea: maxClip }));
-      }
+  const handleMaximizeIconClick = () => {
+    if (canvasRef.current) {
+      const maxClip = {
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+      };
+      setClip(maxClip);
+      setRecordingProps((prior) => ({ ...prior, cropArea: maxClip }));
     }
+  };
+
+  const handleEditIconClick = () => {
+    if (isRectangleVisible) {
+      setRecordingProps((prior) => ({ ...prior, cropArea: clip }));
+      if (isRecording) {
+        stopRecording().catch(showErrorDialog);
+        setTimeout(() => startRecording().catch(showErrorDialog), 100);
+      }
+    } else {
+      setClip(recordingProps.cropArea);
+    }
+    setIsRectangleVisible(!isRectangleVisible);
   };
 
   const isInIcon = (x: number, y: number, iconX: number, iconY: number) => {
@@ -258,12 +294,12 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     if (isInIcon(offsetX, offsetY, toggleIconX, iconPadding)) {
       ignoreClick.current = true;
       e.stopPropagation();
-      handleIconClick('toggle');
+      handleEditIconClick();
     } else if (isInIcon(offsetX, offsetY, maxSizeIconX, iconPadding)) {
       ignoreClick.current = true;
       e.stopPropagation();
-      handleIconClick('maxSize');
-    } else {
+      handleMaximizeIconClick();
+    } else if (isRectangleVisible) {
       const corner = isInCorner(offsetX, offsetY);
       if (corner) {
         ignoreClick.current = true;
@@ -273,10 +309,12 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!draggingCorner) return;
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!draggingCornerRef.current || !canvasRef.current) return;
 
-    let { offsetX, offsetY } = e.nativeEvent;
+    const rect = canvasRef.current.getBoundingClientRect();
+    let offsetX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+    let offsetY = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
     offsetX -= scaleFactors.current.offsetX;
     offsetY -= scaleFactors.current.offsetY;
     offsetX /= scaleFactors.current.scaledWidth;
@@ -286,7 +324,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       const clipValue = (v: number) => {
         return Math.min(1, Math.max(0, v));
       };
-      switch (draggingCorner) {
+      switch (draggingCornerRef.current) {
         case 'tl':
           newRect.width += newRect.x - offsetX;
           newRect.height += newRect.y - offsetY;
@@ -317,26 +355,24 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
 
       return newRect;
     });
-  };
+  }, []);
 
   const handleMouseUp = () => setDraggingCorner(null);
 
   useEffect(() => {
     if (draggingCorner) {
-      const handleWindowMouseUp = () => {
-        handleMouseUp();
-      };
-
       // Add mouseup listener to window
-      window.addEventListener('mouseup', handleWindowMouseUp);
+      window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('mousemove', handleMouseMove);
 
       // Cleanup the event listener
       return () => {
-        window.removeEventListener('mouseup', handleWindowMouseUp);
+        window.removeEventListener('mouseup', handleMouseUp);
+        window.removeEventListener('mousemove', handleMouseMove);
       };
     }
     return () => {};
-  }, [draggingCorner]);
+  }, [draggingCorner, handleMouseMove]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -454,8 +490,11 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     if (settings.showFinishGuide) {
       // Draw the red line
       ctx.beginPath();
-      ctx.moveTo(centerX + guide.pt1 * scale, 0); // Horizontal center + N pixels offset, scaled
-      ctx.lineTo(centerX + guide.pt2 * scale, offsetY + rect.height);
+      ctx.moveTo(offsetX + centerX + guide.pt1 * scale, offsetY + rect.y); // Horizontal center + N pixels offset, scaled
+      ctx.lineTo(
+        offsetX + centerX + guide.pt2 * scale,
+        offsetY + rect.y + rect.height,
+      );
       ctx.strokeStyle = 'red';
       ctx.lineWidth = 1; // Line width can be adjusted as needed
       ctx.stroke();
@@ -508,41 +547,39 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     const toggleIconX = offsetX + scaledWidth - 2 * (iconSize + iconPadding);
     const maxSizeIconX = offsetX + scaledWidth - (iconSize + iconPadding);
 
-    ctx.fillStyle = 'rgba(50, 50, 50, 0.7)'; // Gray background
-    ctx.fillRect(toggleIconX, iconPadding, iconSize, iconSize); // Toggle icon
-    ctx.fillRect(maxSizeIconX, iconPadding, iconSize, iconSize); // Max size icon
-
-    ctx.fillStyle = 'white';
-    ctx.font = '20px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    // Toggle and max size icons
-    ctx.fillText(
-      isRectangleVisible ? '◻' : '◼',
-      toggleIconX + iconSize / 2,
-      iconPadding + iconSize / 2,
+    drawSvgIcon(
+      ctx,
+      isRectangleVisible ? checkImage : editImage,
+      toggleIconX,
+      iconPadding,
     );
-    ctx.fillText(
-      '⛶',
-      maxSizeIconX + iconSize / 2,
-      offsetY + iconPadding + iconSize / 2,
-    );
+
+    drawSvgIcon(ctx, fullscreenImage, maxSizeIconX, iconPadding);
 
     if (isRectangleVisible) {
       // Draw selection rectangle
-      ctx.strokeStyle = 'blue';
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#ffffffb0';
+      ctx.lineWidth = 3;
       ctx.strokeRect(
-        offsetX + rect.x,
-        offsetY + rect.y,
-        rect.width,
-        rect.height,
+        offsetX + rect.x + 2,
+        offsetY + rect.y + 2,
+        rect.width - 3,
+        rect.height - 3,
+      );
+      ctx.strokeStyle = '#ff0000b0';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(
+        offsetX + rect.x + 2,
+        offsetY + rect.y + 2,
+        rect.width - 3,
+        rect.height - 3,
       );
 
       // Draw the WxH text in the upper-left corner of the rectangle with a background
       const text = `${Math.round((clip.width * frame.width) / 4) * 4}x${Math.round((clip.height * frame.height) / 4) * 4}`;
       ctx.font = '16px Arial';
+      ctx.textBaseline = 'middle';
+
       const textMetrics = ctx.measureText(text);
       const padding = 4;
       const textWidth = textMetrics.width + padding * 2;
@@ -558,16 +595,26 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       ctx.fillText(text, offsetX + rect.x + padding, offsetY + rect.y + 16); // Adjust for padding and text baseline
 
       // Draw corner handles
-      ctx.fillStyle = 'blue';
+      ctx.fillStyle = '#ff0000b0';
       const corners = [
-        { x: rect.x, y: rect.y },
-        { x: rect.x + rect.width, y: rect.y },
-        { x: rect.x, y: rect.y + rect.height },
-        { x: rect.x + rect.width, y: rect.y + rect.height },
+        { x: rect.x + 3, y: rect.y + 3 },
+        { x: rect.x - 3 + rect.width, y: rect.y + 3 },
+        { x: rect.x + 3, y: rect.y + rect.height - 3 },
+        { x: rect.x + rect.width - 3, y: rect.y + rect.height - 3 },
       ];
       corners.forEach(({ x, y }) => {
         ctx.fillRect(offsetX + x - 5, offsetY + y - 5, 10, 10);
       });
+    } else {
+      // Draw selection rectangle
+      ctx.strokeStyle = '#ffffffb0';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(
+        offsetX + rect.x,
+        offsetY + rect.y,
+        rect.width,
+        rect.height,
+      );
     }
   }, [
     isRectangleVisible,
@@ -579,16 +626,37 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     isRecording,
     settings.showFinishGuide,
     getNativeClip,
+    editImage,
+    checkImage,
+    fullscreenImage,
   ]);
 
   return (
     <Box
       sx={{ width: divwidth, height: divheight }}
       onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onClick={togglePlay}
     >
+      <CanvasIcon
+        icon={EditIcon}
+        iconSize={24}
+        color="white"
+        setImage={setEditImage}
+      />
+      <CanvasIcon
+        icon={CheckIcon}
+        iconSize={24}
+        color="white"
+        setImage={setCheckImage}
+      />
+      <CanvasIcon
+        icon={FullscreenIcon}
+        iconSize={24}
+        color="white"
+        setImage={setFullscreenImage}
+      />
+
       <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }} />
     </Box>
   );

@@ -17,10 +17,10 @@ For more help beyond this document, visit the [CrewTimer Video Recorder website]
 2. Start the CrewTimer Video Recorder app.
 3. Using the Camera dropdown in the app, identify the IP address of your camera.
 4. Connect to your camera - e.g. <http://10.0.1.188> and log in.  Cameras often default to 'admin' as the username and 'admin' as password.
-5. Configure your camera to 720p video - 1280x720.  Use 60 fps or higher rate for the NDI video stream.  This is often a choice under an NDI configuration menu.
+5. Configure your camera to 720p video - 1280x720.  Use 60 fps or higher rate for the NDI video stream.  This is often a choice under an NDI configuration menu.  You can use higher resolution such as 1080P but it is recommended you crop the image to the needed area to reduce computational overhead and file sizes.
 6. Click the Play button on the video preview area of the app.
 7. Review the event log. Look for reported Gaps in the recording.  It is normal to have an initial Gap reported as the video is starting.
-8. Use VLC or CrewTimer Connect to verify the video is being recorded properly.
+8. Use VLC or CrewTimer Video Review to verify the video is being recorded properly.
 9. Use the camera web page (see step 4) to control camera aspects such as zoom, focus, aperature, and exposure as needed.
 10. Use the camera web interface presets to quickly change configurations.
 

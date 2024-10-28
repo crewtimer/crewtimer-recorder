@@ -203,7 +203,7 @@ const RecorderConfig: React.FC = () => {
           </Tooltip>
         </Grid>
         <Grid item xs={4}>
-          <Tooltip title="If checked, finish line set by CrewTimer Connect will be shown on video preview.">
+          <Tooltip title="If checked, finish line set by CrewTimer Video Review will be shown on video preview.">
             <FormControlLabel
               control={
                 <Checkbox
