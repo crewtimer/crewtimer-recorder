@@ -30,7 +30,7 @@ export const [
   setRecordingStartTime,
   getRecordingStartTime,
 ] = UseDatum(0);
-export const [useIsRecording, setIsRecording] = UseDatum(false);
+export const [useIsRecording, setIsRecording, getIsRecording] = UseDatum(false);
 
 export const [useRecordingStatus, setRecordingStatus] =
   UseDatum<RecordingStatus>(DefaultRecordingStatus);

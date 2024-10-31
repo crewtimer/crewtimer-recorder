@@ -6,6 +6,7 @@ import {
   setRecordingStatus,
   setIsRecording,
   useRecordingStatus,
+  getIsRecording,
 } from './RecorderData';
 import { DefaultRecordingStatus } from './RecorderTypes';
 import { showErrorDialog } from '../components/ErrorDialog';
@@ -18,6 +19,9 @@ const formatTime = (totalSeconds: number) => {
 };
 
 const checkStatus = () => {
+  if (getIsRecording() === false) {
+    return;
+  }
   queryRecordingStatus()
     .then((result) => {
       // console.log(JSON.stringify(result));
