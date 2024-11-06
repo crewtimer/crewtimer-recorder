@@ -166,7 +166,7 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
       auto props = args.Get("props").As<Napi::Object>();
       std::vector<std::string> prop_names = {
           "recordingFolder", "recordingPrefix", "recordingDuration",
-          "networkCamera", "cropArea"};
+          "networkCamera",   "cropArea",        "guide"};
       for (const auto &name : prop_names) {
         if (!props.Has(name.c_str())) {
           std::stringstream ss;
@@ -192,9 +192,13 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
             cropArea.Get("width").As<Napi::Number>().Int32Value(),
             cropArea.Get("height").As<Napi::Number>().Int32Value()};
       }
+      auto guideObj = props.Get("guide").As<Napi::Object>();
+      FrameProcessor::Guide guide;
+      guide.pt1 = guideObj.Get("pt1").As<Napi::Number>().FloatValue();
+      guide.pt2 = guideObj.Get("pt2").As<Napi::Number>().FloatValue();
 
       auto result = recorder->start(networkCamera, "ffmpeg", folder, prefix,
-                                    interval, cropRect);
+                                    interval, cropRect, guide);
       if (!result.empty()) {
         std::cerr << "Error: " << result << std::endl;
         ret.Set("status", Napi::String::New(env, "Fail"));
@@ -237,23 +241,27 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
         ret.Set("status", Napi::String::New(env, "OK"));
         ret.Set("error", Napi::String::New(env, status.error));
         ret.Set("recording", Napi::Boolean::New(env, status.recording));
-        ret.Set("recordingDuration",
-                Napi::Number::New(env, status.recordingDuration));
-        auto frameProcessor = Napi::Object::New(env);
-        ret.Set("frameProcessor", frameProcessor);
-        frameProcessor.Set(
-            "recording",
-            Napi::Boolean::New(env, status.frameProcessor.recording));
-        frameProcessor.Set("error",
-                           Napi::String::New(env, status.frameProcessor.error));
-        frameProcessor.Set(
-            "filename", Napi::String::New(env, status.frameProcessor.filename));
-        frameProcessor.Set("width",
-                           Napi::Number::New(env, status.frameProcessor.width));
-        frameProcessor.Set(
-            "height", Napi::Number::New(env, status.frameProcessor.height));
-        frameProcessor.Set("fps",
-                           Napi::Number::New(env, status.frameProcessor.fps));
+        if (status.recording) {
+
+          ret.Set("recordingDuration",
+                  Napi::Number::New(env, status.recordingDuration));
+          auto frameProcessor = Napi::Object::New(env);
+          ret.Set("frameProcessor", frameProcessor);
+          frameProcessor.Set(
+              "recording",
+              Napi::Boolean::New(env, status.frameProcessor.recording));
+          frameProcessor.Set(
+              "error", Napi::String::New(env, status.frameProcessor.error));
+          frameProcessor.Set(
+              "filename",
+              Napi::String::New(env, status.frameProcessor.filename));
+          frameProcessor.Set(
+              "width", Napi::Number::New(env, status.frameProcessor.width));
+          frameProcessor.Set(
+              "height", Napi::Number::New(env, status.frameProcessor.height));
+          frameProcessor.Set("fps",
+                             Napi::Number::New(env, status.frameProcessor.fps));
+        }
       } else {
         ret.Set("status", Napi::String::New(env, "OK"));
       }

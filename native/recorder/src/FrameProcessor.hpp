@@ -36,13 +36,19 @@ public:
         : x(x), y(y), width(width), height(height) {}
   };
 
+  struct Guide {
+    float pt1;
+    float pt2;
+    Guide() : pt1(0), pt2(0) {}
+  };
+
   /**
    * Constructor for FrameProcessor.
    * Initializes and starts capture and process threads.
    */
   FrameProcessor(const std::string directory, const std::string prefix,
                  std::shared_ptr<VideoRecorder> videoRecorder, int durationSecs,
-                 Rectangle cropArea);
+                 Rectangle cropArea, Guide guide);
 
   void addFrame(FramePtr frame);
 
@@ -74,10 +80,11 @@ public:
 
 private:
   StatusInfo statusInfo;
-  std::string errorMessage;
+  std::string errorMessage = "";
   const std::string directory;
   const std::string prefix;
   Rectangle cropArea;
+  Guide guide;
   std::shared_ptr<VideoRecorder> videoRecorder;
   uint64_t durationSecs;
   uint64_t nextStartTime = 0;
@@ -86,8 +93,8 @@ private:
   std::mutex queueMutex; ///< Mutex for synchronizing access to the frame queue.
   std::condition_variable frameAvailable; ///< Condition variable to notify
                                           ///< when frames are available.
-  std::atomic<bool>
-      running; ///< Atomic flag to control the running state of threads.
+  std::atomic<bool> running =
+      false; ///< Atomic flag to control the running state of threads.
   std::thread processThread; ///< Threads for capturing and processing frames.
   FramePtr lastFrame;
 

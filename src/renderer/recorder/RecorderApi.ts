@@ -10,6 +10,7 @@ import {
 } from './RecorderTypes';
 import {
   getFrameGrab,
+  getGuide,
   getRecordingProps,
   setFrameGrab,
   setIsRecording,
@@ -31,11 +32,12 @@ export const startRecording = () => {
   cropArea.width = Math.round((cropArea.width * (frame?.width || 1)) / 4) * 4;
   cropArea.height =
     Math.round((cropArea.height * (frame?.height || 1)) / 4) * 4;
+  const guide = getGuide();
   return window.msgbus.sendMessage<StartRecorderMessage, HandlerResponse>(
     'recorder',
     {
       op: 'start-recording',
-      props: { ...recordingProps, cropArea },
+      props: { ...recordingProps, cropArea, guide },
     },
   );
 };

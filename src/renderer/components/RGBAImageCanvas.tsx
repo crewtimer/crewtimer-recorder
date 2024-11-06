@@ -150,7 +150,7 @@ let lastGoodFrame: GrabFrameResponse = generateTestPattern();
 
 const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   let [frame] = useFrameGrab();
-  const [guide] = useGuide();
+  const [guide, setGuide] = useGuide();
   const [isRecording] = useIsRecording();
   const [settings] = useRecordingProps();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -229,11 +229,22 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   const isInCorner = (x: number, y: number) => {
     const rect = getNativeClip(clip);
     const cornerSize = 10;
+    const { scale } = scaleFactors.current;
     const corners = [
       { name: 'tl', x: rect.x, y: rect.y },
       { name: 'tr', x: rect.x + rect.width, y: rect.y },
       { name: 'bl', x: rect.x, y: rect.y + rect.height },
       { name: 'br', x: rect.x + rect.width, y: rect.y + rect.height },
+      {
+        name: 'ft',
+        x: rect.x + rect.width / 2 + guide.pt1 * scale,
+        y: rect.y,
+      },
+      {
+        name: 'fb',
+        x: rect.x + rect.width / 2 + guide.pt2 * scale,
+        y: rect.y,
+      },
     ];
     return corners.find(
       (corner) =>
@@ -243,6 +254,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         y <= corner.y + cornerSize,
     );
   };
+
   const handleMaximizeIconClick = () => {
     if (canvasRef.current) {
       const maxClip = {
@@ -309,53 +321,78 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     }
   };
 
-  const handleMouseMove = useCallback((e: MouseEvent) => {
-    if (!draggingCornerRef.current || !canvasRef.current) return;
+  const handleMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!draggingCornerRef.current || !canvasRef.current) return;
 
-    const rect = canvasRef.current.getBoundingClientRect();
-    let offsetX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
-    let offsetY = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
-    offsetX -= scaleFactors.current.offsetX;
-    offsetY -= scaleFactors.current.offsetY;
-    offsetX /= scaleFactors.current.scaledWidth;
-    offsetY /= scaleFactors.current.scaledHeight;
-    setClip((prevRect) => {
-      const newRect = { ...prevRect };
-      const clipValue = (v: number) => {
-        return Math.min(1, Math.max(0, v));
-      };
-      switch (draggingCornerRef.current) {
-        case 'tl':
-          newRect.width += newRect.x - offsetX;
-          newRect.height += newRect.y - offsetY;
-          newRect.x = offsetX;
-          newRect.y = offsetY;
-          break;
-        case 'tr':
-          newRect.width = offsetX - newRect.x;
-          newRect.height += newRect.y - offsetY;
-          newRect.y = offsetY;
-          break;
-        case 'bl':
-          newRect.width += newRect.x - offsetX;
-          newRect.x = offsetX;
-          newRect.height = offsetY - newRect.y;
-          break;
-        case 'br':
-          newRect.width = offsetX - newRect.x;
-          newRect.height = offsetY - newRect.y;
-          break;
-        default:
-          break;
+      const componentRect = canvasRef.current.getBoundingClientRect();
+      let offsetX = Math.max(
+        0,
+        Math.min(componentRect.width, e.clientX - componentRect.left),
+      );
+      let offsetY = Math.max(
+        0,
+        Math.min(componentRect.height, e.clientY - componentRect.top),
+      );
+      offsetX -= scaleFactors.current.offsetX;
+      offsetY -= scaleFactors.current.offsetY;
+      const mouseOffsetX = offsetX;
+      offsetX /= scaleFactors.current.scaledWidth;
+      offsetY /= scaleFactors.current.scaledHeight;
+
+      if (
+        draggingCornerRef.current === 'ft' ||
+        draggingCornerRef.current === 'fb'
+      ) {
+        const rect = getNativeClip(clip);
+        const finishX =
+          (mouseOffsetX - rect.x - rect.width / 2) / scaleFactors.current.scale;
+
+        setGuide({
+          pt1: finishX,
+          pt2: finishX,
+        });
+      } else {
+        setClip((prevRect) => {
+          const newRect = { ...prevRect };
+          const clipValue = (v: number) => {
+            return Math.min(1, Math.max(0, v));
+          };
+          switch (draggingCornerRef.current) {
+            case 'tl':
+              newRect.width += newRect.x - offsetX;
+              newRect.height += newRect.y - offsetY;
+              newRect.x = offsetX;
+              newRect.y = offsetY;
+              break;
+            case 'tr':
+              newRect.width = offsetX - newRect.x;
+              newRect.height += newRect.y - offsetY;
+              newRect.y = offsetY;
+              break;
+            case 'bl':
+              newRect.width += newRect.x - offsetX;
+              newRect.x = offsetX;
+              newRect.height = offsetY - newRect.y;
+              break;
+            case 'br':
+              newRect.width = offsetX - newRect.x;
+              newRect.height = offsetY - newRect.y;
+              break;
+            default:
+              break;
+          }
+          newRect.x = clipValue(newRect.x);
+          newRect.y = clipValue(newRect.y);
+          newRect.width = clipValue(newRect.width);
+          newRect.height = clipValue(newRect.height);
+
+          return newRect;
+        });
       }
-      newRect.x = clipValue(newRect.x);
-      newRect.y = clipValue(newRect.y);
-      newRect.width = clipValue(newRect.width);
-      newRect.height = clipValue(newRect.height);
-
-      return newRect;
-    });
-  }, []);
+    },
+    [clip, getNativeClip, setGuide],
+  );
 
   const handleMouseUp = () => setDraggingCorner(null);
 
@@ -458,7 +495,6 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       scaledHeight,
     );
 
-    let centerX = offsetX + scaledWidth / 2;
     if (width !== clipWidth || height !== clipHeight) {
       // Apply grey dimming outside the rectangle
       ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
@@ -484,15 +520,17 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         rect.width,
         rect.height,
       );
-      centerX = rect.x + rect.width / 2;
     }
 
     if (settings.showFinishGuide) {
       // Draw the red line
       ctx.beginPath();
-      ctx.moveTo(offsetX + centerX + guide.pt1 * scale, offsetY + rect.y); // Horizontal center + N pixels offset, scaled
+      ctx.moveTo(
+        offsetX + rect.x + rect.width / 2 + guide.pt1 * scale,
+        offsetY + rect.y,
+      ); // Horizontal center + N pixels offset, scaled
       ctx.lineTo(
-        offsetX + centerX + guide.pt2 * scale,
+        offsetX + rect.x + rect.width / 2 + guide.pt2 * scale,
         offsetY + rect.y + rect.height,
       );
       ctx.strokeStyle = 'red';

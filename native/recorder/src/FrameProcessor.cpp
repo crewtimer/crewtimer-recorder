@@ -12,9 +12,10 @@ using namespace std::chrono;
 FrameProcessor::FrameProcessor(const std::string directory,
                                const std::string prefix,
                                std::shared_ptr<VideoRecorder> videoRecorder,
-                               int durationSecs, Rectangle cropArea)
-    : directory(directory), prefix(prefix), videoRecorder(videoRecorder),
-      durationSecs(durationSecs), cropArea(cropArea), running(true),
+                               int durationSecs, Rectangle cropArea,
+                               Guide guide)
+    : directory(directory), prefix(prefix), cropArea(cropArea), guide(guide),
+      videoRecorder(videoRecorder), durationSecs(durationSecs), running(true),
       processThread(&FrameProcessor::processFrames, this) {
   errorMessage = "";
 }
@@ -84,6 +85,10 @@ void FrameProcessor::writeJsonSidecarFile() {
            << "  \"source\": {\n"
            << "    \"width\": " << (cropArea.width || lastXres) << ",\n"
            << "    \"height\": " << (cropArea.height || lastYres) << "\n"
+           << "  },\n"
+           << "  \"guide\": {\n"
+           << "    \"pt1\": " << guide.pt1 << ",\n"
+           << "    \"pt2\": " << guide.pt2 << "\n"
            << "  }\n"
            << "}\n";
   jsonFile.close();

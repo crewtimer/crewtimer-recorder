@@ -39,4 +39,7 @@ export const [useFrameGrab, setFrameGrab, getFrameGrab] = UseDatum<
   GrabFrameResponse | undefined
 >(generateTestPattern());
 
-export const [useGuide, setGuide] = UseStoredDatum('guide', { pt1: 0, pt2: 0 });
+export const [useGuide, setGuide, getGuide] = UseStoredDatum('guide', {
+  pt1: 0,
+  pt2: 0,
+});

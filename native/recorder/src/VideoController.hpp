@@ -92,7 +92,8 @@ public:
   std::string start(const std::string srcName, const std::string encoder,
                     const std::string dir, const std::string prefix,
                     const int interval,
-                    const FrameProcessor::Rectangle cropArea) {
+                    const FrameProcessor::Rectangle cropArea,
+                    const FrameProcessor::Guide guide) {
     std::lock_guard<std::recursive_mutex> lock(controlMutex);
     this->srcName = srcName;
     this->encoder = encoder;
@@ -137,8 +138,8 @@ public:
       return msg;
     }
 
-    frameProcessor = std::shared_ptr<FrameProcessor>(
-        new FrameProcessor(dir, prefix, videoRecorder, interval, cropArea));
+    frameProcessor = std::shared_ptr<FrameProcessor>(new FrameProcessor(
+        dir, prefix, videoRecorder, interval, cropArea, guide));
 
     retval = videoReader->start(srcName, frameProcessor);
     if (!retval.empty()) {
