@@ -9,6 +9,24 @@
 #include "VideoUtils.hpp"
 using namespace std::chrono;
 
+static int16_t getTimezoneOffset() {
+  // Get the current time in the system's local timezone
+  auto now = std::chrono::system_clock::now();
+  std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+  std::tm local_tm = *std::localtime(&now_c);
+
+  // Get the current time in UTC
+  std::tm utc_tm = *std::gmtime(&now_c);
+
+  // Calculate the difference in seconds
+  std::time_t local_time = std::mktime(&local_tm);
+  std::time_t utc_time = std::mktime(&utc_tm);
+  double offset_seconds = std::difftime(local_time, utc_time);
+
+  // Convert the difference to minutes
+  auto offset_minutes = static_cast<int16_t>(offset_seconds / 60);
+  return offset_minutes;
+}
 FrameProcessor::FrameProcessor(const std::string directory,
                                const std::string prefix,
                                std::shared_ptr<VideoRecorder> videoRecorder,
@@ -18,6 +36,7 @@ FrameProcessor::FrameProcessor(const std::string directory,
       videoRecorder(videoRecorder), durationSecs(durationSecs), running(true),
       processThread(&FrameProcessor::processFrames, this) {
   errorMessage = "";
+  tzOffset = getTimezoneOffset();
 }
 
 FrameProcessor::~FrameProcessor() { stop(); }
@@ -76,15 +95,19 @@ void FrameProcessor::writeJsonSidecarFile() {
     running = false;
     return;
   }
+
   jsonFile << std::fixed << std::setprecision(7) << "{\n"
            << "  \"file\": {\n"
            << "    \"startTs\": \"" << startTs / 1e7 << "\",\n"
            << "    \"stopTs\": \"" << lastTs / 1e7 << "\",\n"
-           << "    \"numFrames\": " << frameCount << "\n"
+           << "    \"numFrames\": " << frameCount << ",\n"
+           << "    \"tzOffset\": " << tzOffset << "\n"
            << "  },\n"
            << "  \"source\": {\n"
-           << "    \"width\": " << (cropArea.width || lastXres) << ",\n"
-           << "    \"height\": " << (cropArea.height || lastYres) << "\n"
+           << "    \"width\": " << (cropArea.width ? cropArea.width : lastXres)
+           << ",\n"
+           << "    \"height\": "
+           << (cropArea.height ? cropArea.height : lastYres) << "\n"
            << "  },\n"
            << "  \"guide\": {\n"
            << "    \"pt1\": " << guide.pt1 << ",\n"

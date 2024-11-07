@@ -102,6 +102,7 @@ private:
   int64_t frameCount = 0;
   uint64_t startTs;
   uint64_t lastTs;
+  int16_t tzOffset;
   int lastXres = 0;
   int lastYres = 0;
   float lastFPS = 0;
