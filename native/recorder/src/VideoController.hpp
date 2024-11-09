@@ -154,19 +154,19 @@ public:
     mcastListener = std::shared_ptr<MulticastReceiver>(
         new MulticastReceiver("239.215.23.42", 52342));
     mcastListener->setMessageCallback([this](const json &j) {
-      std::cerr << "Received JSON: " << j.dump() << std::endl;
+      // std::cerr << "Received JSON: " << j.dump() << std::endl;
       auto command = j.value<std::string>("cmd", "");
       if (command == "split-video") {
         this->frameProcessor->splitFile();
       }
-      if (command == "guide-config") {
-        json config = {{"pt1", 0}, {"pt2", 0}};
-        auto guide = j.value("guide", config);
-        if (!guide.is_null()) {
-          std::shared_ptr<json> msg = std::make_shared<json>(guide);
-          SendMessageToElectron("guide-config", msg);
-        }
-      }
+      // if (command == "guide-config") {
+      //   json config = {{"pt1", 0}, {"pt2", 0}};
+      //   auto guide = j.value("guide", config);
+      //   if (!guide.is_null()) {
+      //     std::shared_ptr<json> msg = std::make_shared<json>(guide);
+      //     SendMessageToElectron("guide-config", msg);
+      //   }
+      // }
     });
 
     retval = mcastListener->start();
