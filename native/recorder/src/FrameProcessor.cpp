@@ -30,9 +30,10 @@ static int16_t getTimezoneOffset() {
 FrameProcessor::FrameProcessor(const std::string directory,
                                const std::string prefix,
                                std::shared_ptr<VideoRecorder> videoRecorder,
-                               int durationSecs, Rectangle cropArea,
+                               int durationSecs, FRectangle cropArea,
                                Guide guide)
-    : directory(directory), prefix(prefix), cropArea(cropArea), guide(guide),
+    : directory(directory), prefix(prefix), cropArea(cropArea),
+      pxCropArea(Rectangle(0, 0, 0, 0)), guide(guide),
       videoRecorder(videoRecorder), durationSecs(durationSecs), running(true),
       processThread(&FrameProcessor::processFrames, this) {
   errorMessage = "";
@@ -104,10 +105,10 @@ void FrameProcessor::writeJsonSidecarFile() {
            << "    \"tzOffset\": " << tzOffset << "\n"
            << "  },\n"
            << "  \"source\": {\n"
-           << "    \"width\": " << (cropArea.width ? cropArea.width : lastXres)
-           << ",\n"
+           << "    \"width\": "
+           << (pxCropArea.width ? pxCropArea.width : lastXres) << ",\n"
            << "    \"height\": "
-           << (cropArea.height ? cropArea.height : lastYres) << "\n"
+           << (pxCropArea.height ? pxCropArea.height : lastYres) << "\n"
            << "  },\n"
            << "  \"guide\": {\n"
            << "    \"pt1\": " << guide.pt1 << ",\n"
@@ -187,11 +188,23 @@ void FrameProcessor::processFrames() {
         statusInfo.fps = fps;
         statusInfo.width = video_frame->xres;
         statusInfo.height = video_frame->yres;
+        pxCropArea.x = std::round((cropArea.x * (video_frame->xres) / 4)) * 4;
+        pxCropArea.width =
+            std::round((cropArea.width * (video_frame->xres) / 4)) * 4;
+        pxCropArea.y = std::round((cropArea.y * (video_frame->yres) / 4)) * 4;
+        pxCropArea.height =
+            std::round((cropArea.height * (video_frame->yres) / 4)) * 4;
+        std::cout << "cropArea: " << cropArea.x << "," << cropArea.y << ","
+                  << cropArea.width << "," << cropArea.height << std::endl;
+
+        std::cout << "pxCropArea: " << pxCropArea.x << "," << pxCropArea.y
+                  << "," << pxCropArea.width << "," << pxCropArea.height
+                  << std::endl;
 
         const auto err = videoRecorder->openVideoStream(
             directory, filename,
-            cropArea.width ? cropArea.width : video_frame->xres,
-            cropArea.height ? cropArea.height : video_frame->yres, fps);
+            pxCropArea.width ? pxCropArea.width : video_frame->xres,
+            pxCropArea.height ? pxCropArea.height : video_frame->yres, fps);
         if (!err.empty()) {
           errorMessage = err;
           running = false;
@@ -210,12 +223,12 @@ void FrameProcessor::processFrames() {
       // std::cerr << "vstride: " << std::dec << video_frame->stride
       //           << "ptr: " << std::hex << (void *)(video_frame->data)
       //           << std::endl;
-      if (cropArea.width && cropArea.height) {
+      if (pxCropArea.width && pxCropArea.height) {
         // std::cout << "Cropping frame (" << cropArea.x << "," << cropArea.y
         //           << ")" << cropArea.width << "x" << cropArea.height
         //           << std::endl;
-        cropped = cropFrame(video_frame, cropArea.x, cropArea.y, cropArea.width,
-                            cropArea.height);
+        cropped = cropFrame(video_frame, pxCropArea.x, pxCropArea.y,
+                            pxCropArea.width, pxCropArea.height);
 
         // std::cerr << " stride: " << std::dec << cropped->stride
         //           << "ptr: " << std::hex << (void *)(cropped->data)

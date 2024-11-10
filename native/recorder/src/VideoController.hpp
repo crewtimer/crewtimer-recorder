@@ -92,7 +92,7 @@ public:
   std::string start(const std::string srcName, const std::string encoder,
                     const std::string dir, const std::string prefix,
                     const int interval,
-                    const FrameProcessor::Rectangle cropArea,
+                    const FrameProcessor::FRectangle cropArea,
                     const FrameProcessor::Guide guide) {
     std::lock_guard<std::recursive_mutex> lock(controlMutex);
     this->srcName = srcName;

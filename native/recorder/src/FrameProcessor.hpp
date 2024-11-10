@@ -36,6 +36,15 @@ public:
         : x(x), y(y), width(width), height(height) {}
   };
 
+  struct FRectangle {
+    float x;
+    float y;
+    float width;
+    float height;
+    FRectangle(float x, float y, float width, float height)
+        : x(x), y(y), width(width), height(height) {}
+  };
+
   struct Guide {
     float pt1;
     float pt2;
@@ -48,7 +57,7 @@ public:
    */
   FrameProcessor(const std::string directory, const std::string prefix,
                  std::shared_ptr<VideoRecorder> videoRecorder, int durationSecs,
-                 Rectangle cropArea, Guide guide);
+                 FRectangle cropArea, Guide guide);
 
   void addFrame(FramePtr frame);
 
@@ -83,7 +92,8 @@ private:
   std::string errorMessage = "";
   const std::string directory;
   const std::string prefix;
-  Rectangle cropArea;
+  FRectangle cropArea;
+  Rectangle pxCropArea;
   Guide guide;
   std::shared_ptr<VideoRecorder> videoRecorder;
   uint64_t durationSecs;

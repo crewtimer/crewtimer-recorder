@@ -183,14 +183,14 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info) {
           props.Get("recordingDuration").As<Napi::Number>().Uint32Value();
       auto cropArea = props.Get("cropArea").As<Napi::Object>();
 
-      auto cropRect = FrameProcessor::Rectangle{0, 0, 0, 0};
+      auto cropRect = FrameProcessor::FRectangle{0, 0, 0, 0};
       if (cropArea.Has("x") && cropArea.Has("y") && cropArea.Has("width") &&
           cropArea.Has("height")) {
-        cropRect = FrameProcessor::Rectangle{
-            cropArea.Get("x").As<Napi::Number>().Int32Value(),
-            cropArea.Get("y").As<Napi::Number>().Int32Value(),
-            cropArea.Get("width").As<Napi::Number>().Int32Value(),
-            cropArea.Get("height").As<Napi::Number>().Int32Value()};
+        cropRect = FrameProcessor::FRectangle{
+            cropArea.Get("x").As<Napi::Number>().FloatValue(),
+            cropArea.Get("y").As<Napi::Number>().FloatValue(),
+            cropArea.Get("width").As<Napi::Number>().FloatValue(),
+            cropArea.Get("height").As<Napi::Number>().FloatValue()};
       }
       auto guideObj = props.Get("guide").As<Napi::Object>();
       FrameProcessor::Guide guide;
