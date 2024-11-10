@@ -4,6 +4,7 @@ import { Box } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import CheckIcon from '@mui/icons-material/Check';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
+import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter';
 import {
   useFrameGrab,
   useGuide,
@@ -15,7 +16,7 @@ import {
   startRecording,
   stopRecording,
 } from '../recorder/RecorderApi';
-import generateTestPattern from '../util/ImageUtils';
+import generateTestPattern, { drawBox, drawSvgIcon } from '../util/ImageUtils';
 import { GrabFrameResponse, Rect } from '../recorder/RecorderTypes';
 import { showErrorDialog } from './ErrorDialog';
 import CanvasIcon from './CanvasIcon';
@@ -91,19 +92,6 @@ function extractTimestampFromFrame(
   return Number(number); // Convert the BigInt number to a regular number
 }
 
-const drawSvgIcon = (
-  ctx: CanvasRenderingContext2D,
-  image: HTMLImageElement | null,
-  x: number,
-  y: number,
-) => {
-  if (image) {
-    ctx.fillStyle = 'rgba(50, 50, 50, 0.7)'; // '#99999980';
-    ctx.fillRect(x, y, image.width, image.height);
-    ctx.drawImage(image, x, y, image.width, image.height);
-  }
-};
-
 const drawPlayIcon = (
   ctx: CanvasRenderingContext2D,
   canvasWidth: number,
@@ -122,7 +110,7 @@ const drawPlayIcon = (
   ctx.fill();
 
   // Set icon color and style
-  ctx.fillStyle = '#ffffffb0';
+  ctx.fillStyle = playing ? '#dd0000b0' : '#00dd00b0';
   ctx.beginPath();
   if (playing) {
     // Draw stop icon as a square
@@ -173,6 +161,8 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   const [editImage, setEditImage] = useState<HTMLImageElement | null>(null);
   const [checkImage, setCheckImage] = useState<HTMLImageElement | null>(null);
   const [fullscreenImage, setFullscreenImage] =
+    useState<HTMLImageElement | null>(null);
+  const [snapToCenterImage, setSnapToCenterImage] =
     useState<HTMLImageElement | null>(null);
 
   useEffect(() => {
@@ -243,7 +233,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       {
         name: 'fb',
         x: rect.x + rect.width / 2 + guide.pt2 * scale,
-        y: rect.y,
+        y: rect.y + rect.height,
       },
     ];
     return corners.find(
@@ -281,8 +271,13 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     setIsRectangleVisible(!isRectangleVisible);
   };
 
-  const isInIcon = (x: number, y: number, iconX: number, iconY: number) => {
-    const iconSize = 24;
+  const isInIcon = (
+    x: number,
+    y: number,
+    iconX: number,
+    iconY: number,
+    iconSize = 24,
+  ) => {
     return (
       x >= iconX && x <= iconX + iconSize && y >= iconY && y <= iconY + iconSize
     );
@@ -311,6 +306,24 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       ignoreClick.current = true;
       e.stopPropagation();
       handleMaximizeIconClick();
+    } else if (isInIcon(offsetX, offsetY, maxSizeIconX, iconPadding * 2 + 24)) {
+      ignoreClick.current = true;
+      e.stopPropagation();
+      setGuide({
+        pt1: 0,
+        pt2: 0,
+      });
+    } else if (
+      isInIcon(
+        offsetX,
+        offsetY,
+        scaleFactors.current.scaledWidth / 2 - 50,
+        scaleFactors.current.scaledHeight / 2 - 50,
+        100,
+      )
+    ) {
+      e.stopPropagation();
+      togglePlay();
     } else if (isRectangleVisible) {
       const corner = isInCorner(offsetX, offsetY);
       if (corner) {
@@ -348,9 +361,15 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         const finishX =
           (mouseOffsetX - rect.x - rect.width / 2) / scaleFactors.current.scale;
 
-        setGuide({
-          pt1: finishX,
-          pt2: finishX,
+        setGuide((prevGuide) => {
+          const delta = finishX - prevGuide.pt1;
+          return {
+            pt1: draggingCornerRef.current === 'fb' ? prevGuide.pt1 : finishX,
+            pt2:
+              draggingCornerRef.current === 'ft'
+                ? prevGuide.pt2 + delta
+                : finishX,
+          };
         });
       } else {
         setClip((prevRect) => {
@@ -525,17 +544,19 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     if (settings.showFinishGuide) {
       // Draw the red line
       ctx.beginPath();
-      ctx.moveTo(
-        offsetX + rect.x + rect.width / 2 + guide.pt1 * scale,
-        offsetY + rect.y,
-      ); // Horizontal center + N pixels offset, scaled
-      ctx.lineTo(
-        offsetX + rect.x + rect.width / 2 + guide.pt2 * scale,
-        offsetY + rect.y + rect.height,
-      );
+      const fromx = offsetX + rect.x + rect.width / 2 + guide.pt1 * scale;
+      const fromy = offsetY + rect.y;
+      const tox = offsetX + rect.x + rect.width / 2 + guide.pt2 * scale;
+      const toy = offsetY + rect.y + rect.height;
+      ctx.moveTo(fromx, fromy);
+      ctx.lineTo(tox, toy);
       ctx.strokeStyle = 'red';
-      ctx.lineWidth = 1; // Line width can be adjusted as needed
+      ctx.lineWidth = 1;
       ctx.stroke();
+      if (isRectangleVisible) {
+        drawBox(ctx, fromx, fromy, 12, 't');
+        drawBox(ctx, tox, toy, 12, 'b');
+      }
     }
 
     if (timestamp !== 0) {
@@ -593,6 +614,13 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     );
 
     drawSvgIcon(ctx, fullscreenImage, maxSizeIconX, iconPadding);
+    drawSvgIcon(
+      ctx,
+      snapToCenterImage,
+      maxSizeIconX,
+      iconPadding * 2 + 24,
+      true,
+    );
 
     if (isRectangleVisible) {
       // Draw selection rectangle
@@ -625,24 +653,44 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
 
       // Draw background rectangle for the text
       ctx.fillStyle = 'rgba(50, 50, 50, 0.7)'; // Gray background with some transparency
-      ctx.fillRect(offsetX + rect.x, offsetY + rect.y, textWidth, textHeight);
+      ctx.fillRect(
+        50 + offsetX + rect.x,
+        offsetY + rect.y + 2,
+        textWidth,
+        textHeight,
+      );
 
       // Draw the text on top of the background
       ctx.fillStyle = 'white';
       ctx.textAlign = 'left';
-      ctx.fillText(text, offsetX + rect.x + padding, offsetY + rect.y + 16); // Adjust for padding and text baseline
+      ctx.fillText(
+        text,
+        50 + offsetX + rect.x + padding,
+        offsetY + rect.y + 16,
+      ); // Adjust for padding and text baseline
 
       // Draw corner handles
-      ctx.fillStyle = '#ff0000b0';
-      const corners = [
-        { x: rect.x + 3, y: rect.y + 3 },
-        { x: rect.x - 3 + rect.width, y: rect.y + 3 },
-        { x: rect.x + 3, y: rect.y + rect.height - 3 },
-        { x: rect.x + rect.width - 3, y: rect.y + rect.height - 3 },
-      ];
-      corners.forEach(({ x, y }) => {
-        ctx.fillRect(offsetX + x - 5, offsetY + y - 5, 10, 10);
-      });
+      // ctx.fillStyle = '#ff0000b0';
+      // const corners = [
+      //   { x: rect.x + 3, y: rect.y + 3 },
+      //   { x: rect.x - 3 + rect.width, y: rect.y + 3 },
+      //   { x: rect.x + 3, y: rect.y + rect.height - 3 },
+      //   { x: rect.x + rect.width - 3, y: rect.y + rect.height - 3 },
+      // ];
+      // corners.forEach(({ x, y }) => {
+      //   ctx.fillRect(offsetX + x - 5, offsetY + y - 5, 10, 10);
+      // });
+      drawBox(ctx, offsetX + rect.x, offsetY + rect.y, 12, 'tl');
+      drawBox(ctx, offsetX + rect.x + rect.width, offsetY + rect.y, 12, 'tr');
+
+      drawBox(ctx, offsetX + rect.x, offsetY + rect.y + rect.height, 12, 'bl');
+      drawBox(
+        ctx,
+        offsetX + rect.x + rect.width,
+        offsetY + rect.y + rect.height,
+        12,
+        'br',
+      );
     } else {
       // Draw selection rectangle
       ctx.strokeStyle = '#ffffffb0';
@@ -667,6 +715,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     editImage,
     checkImage,
     fullscreenImage,
+    snapToCenterImage,
   ]);
 
   return (
@@ -674,7 +723,6 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       sx={{ width: divwidth, height: divheight }}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
-      onClick={togglePlay}
     >
       <CanvasIcon
         icon={EditIcon}
@@ -693,6 +741,12 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         iconSize={24}
         color="white"
         setImage={setFullscreenImage}
+      />
+      <CanvasIcon
+        icon={VerticalAlignCenterIcon}
+        iconSize={24}
+        color="white"
+        setImage={setSnapToCenterImage}
       />
 
       <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }} />

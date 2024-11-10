@@ -48,4 +48,85 @@ function generateTestPattern(): GrabFrameResponse {
   };
 }
 
+export const drawBox = (
+  context: CanvasRenderingContext2D,
+  xpos: number,
+  ypos: number,
+  size: number,
+  location: 'c' | 't' | 'b' | 'l' | 'r' | 'tl' | 'tr' | 'bl' | 'br',
+) => {
+  let x = xpos;
+  let y = ypos;
+  switch (location) {
+    case 'c':
+      x -= size / 2;
+      y -= size / 2;
+      break;
+    case 't':
+      x -= size / 2;
+      break;
+    case 'b':
+      x -= size / 2;
+      y -= size;
+      break;
+    case 'l':
+      y -= size / 2;
+      break;
+    case 'r':
+      x -= size;
+      y -= size / 2;
+      break;
+    case 'tl':
+      break;
+    case 'tr':
+      x -= size;
+      break;
+    case 'bl':
+      y -= size;
+      break;
+    case 'br':
+      x -= size;
+      y -= size;
+      break;
+    default:
+      x -= size / 2;
+      y -= size / 2;
+      break;
+  }
+  context.beginPath();
+  context.strokeStyle = 'black';
+  context.lineWidth = 1;
+  context.strokeRect(x, y, size, size);
+  context.fillStyle = 'white';
+  context.fillRect(x + 1, y + 1, size - 2, size - 2);
+  context.stroke();
+};
+
+export const drawSvgIcon = (
+  ctx: CanvasRenderingContext2D,
+  image: HTMLImageElement | null,
+  x: number,
+  y: number,
+  rotate90: boolean = false, // New property to control rotation
+) => {
+  if (image) {
+    ctx.save(); // Save the current context state
+
+    if (rotate90) {
+      // Translate and rotate the context around the top-left corner of the image
+      ctx.translate(x + image.height / 2, y + image.width / 2);
+      ctx.rotate((90 * Math.PI) / 180); // Convert degrees to radians
+      ctx.translate(-image.height / 2, -image.width / 2);
+    } else {
+      ctx.translate(x, y); // Translate to x, y for non-rotated image
+    }
+
+    ctx.fillStyle = 'rgba(50, 50, 50, 0.7)'; // '#99999980';
+    ctx.fillRect(0, 0, image.width, image.height);
+    ctx.drawImage(image, 0, 0, image.width, image.height);
+
+    ctx.restore(); // Restore the context to its original state
+  }
+};
+
 export default generateTestPattern;
