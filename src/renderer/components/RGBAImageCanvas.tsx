@@ -6,6 +6,8 @@ import CheckIcon from '@mui/icons-material/Check';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter';
 import {
+  getGuide,
+  getRecordingProps,
   useFrameGrab,
   useGuide,
   useIsRecording,
@@ -16,7 +18,18 @@ import {
   startRecording,
   stopRecording,
 } from '../recorder/RecorderApi';
-import generateTestPattern, { drawBox, drawSvgIcon } from '../util/ImageUtils';
+import generateTestPattern, {
+  drawBox,
+  drawSvgIcon,
+  translateDestCanvas2SrcCanvas,
+  translateSrcCanvas2DestCanvas,
+} from '../util/ImageUtils';
+import {
+  Point,
+  getVideoScaling,
+  setVideoScaling,
+  useVideoScaling,
+} from '../util/VideoSettings';
 import { GrabFrameResponse, Rect } from '../recorder/RecorderTypes';
 import { showErrorDialog } from './ErrorDialog';
 import CanvasIcon from './CanvasIcon';
@@ -85,50 +98,10 @@ function extractTimestampFromFrame(
     number |= bit;
   }
 
-  // console.log(`${number}`.replace('n', ''));
-
   number = (5000n + number) / 10000n; // Round 64-bit number to milliseconds
 
   return Number(number); // Convert the BigInt number to a regular number
 }
-
-const drawPlayIcon = (
-  ctx: CanvasRenderingContext2D,
-  canvasWidth: number,
-  canvasHeight: number,
-  playing: boolean,
-) => {
-  const centerX = canvasWidth / 2;
-  const centerY = canvasHeight / 2;
-  const size = 50; // Size of the icon
-  const radius = size; // Radius of the enclosing circle
-
-  // Draw enclosing circle
-  ctx.beginPath();
-  ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
-  ctx.fillStyle = '#44444480';
-  ctx.fill();
-
-  // Set icon color and style
-  ctx.fillStyle = playing ? '#dd0000b0' : '#00dd00b0';
-  ctx.beginPath();
-  if (playing) {
-    // Draw stop icon as a square
-    ctx.rect(
-      centerX - size / 3,
-      centerY - size / 3,
-      (2 * size) / 3,
-      (2 * size) / 3,
-    );
-  } else {
-    // Draw play icon as a triangle
-    ctx.moveTo(centerX - size / 4, centerY - size / 2);
-    ctx.lineTo(centerX - size / 4, centerY + size / 2);
-    ctx.lineTo(centerX + size / 2, centerY);
-    ctx.closePath();
-  }
-  ctx.fill();
-};
 
 interface CanvasProps {
   divwidth: number;
@@ -136,13 +109,148 @@ interface CanvasProps {
 }
 let lastGoodFrame: GrabFrameResponse = generateTestPattern();
 
+// Given a clip Rect in percentage units, return the native px units equivalent
+const getNativeClip = (imageClip: Rect): Rect => {
+  const { srcWidth, srcHeight } = getVideoScaling();
+  // Calculate the two corner points of the clip area in canvas px units
+  const nativePt1 = translateSrcCanvas2DestCanvas({
+    x: Math.round((imageClip.x * srcWidth) / 4) * 4,
+    y: Math.round((imageClip.y * srcHeight) / 4) * 4,
+  });
+  const nativePt2 = translateSrcCanvas2DestCanvas({
+    x: Math.round(((imageClip.x + imageClip.width) * srcWidth) / 4) * 4,
+    y: Math.round(((imageClip.y + imageClip.height) * srcHeight) / 4) * 4,
+  });
+  // Convert the two points to a rectangle
+  const nativeClip = {
+    x: nativePt1.x,
+    y: nativePt1.y,
+    width: nativePt2.x - nativePt1.x,
+    height: nativePt2.y - nativePt1.y,
+  };
+  return nativeClip;
+};
+
+/**
+ * Get the coordinates of the guide in source image coordinates
+ * @returns {pt1: Point, pt2: Point} in source image coordinates
+ */
+const getSrcGuideCoords = () => {
+  const { cropArea } = getRecordingProps();
+  const guide = getGuide();
+  const { srcWidth, srcHeight } = getVideoScaling();
+  const pt1: Point = {
+    x: cropArea.x * srcWidth + (cropArea.width * srcWidth) / 2 + guide.pt1,
+    y: cropArea.y * srcHeight,
+  };
+  const pt2: Point = {
+    x: cropArea.x * srcWidth + (cropArea.width * srcWidth) / 2 + guide.pt2,
+    y: (cropArea.y + cropArea.height) * srcHeight,
+  };
+  return { pt1, pt2 };
+};
+
+/**
+ * Get the coordinates of the guide in destination canvas coordinates
+ * @returns {pt1: Point, pt2: Point} in destination canvas coordinates
+ */
+const getNativeGuideCoords = () => {
+  const guideSrcCoords = getSrcGuideCoords();
+  const pt1 = translateSrcCanvas2DestCanvas({
+    x: guideSrcCoords.pt1.x,
+    y: guideSrcCoords.pt1.y,
+  });
+  const pt2 = translateSrcCanvas2DestCanvas({
+    x: guideSrcCoords.pt2.x,
+    y: guideSrcCoords.pt2.y,
+  });
+  return { pt1, pt2 };
+};
+
+const applyZoom = ({ srcPoint, zoom }: { srcPoint: Point; zoom: number }) => {
+  const videoScaling = getVideoScaling();
+  const destZoomWidth = videoScaling.destWidth * zoom;
+  const destZoomHeight = videoScaling.destHeight * zoom;
+
+  const { srcWidth, srcHeight } = videoScaling;
+
+  let srcCenterPoint = srcPoint;
+  if (srcPoint.x === 0 || zoom === 1) {
+    srcCenterPoint = { x: srcWidth / 2, y: srcHeight / 2 };
+  } else if (getRecordingProps().showFinishGuide) {
+    const guideSrcCoords = getSrcGuideCoords();
+    srcCenterPoint.x = (guideSrcCoords.pt1.x + guideSrcCoords.pt2.x) / 2; // Center around Finish Guide
+  }
+
+  // Calculate the aspect ratio
+  const srcAspectRatio = srcWidth / srcHeight;
+  const destAspectRatio = destZoomWidth / destZoomHeight;
+
+  let scaledWidth: number;
+  let scaledHeight: number;
+  let pixScale: number;
+  // Maintain the aspect ratio
+  if (srcAspectRatio > destAspectRatio) {
+    // Source is wider relative to destination
+    scaledWidth = destZoomWidth;
+    scaledHeight = destZoomWidth / srcAspectRatio;
+    pixScale = srcHeight / scaledHeight;
+  } else {
+    // Source is taller relative to destination
+    scaledWidth = destZoomHeight * srcAspectRatio;
+    scaledHeight = destZoomHeight;
+    pixScale = srcWidth / scaledWidth;
+  }
+
+  const destX =
+    videoScaling.destWidth / 2 - scaledWidth * (srcCenterPoint.x / srcWidth);
+  const destY = Math.min(
+    0,
+    videoScaling.destHeight / 2 - scaledHeight * (srcCenterPoint.y / srcHeight),
+  );
+
+  const pt1 = translateSrcCanvas2DestCanvas({ x: 0, y: 0 }, videoScaling);
+  const pt2 = translateSrcCanvas2DestCanvas(
+    { x: videoScaling.srcWidth, y: videoScaling.srcHeight },
+    videoScaling,
+  );
+
+  // Specify the actual area in the canvas that will show video data
+  const drawableRect: Rect = {
+    x: Math.max(destX, 0),
+    y: 0,
+    width: videoScaling.destWidth - 2 * Math.max(destX, 0),
+    height: Math.min(destY + scaledHeight, videoScaling.destHeight),
+  };
+
+  setVideoScaling((prior) => ({
+    ...prior,
+    destX,
+    destY,
+    srcCenterPoint,
+    scaledWidth,
+    scaledHeight,
+    zoom,
+    pixScale,
+    drawableRect,
+    pt1,
+    pt2,
+  }));
+};
+
+const isZooming = () => getVideoScaling().zoom !== 1;
+
+const clearZoom = () => {
+  applyZoom({ zoom: 1, srcPoint: getVideoScaling().srcCenterPoint });
+};
+
 const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   let [frame] = useFrameGrab();
   const [guide, setGuide] = useGuide();
   const [isRecording] = useIsRecording();
   const [settings] = useRecordingProps();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-
+  const [videoScaling] = useVideoScaling();
   // State for the selection rectangle
   const [recordingProps, setRecordingProps] = useRecordingProps();
 
@@ -151,13 +259,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   const [draggingCorner, setDraggingCorner] = useState<string | null>(null);
   const [isRectangleVisible, setIsRectangleVisible] = useState(false);
   const ignoreClick = useRef(false);
-  const scaleFactors = useRef({
-    offsetX: 0,
-    offsetY: 0,
-    scaledWidth: 1280,
-    scaledHeight: 720,
-    scale: 1,
-  });
+  const srcCenter = useRef<Point>({ x: divwidth / 2, y: divheight / 2 });
   const [editImage, setEditImage] = useState<HTMLImageElement | null>(null);
   const [checkImage, setCheckImage] = useState<HTMLImageElement | null>(null);
   const [fullscreenImage, setFullscreenImage] =
@@ -188,38 +290,27 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     setClip(crop);
   }, [recordingProps.cropArea]);
 
-  // Given a clip Rect in percentage units, return the native px units equivalent
-  const getNativeClip = useCallback((imageClip: Rect): Rect => {
-    const nativeClip = {
-      x: imageClip.x * scaleFactors.current.scaledWidth,
-      y: imageClip.y * scaleFactors.current.scaledHeight,
-      width: imageClip.width * scaleFactors.current.scaledWidth,
-      height: imageClip.height * scaleFactors.current.scaledHeight,
-    };
-    return nativeClip;
-  }, []);
-
-  const togglePlay = () => {
-    if (ignoreClick.current) {
-      ignoreClick.current = false;
-      return;
-    }
-    if (isRecording) {
-      stopRecording().catch(showErrorDialog);
-    } else {
-      if (isRectangleVisible) {
-        setRecordingProps((prior) => ({ ...prior, cropArea: clip }));
-        setIsRectangleVisible(false);
-      }
-      startRecording().catch(showErrorDialog);
-    }
-  };
+  useEffect(() => {
+    srcCenter.current = { x: frame.width / 2, y: frame.height / 2 };
+    setVideoScaling((prior) => ({
+      ...prior,
+      srcWidth: frame.width,
+      srcHeight: frame.height,
+      destWidth: divwidth,
+      destHeight: divheight,
+    }));
+    applyZoom({
+      zoom: 1,
+      srcPoint: { x: frame.width / 2, y: frame.height / 2 },
+    });
+    // drawContentDebounced();
+  }, [frame.width, frame.height, divwidth, divheight]);
 
   // Check if the point is within a rectangle corner
   const isInCorner = (x: number, y: number) => {
     const rect = getNativeClip(clip);
     const cornerSize = 10;
-    const { scale } = scaleFactors.current;
+    const { pixScale, drawableRect } = getVideoScaling();
     const corners = [
       { name: 'tl', x: rect.x, y: rect.y },
       { name: 'tr', x: rect.x + rect.width, y: rect.y },
@@ -227,15 +318,16 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       { name: 'br', x: rect.x + rect.width, y: rect.y + rect.height },
       {
         name: 'ft',
-        x: rect.x + rect.width / 2 + guide.pt1 * scale,
-        y: rect.y,
+        x: guide.pt1 / pixScale + rect.x + rect.width / 2,
+        y: Math.max(drawableRect.y, rect.y),
       },
       {
         name: 'fb',
-        x: rect.x + rect.width / 2 + guide.pt2 * scale,
-        y: rect.y + rect.height,
+        x: guide.pt2 / pixScale + rect.x + rect.width / 2,
+        y: Math.min(drawableRect.y + drawableRect.height, rect.y + rect.height),
       },
     ];
+
     return corners.find(
       (corner) =>
         x >= corner.x - cornerSize &&
@@ -260,7 +352,17 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
 
   const handleEditIconClick = () => {
     if (isRectangleVisible) {
+      const guide1 = getSrcGuideCoords();
       setRecordingProps((prior) => ({ ...prior, cropArea: clip }));
+      // Updte the guide position so it doesn't move when the crop changes
+      const guide2 = getSrcGuideCoords();
+      const dx = Math.round(guide1.pt1.x - guide2.pt1.x);
+      setGuide((prevGuide) => {
+        return {
+          pt1: prevGuide.pt1 + dx,
+          pt2: prevGuide.pt2 + dx,
+        };
+      });
       if (isRecording) {
         stopRecording().catch(showErrorDialog);
         setTimeout(() => startRecording().catch(showErrorDialog), 100);
@@ -284,21 +386,48 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    let { offsetX, offsetY } = e.nativeEvent;
-    offsetX -= scaleFactors.current.offsetX;
-    offsetY -= scaleFactors.current.offsetY;
-
     if (!canvasRef.current) return;
+    const { offsetX, offsetY } = e.nativeEvent;
 
     const iconSize = 24;
     const iconPadding = 10;
 
     // Icon positions relative to the canvas width
+    const { drawableRect } = videoScaling;
     const toggleIconX =
-      scaleFactors.current.scaledWidth - 2 * (iconSize + iconPadding);
+      drawableRect.x + drawableRect.width - 2 * (iconSize + iconPadding);
     const maxSizeIconX =
-      scaleFactors.current.scaledWidth - (iconSize + iconPadding);
-    if (isInIcon(offsetX, offsetY, toggleIconX, iconPadding)) {
+      drawableRect.x + drawableRect.width - (iconSize + iconPadding);
+    if (e.button === 2) {
+      e.preventDefault();
+      e.stopPropagation();
+      // zoom in/out
+      if (isZooming()) {
+        clearZoom();
+      } else {
+        // const { cropArea } = getRecordingProps();
+        // const { srcWidth, srcHeight, pixScale } = getVideoScaling();
+        // const newZoom = Math.min(
+        //   divwidth / (cropArea.width * srcWidth),
+        //   divheight / (cropArea.height * srcHeight),
+        // );
+        // const center = translateDestCanvas2SrcCanvas({
+        //   x: offsetX,
+        //   y: offsetY,
+        // });
+
+        // center.y = (cropArea.y + cropArea.height / 2) * srcHeight;
+        // center.x = (cropArea.x + cropArea.width / 2) * srcWidth;
+        // applyZoom({
+        //   srcPoint: center,
+        //   zoom: pixScale * newZoom,
+        // });
+        applyZoom({
+          srcPoint: translateDestCanvas2SrcCanvas({ x: offsetX, y: offsetY }),
+          zoom: 4,
+        });
+      }
+    } else if (isInIcon(offsetX, offsetY, toggleIconX, iconPadding)) {
       ignoreClick.current = true;
       e.stopPropagation();
       handleEditIconClick();
@@ -313,17 +442,6 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         pt1: 0,
         pt2: 0,
       });
-    } else if (
-      isInIcon(
-        offsetX,
-        offsetY,
-        scaleFactors.current.scaledWidth / 2 - 50,
-        scaleFactors.current.scaledHeight / 2 - 50,
-        100,
-      )
-    ) {
-      e.stopPropagation();
-      togglePlay();
     } else if (isRectangleVisible) {
       const corner = isInCorner(offsetX, offsetY);
       if (corner) {
@@ -347,11 +465,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         0,
         Math.min(componentRect.height, e.clientY - componentRect.top),
       );
-      offsetX -= scaleFactors.current.offsetX;
-      offsetY -= scaleFactors.current.offsetY;
       const mouseOffsetX = offsetX;
-      offsetX /= scaleFactors.current.scaledWidth;
-      offsetY /= scaleFactors.current.scaledHeight;
 
       if (
         draggingCornerRef.current === 'ft' ||
@@ -359,10 +473,10 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       ) {
         const rect = getNativeClip(clip);
         const finishX =
-          (mouseOffsetX - rect.x - rect.width / 2) / scaleFactors.current.scale;
+          (mouseOffsetX - rect.x - rect.width / 2) * videoScaling.pixScale;
 
         setGuide((prevGuide) => {
-          const delta = finishX - prevGuide.pt1;
+          const delta = Math.round(finishX - prevGuide.pt1);
           return {
             pt1: draggingCornerRef.current === 'fb' ? prevGuide.pt1 : finishX,
             pt2:
@@ -372,11 +486,16 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
           };
         });
       } else {
+        offsetX -= videoScaling.destX;
+        offsetY -= videoScaling.destY;
+        offsetX /= videoScaling.scaledWidth;
+        offsetY /= videoScaling.scaledHeight;
         setClip((prevRect) => {
           const newRect = { ...prevRect };
           const clipValue = (v: number) => {
             return Math.min(1, Math.max(0, v));
           };
+
           switch (draggingCornerRef.current) {
             case 'tl':
               newRect.width += newRect.x - offsetX;
@@ -405,12 +524,11 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
           newRect.y = clipValue(newRect.y);
           newRect.width = clipValue(newRect.width);
           newRect.height = clipValue(newRect.height);
-
           return newRect;
         });
       }
     },
-    [clip, getNativeClip, setGuide],
+    [clip, setGuide, videoScaling],
   );
 
   const handleMouseUp = () => setDraggingCorner(null);
@@ -466,29 +584,8 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     const parentWidth = canvas.parentElement?.clientWidth || width;
     const parentHeight = canvas.parentElement?.clientHeight || height;
 
-    // Calculate the scale to maintain aspect ratio and fit within the parent container
-    scaleFactors.current.scale = Math.min(
-      parentWidth / width,
-      parentHeight / height,
-    );
-
-    scaleFactors.current.scaledWidth = width * scaleFactors.current.scale;
-    scaleFactors.current.scaledHeight = height * scaleFactors.current.scale;
-
-    // Center the image in the canvas
-    scaleFactors.current.offsetX =
-      (parentWidth - scaleFactors.current.scaledWidth) / 2;
-    scaleFactors.current.offsetY = 0; // (parentHeight - scaleFactors.current.scaledHeight) / 2;
-    const { scale, offsetX, offsetY, scaledWidth, scaledHeight } =
-      scaleFactors.current;
-
-    const rect = getNativeClip(clip);
-
     canvas.width = parentWidth;
     canvas.height = parentHeight;
-
-    const clipWidth = Math.round(rect.width / scale);
-    const clipHeight = Math.round(rect.height / scale);
 
     // Create an ImageData object
     const imageData = new ImageData(new Uint8ClampedArray(data), width, height);
@@ -506,56 +603,57 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       offscreenCanvas,
       0,
       0,
-      width,
-      height,
-      offsetX,
-      offsetY,
-      scaledWidth,
-      scaledHeight,
+      videoScaling.srcWidth,
+      videoScaling.srcHeight,
+      videoScaling.destX,
+      videoScaling.destY,
+      videoScaling.scaledWidth,
+      videoScaling.scaledHeight,
     );
 
-    if (width !== clipWidth || height !== clipHeight) {
-      // Apply grey dimming outside the rectangle
+    const destClipRect = getNativeClip(clip);
+    if (clip.width !== 1 || clip.height !== 1) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(
+        videoScaling.destX,
+        videoScaling.destY,
+        videoScaling.scaledWidth,
+        videoScaling.scaledHeight,
+      );
+      ctx.moveTo(destClipRect.x, destClipRect.y); // Move to top-left corner of the clear area
+      ctx.rect(
+        destClipRect.x,
+        destClipRect.y,
+        destClipRect.width,
+        destClipRect.height,
+      ); // Inner rectangle to exclude
+      ctx.closePath();
       ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.fillRect(offsetX, offsetY, scaledWidth, scaledHeight);
+      ctx.fill('evenodd'); // Fills everything except the inner rectangle
 
-      // Clear the area within the rectangle to make it non-dimmed
-      ctx.clearRect(
-        offsetX + rect.x,
-        offsetY + rect.y,
-        rect.width,
-        rect.height,
-      );
-
-      // Redraw the area inside the rectangle to remove transparency
-      ctx.drawImage(
-        offscreenCanvas,
-        rect.x / scale,
-        rect.y / scale,
-        rect.width / scale,
-        rect.height / scale,
-        offsetX + rect.x,
-        offsetY + rect.y,
-        rect.width,
-        rect.height,
-      );
+      // Restore the canvas state
+      ctx.restore();
     }
 
     if (settings.showFinishGuide) {
-      // Draw the red line
+      const nativeGuide = getNativeGuideCoords();
+      const from = nativeGuide.pt1;
+      const to = nativeGuide.pt2;
+      from.y = Math.max(from.y, videoScaling.drawableRect.y);
+      to.y = Math.min(
+        to.y,
+        videoScaling.drawableRect.y + videoScaling.drawableRect.height,
+      );
       ctx.beginPath();
-      const fromx = offsetX + rect.x + rect.width / 2 + guide.pt1 * scale;
-      const fromy = offsetY + rect.y;
-      const tox = offsetX + rect.x + rect.width / 2 + guide.pt2 * scale;
-      const toy = offsetY + rect.y + rect.height;
-      ctx.moveTo(fromx, fromy);
-      ctx.lineTo(tox, toy);
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
       ctx.strokeStyle = 'red';
       ctx.lineWidth = 1;
       ctx.stroke();
       if (isRectangleVisible) {
-        drawBox(ctx, fromx, fromy, 12, 't');
-        drawBox(ctx, tox, toy, 12, 'b');
+        drawBox(ctx, from.x, from.y, 12, 't');
+        drawBox(ctx, to.x, to.y, 12, 'b');
       }
     }
 
@@ -567,44 +665,33 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       ctx.font = `${textHeight}px Arial`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      const x = canvas.width / 4;
-      const y = canvas.height / 4;
+      const x = Math.max(videoScaling.destX, 0) + 8;
+      const y = 36;
       // Measure the text width and height
       const textMetrics = ctx.measureText(tsString);
       const textWidth = textMetrics.width;
-
-      // Adjust for the lack of descenders by moving the box up slightly
-      const descenderAdjustment = textHeight * 0.1;
+      const boxHeight = textHeight + padding * 2;
 
       // Draw a white rectangle behind the text
       ctx.fillStyle = '#ffffffa0';
-      ctx.fillRect(
-        x - textWidth / 2 - padding,
-        y - textHeight / 2 - padding,
-        textWidth + padding * 2,
-        textHeight + padding * 2,
-      );
+      ctx.fillRect(x, y, textWidth + padding * 2, boxHeight);
 
       ctx.strokeStyle = 'black';
       ctx.lineWidth = 2;
-      ctx.strokeRect(
-        x - textWidth / 2 - padding,
-        y - textHeight / 2 - padding,
-        textWidth + padding * 2,
-        textHeight + padding * 2,
-      );
+      ctx.strokeRect(x, y, textWidth + padding * 2, boxHeight);
 
       ctx.fillStyle = 'black';
-      ctx.fillText(tsString, x, y + descenderAdjustment);
+      ctx.fillText(tsString, x + padding + textWidth / 2, y + boxHeight / 2);
     }
-
-    drawPlayIcon(ctx, parentWidth, scaledHeight, isRecording);
 
     // Draw icons based on canvas width
     const iconSize = 24;
     const iconPadding = 10;
-    const toggleIconX = offsetX + scaledWidth - 2 * (iconSize + iconPadding);
-    const maxSizeIconX = offsetX + scaledWidth - (iconSize + iconPadding);
+    const { drawableRect } = videoScaling;
+    const toggleIconX =
+      drawableRect.x + drawableRect.width - 2 * (iconSize + iconPadding);
+    const maxSizeIconX =
+      drawableRect.x + drawableRect.width - (iconSize + iconPadding);
 
     drawSvgIcon(
       ctx,
@@ -622,72 +709,75 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       true,
     );
 
+    // Draw the WxH text in the upper-left corner of the rectangle with a background
+    const text = `${Math.round((clip.width * frame.width) / 4) * 4}x${Math.round((clip.height * frame.height) / 4) * 4}`;
+    ctx.font = '16px Arial';
+    ctx.textBaseline = 'middle';
+
+    const textMetrics = ctx.measureText(text);
+    const padding = 4;
+    const textWidth = textMetrics.width + padding * 2;
+    const textHeight = 16 + padding * 2;
+    const edgeOffset = 8;
+
+    // Draw background rectangle for the text
+    ctx.fillStyle = 'rgba(50, 50, 50, 0.7)'; // Gray background with some transparency
+    ctx.fillRect(
+      edgeOffset + destClipRect.x,
+      destClipRect.y + edgeOffset,
+      textWidth,
+      textHeight,
+    );
+
+    // Draw the text on top of the background
+    ctx.fillStyle = 'white';
+    ctx.textAlign = 'left';
+    ctx.fillText(
+      text,
+      edgeOffset + destClipRect.x + padding,
+      destClipRect.y + edgeOffset + textHeight / 2,
+    ); // Adjust for padding and text baseline
+
     if (isRectangleVisible) {
       // Draw selection rectangle
       ctx.strokeStyle = '#ffffffb0';
       ctx.lineWidth = 3;
       ctx.strokeRect(
-        offsetX + rect.x + 2,
-        offsetY + rect.y + 2,
-        rect.width - 3,
-        rect.height - 3,
+        destClipRect.x + 2,
+        destClipRect.y + 2,
+        destClipRect.width - 3,
+        destClipRect.height - 3,
       );
       ctx.strokeStyle = '#ff0000b0';
       ctx.lineWidth = 1;
       ctx.strokeRect(
-        offsetX + rect.x + 2,
-        offsetY + rect.y + 2,
-        rect.width - 3,
-        rect.height - 3,
+        destClipRect.x + 2,
+        destClipRect.y + 2,
+        destClipRect.width - 3,
+        destClipRect.height - 3,
       );
 
-      // Draw the WxH text in the upper-left corner of the rectangle with a background
-      const text = `${Math.round((clip.width * frame.width) / 4) * 4}x${Math.round((clip.height * frame.height) / 4) * 4}`;
-      ctx.font = '16px Arial';
-      ctx.textBaseline = 'middle';
-
-      const textMetrics = ctx.measureText(text);
-      const padding = 4;
-      const textWidth = textMetrics.width + padding * 2;
-      const textHeight = 16 + padding * 2;
-
-      // Draw background rectangle for the text
-      ctx.fillStyle = 'rgba(50, 50, 50, 0.7)'; // Gray background with some transparency
-      ctx.fillRect(
-        50 + offsetX + rect.x,
-        offsetY + rect.y + 2,
-        textWidth,
-        textHeight,
-      );
-
-      // Draw the text on top of the background
-      ctx.fillStyle = 'white';
-      ctx.textAlign = 'left';
-      ctx.fillText(
-        text,
-        50 + offsetX + rect.x + padding,
-        offsetY + rect.y + 16,
-      ); // Adjust for padding and text baseline
-
-      // Draw corner handles
-      // ctx.fillStyle = '#ff0000b0';
-      // const corners = [
-      //   { x: rect.x + 3, y: rect.y + 3 },
-      //   { x: rect.x - 3 + rect.width, y: rect.y + 3 },
-      //   { x: rect.x + 3, y: rect.y + rect.height - 3 },
-      //   { x: rect.x + rect.width - 3, y: rect.y + rect.height - 3 },
-      // ];
-      // corners.forEach(({ x, y }) => {
-      //   ctx.fillRect(offsetX + x - 5, offsetY + y - 5, 10, 10);
-      // });
-      drawBox(ctx, offsetX + rect.x, offsetY + rect.y, 12, 'tl');
-      drawBox(ctx, offsetX + rect.x + rect.width, offsetY + rect.y, 12, 'tr');
-
-      drawBox(ctx, offsetX + rect.x, offsetY + rect.y + rect.height, 12, 'bl');
+      // Draw the corner handles
+      drawBox(ctx, destClipRect.x, destClipRect.y, 12, 'tl');
       drawBox(
         ctx,
-        offsetX + rect.x + rect.width,
-        offsetY + rect.y + rect.height,
+        destClipRect.x + destClipRect.width,
+        destClipRect.y,
+        12,
+        'tr',
+      );
+
+      drawBox(
+        ctx,
+        destClipRect.x,
+        destClipRect.y + destClipRect.height,
+        12,
+        'bl',
+      );
+      drawBox(
+        ctx,
+        destClipRect.x + destClipRect.width,
+        destClipRect.y + destClipRect.height,
         12,
         'br',
       );
@@ -696,10 +786,10 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       ctx.strokeStyle = '#ffffffb0';
       ctx.lineWidth = 2;
       ctx.strokeRect(
-        offsetX + rect.x,
-        offsetY + rect.y,
-        rect.width,
-        rect.height,
+        destClipRect.x,
+        destClipRect.y,
+        destClipRect.width,
+        destClipRect.height,
       );
     }
   }, [
@@ -711,11 +801,11 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     guide,
     isRecording,
     settings.showFinishGuide,
-    getNativeClip,
     editImage,
     checkImage,
     fullscreenImage,
     snapToCenterImage,
+    videoScaling,
   ]);
 
   return (
@@ -723,6 +813,9 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       sx={{ width: divwidth, height: divheight }}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
+      onContextMenu={(event) => {
+        event.preventDefault();
+      }}
     >
       <CanvasIcon
         icon={EditIcon}

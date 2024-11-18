@@ -8,11 +8,14 @@ import {
   FormControlLabel,
   Tooltip,
   IconButton,
+  Button,
 } from '@mui/material';
 import { UseDatum } from 'react-usedatum';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import { queryCameraList } from './RecorderApi';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import StopIcon from '@mui/icons-material/Stop';
+import { queryCameraList, startRecording, stopRecording } from './RecorderApi';
 import {
   useRecordingStatus,
   useIsRecording,
@@ -21,6 +24,8 @@ import {
 import { FullSizeWindow } from '../components/FullSizeWindow';
 import RGBAImageCanvas from '../components/RGBAImageCanvas';
 import { showErrorDialog } from '../components/ErrorDialog';
+import InfoPopup from '../components/InfoPopup';
+import RecorderTips from './RecorderTips';
 
 const { openDirDialog, openFileExplorer } = window.Util;
 
@@ -108,6 +113,14 @@ const RecorderConfig: React.FC = () => {
     });
   }
 
+  const handleToggleRecording = () => {
+    if (isRecording) {
+      stopRecording().catch(showErrorDialog);
+    } else {
+      startRecording().catch(showErrorDialog);
+    }
+  };
+
   return (
     <div
       style={{
@@ -119,7 +132,7 @@ const RecorderConfig: React.FC = () => {
     >
       <RecordingError />
       <Grid container spacing={2}>
-        <Grid item xs={12}>
+        <Grid item xs={10}>
           <TextField
             select
             margin="normal"
@@ -136,6 +149,23 @@ const RecorderConfig: React.FC = () => {
               </MenuItem>
             ))}
           </TextField>
+        </Grid>
+        <Grid item xs={2} container justifyContent="center" alignItems="center">
+          <Tooltip title="Explore Recording Folder">
+            <Button
+              variant="contained"
+              onClick={handleToggleRecording}
+              startIcon={isRecording ? <StopIcon /> : <PlayArrowIcon />}
+              sx={{
+                backgroundColor: isRecording ? 'red' : 'green',
+                '&:hover': {
+                  backgroundColor: isRecording ? 'darkred' : 'darkgreen',
+                },
+              }}
+            >
+              {isRecording ? 'Stop' : 'Start'}
+            </Button>
+          </Tooltip>
         </Grid>
         <Grid item xs={10}>
           <TextField
@@ -202,8 +232,8 @@ const RecorderConfig: React.FC = () => {
             />
           </Tooltip>
         </Grid>
-        <Grid item xs={4}>
-          <Tooltip title="If checked, finish line set by CrewTimer Video Review will be shown on video preview.">
+        <Grid item xs={2}>
+          <Tooltip title="If checked, finish line location will be shown on video preview.">
             <FormControlLabel
               control={
                 <Checkbox
@@ -216,6 +246,9 @@ const RecorderConfig: React.FC = () => {
               sx={{ paddingTop: '1em' }}
             />
           </Tooltip>
+        </Grid>
+        <Grid item xs={2} container justifyContent="center" alignItems="center">
+          <InfoPopup body={<RecorderTips />} />
         </Grid>
       </Grid>
       <div

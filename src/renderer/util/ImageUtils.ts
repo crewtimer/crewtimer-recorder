@@ -1,5 +1,6 @@
 import { Buffer } from 'buffer';
 import { GrabFrameResponse } from '../recorder/RecorderTypes';
+import { Point, VideoScaling, getVideoScaling } from './VideoSettings';
 
 /**
  * Generate a 320x240 RGBA checkerboard pattern.
@@ -127,6 +128,35 @@ export const drawSvgIcon = (
 
     ctx.restore(); // Restore the context to its original state
   }
+};
+
+export const translateSrcCanvas2DestCanvas = (
+  srcPoint: Point,
+  scalingArg?: VideoScaling,
+): Point => {
+  const scaling = scalingArg || getVideoScaling();
+  const translatedX =
+    scaling.destX + (srcPoint.x * scaling.scaledWidth) / scaling.srcWidth;
+  const translatedY =
+    scaling.destY + (srcPoint.y * scaling.scaledHeight) / scaling.srcHeight;
+  return { x: translatedX, y: translatedY };
+};
+
+export const translateDestCanvas2SrcCanvas = (
+  srcPoint: Point,
+  scalingArg?: VideoScaling,
+): Point => {
+  const videoScaling = scalingArg || getVideoScaling();
+  const translatedX =
+    (videoScaling.srcWidth * (srcPoint.x - videoScaling.drawableRect.x)) /
+    videoScaling.drawableRect.width;
+  const translatedY =
+    (videoScaling.srcHeight * (srcPoint.y - videoScaling.drawableRect.y)) /
+    videoScaling.drawableRect.height;
+  // translatedX = Math.min(Math.max(0, translatedX), videoScaling.srcWidth);
+  // translatedY = Math.min(Math.max(0, translatedY), videoScaling.srcHeight);
+
+  return { x: translatedX, y: translatedY };
 };
 
 export default generateTestPattern;

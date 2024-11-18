@@ -8,6 +8,7 @@
     "install": "prebuild-install --verbose -r napi || node-gyp rebuild",
     "xinstall-prebuild": "prebuild-install --verbose -r napi",
     "prebuild": "prebuild --verbose --runtime napi --all --verbose",
+    "pushrelease": "rm -rf node_modules build prebuilds yarn.lock && yarn install && yarn prebuild",
     "rebuild": "node-gyp rebuild",
     "uploadall": "prebuild --verbose --upload-all",
     "upload": "prebuild --verbose --runtime napi",
