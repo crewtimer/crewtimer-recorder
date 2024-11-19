@@ -167,82 +167,119 @@ const getNativeGuideCoords = () => {
   return { pt1, pt2 };
 };
 
-const applyZoom = ({ srcPoint, zoom }: { srcPoint: Point; zoom: number }) => {
-  const videoScaling = getVideoScaling();
-  const destZoomWidth = videoScaling.destWidth * zoom;
-  const destZoomHeight = videoScaling.destHeight * zoom;
+enum ZoomMode {
+  Fit,
+  Zoom,
+  Maximize,
+}
 
-  const { srcWidth, srcHeight } = videoScaling;
+const applyZoom = ({
+  center,
+  zoomMode,
+}: {
+  center?: Point;
+  zoomMode: ZoomMode;
+}) => {
+  const { srcWidth, srcHeight, destWidth, destHeight } = getVideoScaling();
+  const baseScale = Math.min(destWidth / srcWidth, destHeight / srcHeight);
+  const srcPoint = center || { x: srcWidth / 2, y: srcHeight / 2 };
 
-  let srcCenterPoint = srcPoint;
-  if (srcPoint.x === 0 || zoom === 1) {
-    srcCenterPoint = { x: srcWidth / 2, y: srcHeight / 2 };
-  } else if (getRecordingProps().showFinishGuide) {
-    const guideSrcCoords = getSrcGuideCoords();
-    srcCenterPoint.x = (guideSrcCoords.pt1.x + guideSrcCoords.pt2.x) / 2; // Center around Finish Guide
+  let pixScale = baseScale;
+  let zoom = 1;
+  let destX = 0;
+  let destY = 0;
+
+  switch (zoomMode) {
+    case ZoomMode.Fit:
+      pixScale = baseScale; // No zoom, center raw image
+      destX = destWidth / 2 - (pixScale * srcWidth) / 2;
+      destY = destHeight / 2 - (pixScale * srcHeight) / 2;
+      break;
+    case ZoomMode.Maximize:
+      {
+        // Center and maximize the crop region
+        const { cropArea } = getRecordingProps();
+
+        // Center of cropArea
+        srcPoint.x = (cropArea.x + cropArea.width / 2) * srcWidth;
+        srcPoint.y = (cropArea.y + cropArea.height / 2) * srcHeight;
+
+        // Retain max scale while retaining aspect ratio
+        const maxScale = Math.min(
+          destWidth / (cropArea.width * srcWidth),
+          destHeight / (cropArea.height * srcHeight),
+        );
+
+        // Compute scale and zoom
+        pixScale = maxScale;
+        zoom = pixScale / baseScale; // Addional zoom required to fill with crop region
+        destX = destWidth / 2 - pixScale * srcPoint.x;
+        destY = destHeight / 2 - pixScale * srcPoint.y;
+      }
+      break;
+    case ZoomMode.Zoom:
+      {
+        // Zoom around a point of interest
+        zoom = 6;
+        pixScale = baseScale * zoom;
+
+        const guideSrcCoords = getSrcGuideCoords();
+        if (getRecordingProps().showFinishGuide) {
+          srcPoint.x = (guideSrcCoords.pt1.x + guideSrcCoords.pt2.x) / 2; // Center around Finish Guide
+        }
+
+        // Normal centering around selected point
+        destX = destWidth / 2 - pixScale * srcPoint.x;
+        destY = destHeight / 2 - pixScale * srcPoint.y;
+
+        // Adjust centering to show more of the crop area when near edges
+        const { cropArea } = getRecordingProps();
+        const yMin = -cropArea.y * srcHeight * pixScale;
+        const yMax =
+          -(cropArea.y + cropArea.height) * srcHeight * pixScale + destHeight;
+        destY = Math.min(yMin, Math.max(yMax, destY));
+        const xMin = -cropArea.x * srcWidth * pixScale;
+        const xMax =
+          -(cropArea.x + cropArea.width) * srcWidth * pixScale + destWidth;
+        destX = Math.min(xMin, Math.max(xMax, destX));
+      }
+      break;
+    default:
+      break;
   }
 
-  // Calculate the aspect ratio
-  const srcAspectRatio = srcWidth / srcHeight;
-  const destAspectRatio = destZoomWidth / destZoomHeight;
+  const scaledWidth = pixScale * srcWidth;
+  const scaledHeight = pixScale * srcHeight;
 
-  let scaledWidth: number;
-  let scaledHeight: number;
-  let pixScale: number;
-  // Maintain the aspect ratio
-  if (srcAspectRatio > destAspectRatio) {
-    // Source is wider relative to destination
-    scaledWidth = destZoomWidth;
-    scaledHeight = destZoomWidth / srcAspectRatio;
-    pixScale = srcHeight / scaledHeight;
-  } else {
-    // Source is taller relative to destination
-    scaledWidth = destZoomHeight * srcAspectRatio;
-    scaledHeight = destZoomHeight;
-    pixScale = srcWidth / scaledWidth;
-  }
-
-  const destX =
-    videoScaling.destWidth / 2 - scaledWidth * (srcCenterPoint.x / srcWidth);
-  const destY = Math.min(
-    0,
-    videoScaling.destHeight / 2 - scaledHeight * (srcCenterPoint.y / srcHeight),
-  );
-
-  const pt1 = translateSrcCanvas2DestCanvas({ x: 0, y: 0 }, videoScaling);
-  const pt2 = translateSrcCanvas2DestCanvas(
-    { x: videoScaling.srcWidth, y: videoScaling.srcHeight },
-    videoScaling,
-  );
+  destY = Math.min(0, destY);
 
   // Specify the actual area in the canvas that will show video data
   const drawableRect: Rect = {
     x: Math.max(destX, 0),
     y: 0,
-    width: videoScaling.destWidth - 2 * Math.max(destX, 0),
-    height: Math.min(destY + scaledHeight, videoScaling.destHeight),
+    width: destWidth - 2 * Math.max(destX, 0),
+    height: Math.min(destY + scaledHeight, destHeight),
   };
 
   setVideoScaling((prior) => ({
     ...prior,
     destX,
     destY,
-    srcCenterPoint,
+    srcCenterPoint: srcPoint,
     scaledWidth,
     scaledHeight,
     zoom,
     pixScale,
     drawableRect,
-    pt1,
-    pt2,
+    zoomMode,
   }));
 };
 
-const isZooming = () => getVideoScaling().zoom !== 1;
+// const isZooming = () => getVideoScaling().zoom !== 1;
 
-const clearZoom = () => {
-  applyZoom({ zoom: 1, srcPoint: getVideoScaling().srcCenterPoint });
-};
+// const clearZoom = () => {
+//   applyZoom({ zoomMode: ZoomMode.Fit });
+// };
 
 const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   let [frame] = useFrameGrab();
@@ -300,8 +337,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       destHeight: divheight,
     }));
     applyZoom({
-      zoom: 1,
-      srcPoint: { x: frame.width / 2, y: frame.height / 2 },
+      zoomMode: ZoomMode.Fit,
     });
     // drawContentDebounced();
   }, [frame.width, frame.height, divwidth, divheight]);
@@ -318,12 +354,12 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       { name: 'br', x: rect.x + rect.width, y: rect.y + rect.height },
       {
         name: 'ft',
-        x: guide.pt1 / pixScale + rect.x + rect.width / 2,
+        x: guide.pt1 * pixScale + rect.x + rect.width / 2,
         y: Math.max(drawableRect.y, rect.y),
       },
       {
         name: 'fb',
-        x: guide.pt2 / pixScale + rect.x + rect.width / 2,
+        x: guide.pt2 * pixScale + rect.x + rect.width / 2,
         y: Math.min(drawableRect.y + drawableRect.height, rect.y + rect.height),
       },
     ];
@@ -401,32 +437,22 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     if (e.button === 2) {
       e.preventDefault();
       e.stopPropagation();
-      // zoom in/out
-      if (isZooming()) {
-        clearZoom();
-      } else {
-        // const { cropArea } = getRecordingProps();
-        // const { srcWidth, srcHeight, pixScale } = getVideoScaling();
-        // const newZoom = Math.min(
-        //   divwidth / (cropArea.width * srcWidth),
-        //   divheight / (cropArea.height * srcHeight),
-        // );
-        // const center = translateDestCanvas2SrcCanvas({
-        //   x: offsetX,
-        //   y: offsetY,
-        // });
+      const center = translateDestCanvas2SrcCanvas({
+        x: offsetX,
+        y: offsetY,
+      }); // mouse pos in src units
+      let { zoomMode } = getVideoScaling();
+      zoomMode =
+        zoomMode === ZoomMode.Fit
+          ? ZoomMode.Maximize
+          : zoomMode === ZoomMode.Maximize
+            ? ZoomMode.Zoom
+            : ZoomMode.Fit;
 
-        // center.y = (cropArea.y + cropArea.height / 2) * srcHeight;
-        // center.x = (cropArea.x + cropArea.width / 2) * srcWidth;
-        // applyZoom({
-        //   srcPoint: center,
-        //   zoom: pixScale * newZoom,
-        // });
-        applyZoom({
-          srcPoint: translateDestCanvas2SrcCanvas({ x: offsetX, y: offsetY }),
-          zoom: 4,
-        });
-      }
+      applyZoom({
+        center,
+        zoomMode,
+      });
     } else if (isInIcon(offsetX, offsetY, toggleIconX, iconPadding)) {
       ignoreClick.current = true;
       e.stopPropagation();
@@ -472,8 +498,10 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         draggingCornerRef.current === 'fb'
       ) {
         const rect = getNativeClip(clip);
-        const finishX =
-          (mouseOffsetX - rect.x - rect.width / 2) * videoScaling.pixScale;
+        // finish is always aligned on a pixel.
+        const finishX = Math.round(
+          (mouseOffsetX - rect.x - rect.width / 2) / videoScaling.pixScale,
+        );
 
         setGuide((prevGuide) => {
           const delta = Math.round(finishX - prevGuide.pt1);
@@ -671,17 +699,27 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       const textMetrics = ctx.measureText(tsString);
       const textWidth = textMetrics.width;
       const boxHeight = textHeight + padding * 2;
+      const boxWidth = textWidth + padding * 2;
 
       // Draw a white rectangle behind the text
-      ctx.fillStyle = '#ffffffa0';
-      ctx.fillRect(x, y, textWidth + padding * 2, boxHeight);
+      ctx.fillStyle = 'rgba(50, 50, 50, 0.7)'; // Gray background with some transparency
 
-      ctx.strokeStyle = 'black';
+      ctx.fillRect(x, y, boxWidth, boxHeight);
+
+      ctx.strokeStyle = '#888888';
       ctx.lineWidth = 2;
-      ctx.strokeRect(x, y, textWidth + padding * 2, boxHeight);
+      ctx.strokeRect(x, y, boxWidth, boxHeight);
 
-      ctx.fillStyle = 'black';
-      ctx.fillText(tsString, x + padding + textWidth / 2, y + boxHeight / 2);
+      ctx.fillStyle = '#eeeeee';
+      ctx.fillText(
+        tsString,
+        x + padding + textWidth / 2,
+        y +
+          boxHeight / 2 +
+          (textMetrics.actualBoundingBoxAscent -
+            textMetrics.actualBoundingBoxDescent) /
+            2,
+      );
     }
 
     // Draw icons based on canvas width
@@ -711,31 +749,46 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
 
     // Draw the WxH text in the upper-left corner of the rectangle with a background
     const text = `${Math.round((clip.width * frame.width) / 4) * 4}x${Math.round((clip.height * frame.height) / 4) * 4}`;
-    ctx.font = '16px Arial';
+    const fontSize = 16;
+    ctx.font = `${fontSize}px Arial`;
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
     const textMetrics = ctx.measureText(text);
     const padding = 4;
-    const textWidth = textMetrics.width + padding * 2;
-    const textHeight = 16 + padding * 2;
+    const boxWidth = textMetrics.width + padding * 2;
+    const boxHeight = fontSize + padding * 2;
     const edgeOffset = 8;
 
     // Draw background rectangle for the text
     ctx.fillStyle = 'rgba(50, 50, 50, 0.7)'; // Gray background with some transparency
     ctx.fillRect(
       edgeOffset + destClipRect.x,
-      destClipRect.y + edgeOffset,
-      textWidth,
-      textHeight,
+      edgeOffset + destClipRect.y,
+      boxWidth,
+      boxHeight,
+    );
+
+    ctx.strokeStyle = '#888888';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(
+      edgeOffset + destClipRect.x,
+      edgeOffset + destClipRect.y,
+      boxWidth,
+      boxHeight,
     );
 
     // Draw the text on top of the background
-    ctx.fillStyle = 'white';
-    ctx.textAlign = 'left';
+    ctx.fillStyle = '#eeeeee';
     ctx.fillText(
       text,
-      edgeOffset + destClipRect.x + padding,
-      destClipRect.y + edgeOffset + textHeight / 2,
+      edgeOffset + destClipRect.x + padding + textMetrics.width / 2,
+      edgeOffset +
+        destClipRect.y +
+        boxHeight / 2 +
+        (textMetrics.actualBoundingBoxAscent -
+          textMetrics.actualBoundingBoxDescent) /
+          2,
     ); // Adjust for padding and text baseline
 
     if (isRectangleVisible) {

@@ -3,6 +3,12 @@ import { Rect } from '../recorder/RecorderTypes';
 
 export type Point = { x: number; y: number };
 
+enum ZoomMode {
+  Fit,
+  Zoom,
+  Maximize,
+}
+
 export interface VideoScaling {
   destX: number; /// X offset in dest canvas units of image
   destY: number; /// Y offset in dest canvas units of image
@@ -16,6 +22,7 @@ export interface VideoScaling {
   pixScale: number; /// convert canvas pixels to src pixels
   zoom: number; /// zoom factor
   drawableRect: Rect; // Native units where we will be drawing images
+  zoomMode: ZoomMode;
 }
 
 export const [useVideoScaling, setVideoScaling, getVideoScaling] =
@@ -32,4 +39,5 @@ export const [useVideoScaling, setVideoScaling, getVideoScaling] =
     pixScale: 1,
     zoom: 1,
     drawableRect: { x: 0, y: 0, width: 1, height: 1 },
+    zoomMode: ZoomMode.Fit,
   });

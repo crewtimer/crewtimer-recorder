@@ -130,33 +130,18 @@ export const drawSvgIcon = (
   }
 };
 
-export const translateSrcCanvas2DestCanvas = (
-  srcPoint: Point,
-  scalingArg?: VideoScaling,
-): Point => {
-  const scaling = scalingArg || getVideoScaling();
-  const translatedX =
-    scaling.destX + (srcPoint.x * scaling.scaledWidth) / scaling.srcWidth;
-  const translatedY =
-    scaling.destY + (srcPoint.y * scaling.scaledHeight) / scaling.srcHeight;
-  return { x: translatedX, y: translatedY };
+export const translateSrcCanvas2DestCanvas = (srcPoint: Point): Point => {
+  const { destX, destY, pixScale } = getVideoScaling();
+  return { x: destX + srcPoint.x * pixScale, y: destY + srcPoint.y * pixScale };
 };
 
-export const translateDestCanvas2SrcCanvas = (
-  srcPoint: Point,
-  scalingArg?: VideoScaling,
-): Point => {
-  const videoScaling = scalingArg || getVideoScaling();
-  const translatedX =
-    (videoScaling.srcWidth * (srcPoint.x - videoScaling.drawableRect.x)) /
-    videoScaling.drawableRect.width;
-  const translatedY =
-    (videoScaling.srcHeight * (srcPoint.y - videoScaling.drawableRect.y)) /
-    videoScaling.drawableRect.height;
-  // translatedX = Math.min(Math.max(0, translatedX), videoScaling.srcWidth);
-  // translatedY = Math.min(Math.max(0, translatedY), videoScaling.srcHeight);
+export const translateDestCanvas2SrcCanvas = (srcPoint: Point): Point => {
+  const { destX, destY, pixScale } = getVideoScaling();
 
-  return { x: translatedX, y: translatedY };
+  return {
+    x: (srcPoint.x - destX) / pixScale,
+    y: (srcPoint.y - destY) / pixScale,
+  };
 };
 
 export default generateTestPattern;
