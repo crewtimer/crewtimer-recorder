@@ -1,6 +1,6 @@
 {
   "name": "crewtimer-video-recorder",
-  "version": "1.0.8",
+  "version": "1.0.10",
   "description": "An NDI video recorder for use with CrewTimer Video Review",
   "license": "MIT",
   "author": {
@@ -15,7 +15,7 @@
     "link-modules": "node -r ts-node/register ../../.erb/scripts/link-modules.ts"
   },
   "dependencies": {
-    "crewtimer_video_recorder": "../../native/recorder/"
+    "crewtimer_video_recorder": "../../native/recorder"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.6.0"

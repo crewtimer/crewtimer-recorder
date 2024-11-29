@@ -1,5 +1,77 @@
 # CrewTimer Video Recorder
 
+An electron native module for recording video for use with CrewTimer.  The package uses 'prebuild' to build native versions and store them in github releases so projects which use this module do not have to build the module.
+
+## Toolchains
+
+Building this native module on windows requires building both opencv and ffmpeg from source to allow static linking to the C++ code.  This requires build tools and a few custom scripts.
+
+### MacOS Toolchain
+
+On MacOS, the following brew modules are required to be installed.
+
+Install brew from [brew.sh](https://brew.sh)
+
+```bash
+brew install nvm
+brew install nasm
+brew install yasm
+brew install pkg-config
+brew install cmake
+```
+
+### Windows Toolchain
+
+A unix like environment is needed to build ffmpeg and opencv.  Cygwin is used to establish a unix-like environment.  Install the following:
+
+- [nvm for windows](https://github.com/coreybutler/nvm-windows/releases)
+- [git for windows](https://gitforwindows.org/)
+- [Visual Studio Community]() with C++ addon
+- [cmake](https://cmake.org/download/)
+- Python.  Just type `python` on windows to get prompted to install. It is installed already on macos.
+- [Cygwin 64 bit](https://www.cygwin.com/install.html).  Add 'yasm' and 'make' modules.
+
+Either check out the git repo or if in a Macos Parallels Desktop, map a network drive to share the git repo.
+
+In windows explorer, navigate to the scripts/ folder and double click on the Cygwin-vstudio.bat file.  This will open a bash terminal with the visual studio tools available from the command line.
+
+## Building the prebuilt binary
+
+Set up nvm/node:
+
+```bash
+nvm install 18
+nvm use 18
+npm i -g yarn
+```
+
+Build ffmpeg and opencv:
+
+```bash
+cd crewtimer-video-review/native/ffreader
+./scripts/build-opencv.sh
+./scripts/build-ffmpeg.sh
+```
+
+Build the module and upload to github:
+
+```bash
+yarn install
+yarn prebuild
+```
+
+The result is placed into a file such as prebuilds/crewtimer_video_reader-v1.0.2-napi-v6-win32-x64.tar.gz.
+
+The `yarn prebuild` command will also upload the binary module to github if a ~/.prebuildrc file with a github token is present such as 
+
+```txt
+upload=ghp_kQ04DpisXo2hTiLt2syssyssysysysysysy
+token=ghp_kQ04DpisXo2hTiLt2syssyssysysysysysy
+```
+
+Optionally manually upload the tar.gz file to [github releases](https://github.com/crewtimer/crewtimer-video-review/releases).
+
+
 ## Building standalone console recorder
 
 On mac: ```mkdir build && cd build && cmake .. && make```
@@ -23,28 +95,6 @@ make
 ## Macos tweaks
 
 Increase kernel udp buffer size: ```sudo sysctl -w net.inet.udp.maxdgram=4000000```
-
-## Making a new prebuilt on windows
-
-First, ensure that ffmpeg has been built by following the prior section instructions.
-
-Open a shell via C:\cygwin64\Cygwin.bat.  Alternatively, open a Visual Studio 2022 x64 Native Tools Command Prompt.
-
-```bash
-cd c:/Users/glenne/git/crewtimer-recorder/native/recorder
-rm -rf node_modules build # start from scratch
-rm yarn.lock # removes an error about stringWidth libraries
-yarn install # The final step of the install will fail where it tries to get prebuilt binaries.  We'll build our own next
-yarn prebuild # This will likely fail on the final step where it tries to upload to github releases
-```
-
-If you get an error about a stringWidth require, do the following: `rm -rf node_modules yarn.lock && yarn install`.  A conflict exists between two string packages and an install without a yarn.lock will succeed.
-
-The result is placed into a file such as prebuilds/crewtimer_recorder-v1.0.2-napi-v6-win32-x64.tar.gz.  It will also attempt to upload it to github releases.  This file can also be copied to a similar directory on a mac and uploaded from there via `yarn uploadall`.
-
-If it creates a file with something like v94 instead of v6, this is not what you want and a script got the wrong napi version.  Try also removing the build directory - `rm -rf node_modules yarn.lock build && yarn install`.
-
-Uploading requires a GITHUB_TOKEN env variable to be set to grant permission.
 
 ## NDI Cameras
 

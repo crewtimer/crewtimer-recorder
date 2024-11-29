@@ -21,27 +21,23 @@
       "conditions": [
         ['OS=="mac"', {
           "include_dirs": [
-              "/Users/glenne/ffmpeg-built-mac/include",
+              "./lib-build/ffmpeg-static-mac/include",
               "/Library/NDI\ SDK\ for\ Apple/include/",
             ],
           "link_settings": {
             "libraries": [
-                "/Users/glenne/ffmpeg-built-mac/lib/libavcodec.a",
-                "/Users/glenne/ffmpeg-built-mac/lib/libavdevice.a",
-                "/Users/glenne/ffmpeg-built-mac/lib/libavfilter.a",
-                "/Users/glenne/ffmpeg-built-mac/lib/libavformat.a",
-                "/Users/glenne/ffmpeg-built-mac/lib/libavutil.a",
-                "/Users/glenne/ffmpeg-built-mac/lib/libswresample.a",
-                "/Users/glenne/ffmpeg-built-mac/lib/libswscale.a",
-                "/usr/local/lib/libndi.dylib",
-                "-framework VideoToolbox",
-                "-framework AudioToolbox",
-                "-framework CoreMedia",
-                "-framework CoreVideo",
-                "-framework CoreServices",
-                "-framework CoreFoundation"],
-
-            'library_dirs': ['/Users/glenne/ffmpeg-built-mac/lib']
+              "../lib-build/ffmpeg-static-mac/lib/libavcodec.a",
+              "../lib-build/ffmpeg-static-mac/lib/libavformat.a",
+              "../lib-build/ffmpeg-static-mac/lib/libavutil.a",
+              "../lib-build/ffmpeg-static-mac/lib/libswscale.a",
+              "../lib/libndi.dylib",
+              "-framework VideoToolbox",
+              "-framework AudioToolbox",
+              "-framework CoreMedia",
+              "-framework CoreVideo",
+              "-framework CoreServices",
+              "-framework CoreFoundation"],
+            'library_dirs': ['../lib-build/ffmpeg-static-mac/lib','../lib']
           },
           'xcode_settings': {
             'GCC_ENABLE_CPP_EXCEPTIONS': 'YES',
@@ -51,20 +47,22 @@
 
       ['OS=="win"', {
         "include_dirs": [
-          "y:/ffmpeg-built-win/include",
-          "C:/Program Files/NDI/NDI 5 SDK/Include"
+          "./lib-build/ffmpeg-static-win/include",
+          "C:/Program Files/NDI/NDI 5 SDK/Include",
+          "C:/Program Files (x86)/NDI/NDI 5 SDK/Include",
+           "C:/Program Files/NDI/NDI 6 SDK/Include",
+          "C:/Program Files (x86)/NDI/NDI 6 SDK/Include"
         ],
         "link_settings": {
             "libraries": [
-                "y:/ffmpeg-built-win/lib/libavcodec.a",
-                "y:/ffmpeg-built-win/lib/libavformat.a",
-                "y:/ffmpeg-built-win/lib/libavutil.a",
-                "y:/ffmpeg-built-win/lib/libswscale.a",
-                "y:/ffmpeg-built-win/lib/libswresample.a",
-                "Processing.NDI.Lib.x64.lib",
-                "Bcrypt.lib", "Mfuuid.lib", "Strmiids.lib"
+              "../lib-build/ffmpeg-static-win/lib/libavcodec.a",
+              "../lib-build/ffmpeg-static-win/lib/libavformat.a",
+              "../lib-build/ffmpeg-static-win/lib/libavutil.a",
+              "../lib-build/ffmpeg-static-win/lib/libswscale.a",
+              "../lib/Processing.NDI.Lib.x64.lib",
+              "Bcrypt.lib", "Mfuuid.lib", "Strmiids.lib"
             ],
-          'library_dirs': ['y:/ffmpeg-built-win/lib', "C:/Program Files/NDI/NDI 5 SDK/lib/x64"]
+          'library_dirs': ["../lib-build/ffmpeg-static-win/staticlib","../lib"]
           }
         }],
       ],

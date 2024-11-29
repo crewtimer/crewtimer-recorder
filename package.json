@@ -38,10 +38,11 @@
     "build:dll": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack --config ./.erb/configs/webpack.config.renderer.dev.dll.ts",
     "build:main": "cross-env NODE_ENV=production TS_NODE_TRANSPILE_ONLY=true webpack --config ./.erb/configs/webpack.config.main.prod.ts",
     "build:renderer": "cross-env NODE_ENV=production TS_NODE_TRANSPILE_ONLY=true webpack --config ./.erb/configs/webpack.config.renderer.prod.ts",
-    "postinstall": "ts-node .erb/scripts/check-native-dep.js && electron-builder install-app-deps && npm run build:dll",
+    "postinstall": "yarn copy:ndi && ts-node .erb/scripts/check-native-dep.js && electron-builder install-app-deps && npm run build:dll",
     "lint": "cross-env NODE_ENV=development eslint . --ext .js,.jsx,.ts,.tsx",
     "package": "ts-node ./.erb/scripts/clean.js dist && npm run build && electron-builder build --publish never && npm run build:dll",
     "rebuild": "electron-rebuild --parallel --types prod,dev,optional --module-dir release/app",
+    "copy:ndi": "cp native/recorder/lib/libndi.dylib 'node_modules/electron/dist/Electron.app/Contents/Frameworks/Electron Framework.framework/Versions/A/Libraries'",
     "start": "ts-node ./.erb/scripts/check-port-in-use.js && npm run start:renderer",
     "start:main": "cross-env NODE_ENV=development electronmon -r ts-node/register/transpile-only .",
     "start:preload": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack --config ./.erb/configs/webpack.config.preload.dev.ts",
@@ -207,7 +208,8 @@
       "target": {
         "target": "default",
         "arch": [
-          "x64"
+          "x64",
+          "arm64"
         ]
       },
       "type": "distribution",
@@ -217,7 +219,7 @@
       "gatekeeperAssess": false,
       "extraFiles": [
         {
-          "from": "resources/",
+          "from": "native/recorder/lib",
           "to": "Frameworks",
           "filter": [
             "libndi.dylib"
@@ -240,12 +242,15 @@
       ]
     },
     "win": {
-      "target": [
-        "nsis"
-      ],
+      "target": {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      },
       "extraFiles": [
         {
-          "from": "resources/Processing.NDI.Lib.x64.dll",
+          "from": "native/recorder/lib/Processing.NDI.Lib.x64.dll",
           "to": "Processing.NDI.Lib.x64.dll"
         }
       ]

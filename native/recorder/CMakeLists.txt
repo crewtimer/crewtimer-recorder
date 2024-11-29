@@ -72,8 +72,8 @@ include_directories(
     /home/glenne/ndi/NDI/include
     /usr/include/ndi
     /usr/local/opt/ndi
-    /Library/NDI\ SDK\ for\ Apple/include/
-    "C:/Program\ Files/NDI/NDI\ 5\ SDK/Include"
+    "/Library/NDI SDK for Apple/include/"
+    "C:/Program Files/NDI/NDI 5 SDK/Include"
 )
 
 # Fetch nlohmann/json from GitHub
