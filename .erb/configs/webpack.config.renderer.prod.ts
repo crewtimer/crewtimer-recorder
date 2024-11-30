@@ -47,7 +47,8 @@ const configuration: webpack.Configuration = {
             options: {
               modules: true,
               sourceMap: true,
-              importLoaders: 1,
+              importLoaders: 1,              // Use the modern Dart Sass API explicitly
+              implementation: require('sass'),
             },
           },
           'sass-loader',
@@ -72,6 +73,25 @@ const configuration: webpack.Configuration = {
       {
         test: /\.md$/,
         use: 'raw-loader',
+      },
+      // SVG
+      {
+        test: /\.xxsvg$/,
+        use: [
+          {
+            loader: '@svgr/webpack',
+            options: {
+              prettier: false,
+              svgo: false,
+              svgoConfig: {
+                plugins: [{ removeViewBox: false }],
+              },
+              titleProp: true,
+              ref: true,
+            },
+          },
+          'file-loader',
+        ],
       },
     ],
   },
