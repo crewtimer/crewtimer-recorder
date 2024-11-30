@@ -54,7 +54,8 @@
     "winbuild": "npm run build && node_modules/.bin/electron-builder --win",
     "macbuild": "npm run build && node_modules/.bin/electron-builder --mac",
     "macx64build": "npm run build && node_modules/.bin/electron-builder --mac --arch x64",
-    "kill": "kill -9 `lsof -i:1213 -t`"
+    "kill": "kill -9 `lsof -i:1213 -t`",
+    "build:native": "cd release/app && yarn add ../../native/recorder"
   },
   "browserslist": [
     "extends browserslist-config-erb"

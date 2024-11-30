@@ -7,6 +7,7 @@ FramePtr cropFrame(const FramePtr &frame, int cropX, int cropY, int cropWidth,
                    int cropHeight) {
   if (!frame || cropX < 0 || cropY < 0 || cropX + cropWidth > frame->xres ||
       cropY + cropHeight > frame->yres) {
+        std::cerr << "Invalid crop.  frame: " << !frame << " cropX < 0:" << (cropX < 0) << " cropY < 0:" << (cropY < 0) << "cropX + cropWidth > frame->xres:" << (cropX + cropWidth > frame->xres) << " cropY + cropHeight > frame->yres:" << (cropY + cropHeight > frame->yres) <<  " xres: " << frame->xres << " yres: " << frame->yres << std::endl;
     return nullptr; // Return null if invalid crop dimensions
   }
 

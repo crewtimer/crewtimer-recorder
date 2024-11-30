@@ -136,6 +136,10 @@ void FrameProcessor::processFrames() {
       auto video_frame = frameQueue.front();
       frameQueue.pop();
       lock.unlock();
+      if (video_frame->xres == 0 || video_frame->yres == 0) {
+         std::cerr << "Null frame received" << std::endl;
+         continue;
+      }
       const auto fps =
           (float)video_frame->frame_rate_N / (float)video_frame->frame_rate_D;
 
@@ -188,12 +192,17 @@ void FrameProcessor::processFrames() {
         statusInfo.fps = fps;
         statusInfo.width = video_frame->xres;
         statusInfo.height = video_frame->yres;
+
         pxCropArea.x = std::round((cropArea.x * (video_frame->xres) / 4)) * 4;
-        pxCropArea.width =
-            std::round((cropArea.width * (video_frame->xres) / 4)) * 4;
+        int cropWidth = cropArea.width*video_frame->xres;
+        cropWidth = std::min(video_frame->xres - pxCropArea.x, cropWidth);
+        pxCropArea.width = int(cropWidth / 4) * 4; // trunc to mult of 4
+
         pxCropArea.y = std::round((cropArea.y * (video_frame->yres) / 4)) * 4;
-        pxCropArea.height =
-            std::round((cropArea.height * (video_frame->yres) / 4)) * 4;
+        int cropHeight = cropArea.height*video_frame->yres;
+        cropHeight = std::min(video_frame->yres - pxCropArea.y, cropHeight);
+        pxCropArea.height = int(cropHeight / 4) * 4; // trunc to mult of 4
+
         std::cout << "cropArea: " << cropArea.x << "," << cropArea.y << ","
                   << cropArea.width << "," << cropArea.height << std::endl;
 
@@ -221,17 +230,24 @@ void FrameProcessor::processFrames() {
 
       auto cropped = video_frame;
       // std::cerr << "vstride: " << std::dec << video_frame->stride
-      //           << "ptr: " << std::hex << (void *)(video_frame->data)
+      //           << "ptr: " << std::hex << (void *)(video_frame->data) << std::dec
       //           << std::endl;
       if (pxCropArea.width && pxCropArea.height) {
-        // std::cout << "Cropping frame (" << cropArea.x << "," << cropArea.y
-        //           << ")" << cropArea.width << "x" << cropArea.height
+        // std::cout << "Cropping frame (" << pxCropArea.x << "," << pxCropArea.y
+        //           << ")" << pxCropArea.width << "x" << pxCropArea.height
         //           << std::endl;
         cropped = cropFrame(video_frame, pxCropArea.x, pxCropArea.y,
                             pxCropArea.width, pxCropArea.height);
 
+        if (!cropped) {
+           std::cout << "Crop (" << pxCropArea.x << "," << pxCropArea.y
+                  << ")" << pxCropArea.width << "x" << pxCropArea.height << " from frame=" << video_frame->xres << "x" << video_frame->yres
+                  << std::endl;
+           std::cerr << "Frame crop failed." << std::endl;
+           cropped = video_frame; // continue with full frame
+        }
         // std::cerr << " stride: " << std::dec << cropped->stride
-        //           << "ptr: " << std::hex << (void *)(cropped->data)
+        //           << "ptr: " << std::hex << (void *)(cropped->data) << std::dec
         //           << std::endl;
         encodeTimestamp(cropped->data, cropped->stride, video_frame->timestamp);
       }
