@@ -107,5 +107,6 @@
     "package-lock.json": true,
     "*.{css,sass,scss}.d.ts": true
   },
-  "cmake.sourceDirectory": "/Users/glenne/git/crewtimer-recorder/native/recorder"
+  "cmake.sourceDirectory": "/Users/glenne/git/crewtimer-recorder/native/recorder",
+  "editor.formatOnSave": true
 }

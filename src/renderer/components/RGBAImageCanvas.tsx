@@ -1,12 +1,12 @@
 /* eslint-disable no-bitwise */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Box } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
-import CheckIcon from '@mui/icons-material/Check';
+import CropIcon from '@mui/icons-material/Crop';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter';
 import {
   getGuide,
+  getIsRecording,
   getRecordingProps,
   useFrameGrab,
   useGuide,
@@ -33,6 +33,23 @@ import {
 import { GrabFrameResponse, Rect } from '../recorder/RecorderTypes';
 import { showErrorDialog } from './ErrorDialog';
 import CanvasIcon from './CanvasIcon';
+import retriggerableOneShot from './RetriggerableOneshot';
+
+const DefaultCrop: Rect = {
+  x: 0,
+  y: 0,
+  width: 1,
+  height: 1,
+};
+
+const isDefaultCrop = (r: Rect) => {
+  return (
+    r.x === DefaultCrop.x &&
+    r.y === DefaultCrop.y &&
+    r.width === DefaultCrop.width &&
+    (r.height = DefaultCrop.height)
+  );
+};
 
 /**
  * Convert a timestamp in milliseconds to a string formatted as HH:MM:SS.MMM
@@ -176,9 +193,11 @@ enum ZoomMode {
 const applyZoom = ({
   center,
   zoomMode,
+  cropRect,
 }: {
   center?: Point;
   zoomMode: ZoomMode;
+  cropRect?: Rect;
 }) => {
   const { srcWidth, srcHeight, destWidth, destHeight } = getVideoScaling();
   const baseScale = Math.min(destWidth / srcWidth, destHeight / srcHeight);
@@ -198,16 +217,19 @@ const applyZoom = ({
     case ZoomMode.Maximize:
       {
         // Center and maximize the crop region
-        const { cropArea } = getRecordingProps();
+        if (!cropRect) {
+          const { cropArea } = getRecordingProps();
+          cropRect = cropArea;
+        }
 
         // Center of cropArea
-        srcPoint.x = (cropArea.x + cropArea.width / 2) * srcWidth;
-        srcPoint.y = (cropArea.y + cropArea.height / 2) * srcHeight;
+        srcPoint.x = (cropRect.x + cropRect.width / 2) * srcWidth;
+        srcPoint.y = (cropRect.y + cropRect.height / 2) * srcHeight;
 
         // Retain max scale while retaining aspect ratio
         const maxScale = Math.min(
-          destWidth / (cropArea.width * srcWidth),
-          destHeight / (cropArea.height * srcHeight),
+          destWidth / (cropRect.width * srcWidth),
+          destHeight / (cropRect.height * srcHeight),
         );
 
         // Compute scale and zoom
@@ -294,19 +316,38 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   const [clip, setClip] = useState<Rect>(recordingProps.cropArea);
   const draggingCornerRef = useRef<string | null>(null);
   const [draggingCorner, setDraggingCorner] = useState<string | null>(null);
-  const [isRectangleVisible, setIsRectangleVisible] = useState(false);
+  const [isAdjustingCrop, setIsAdjustingCrop] = useState(false);
   const ignoreClick = useRef(false);
   const srcCenter = useRef<Point>({ x: divwidth / 2, y: divheight / 2 });
-  const [editImage, setEditImage] = useState<HTMLImageElement | null>(null);
-  const [checkImage, setCheckImage] = useState<HTMLImageElement | null>(null);
+  const [cropImage, setEditImage] = useState<HTMLImageElement | null>(null);
   const [fullscreenImage, setFullscreenImage] =
     useState<HTMLImageElement | null>(null);
   const [snapToCenterImage, setSnapToCenterImage] =
     useState<HTMLImageElement | null>(null);
+  const [applyChanges] = retriggerableOneShot((cropArea: Rect) => {
+    const oldGuide = getSrcGuideCoords();
+    setRecordingProps((prior) => ({ ...prior, cropArea }));
+    // Updte the guide position so it doesn't move when the crop changes
+    const newGuide = getSrcGuideCoords();
+    const dx = Math.round(oldGuide.pt1.x - newGuide.pt1.x);
+    setGuide((prevGuide) => {
+      return {
+        pt1: prevGuide.pt1 + dx,
+        pt2: prevGuide.pt2 + dx,
+      };
+    });
+    if (getIsRecording()) {
+      stopRecording().catch(showErrorDialog);
+      setTimeout(() => startRecording().catch(showErrorDialog), 100);
+    }
+  }, 2000);
 
   useEffect(() => {
     draggingCornerRef.current = draggingCorner;
   }, [draggingCorner]);
+  useEffect(() => {
+    setIsAdjustingCrop(clip.width !== 1 || clip.height !== 1);
+  }, [clip, setIsAdjustingCrop]);
 
   if (frame?.data) {
     lastGoodFrame = frame;
@@ -317,12 +358,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   useEffect(() => {
     let crop = { ...recordingProps.cropArea };
     if (crop.width === 0 || crop.height === 0) {
-      crop = {
-        x: 0,
-        y: 0,
-        width: 1,
-        height: 1,
-      };
+      crop = { ...DefaultCrop };
     }
     setClip(crop);
   }, [recordingProps.cropArea]);
@@ -344,69 +380,53 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
 
   // Check if the point is within a rectangle corner
   const isInCorner = (x: number, y: number) => {
-    const rect = getNativeClip(clip);
+    const cropRect = getNativeClip(clip);
     const cornerSize = 10;
-    const { pixScale, drawableRect } = getVideoScaling();
+
+    const nativeGuide = getNativeGuideCoords();
     const corners = [
-      { name: 'tl', x: rect.x, y: rect.y },
-      { name: 'tr', x: rect.x + rect.width, y: rect.y },
-      { name: 'bl', x: rect.x, y: rect.y + rect.height },
-      { name: 'br', x: rect.x + rect.width, y: rect.y + rect.height },
+      { name: 'tl', x: cropRect.x, y: cropRect.y },
+      { name: 'tr', x: cropRect.x + cropRect.width, y: cropRect.y },
+      { name: 'bl', x: cropRect.x, y: cropRect.y + cropRect.height },
+      {
+        name: 'br',
+        x: cropRect.x + cropRect.width,
+        y: cropRect.y + cropRect.height,
+      },
       {
         name: 'ft',
-        x: guide.pt1 * pixScale + rect.x + rect.width / 2,
-        y: Math.max(drawableRect.y, rect.y),
+        x: nativeGuide.pt1.x,
+        y: cropRect.y,
       },
       {
         name: 'fb',
-        x: guide.pt2 * pixScale + rect.x + rect.width / 2,
-        y: Math.min(drawableRect.y + drawableRect.height, rect.y + rect.height),
+        x: nativeGuide.pt2.x,
+        y: cropRect.y + cropRect.height,
       },
     ];
 
-    return corners.find(
+    const corner = corners.find(
       (corner) =>
         x >= corner.x - cornerSize &&
         x <= corner.x + cornerSize &&
         y >= corner.y - cornerSize &&
         y <= corner.y + cornerSize,
     );
+    return corner;
   };
 
   const handleMaximizeIconClick = () => {
     if (canvasRef.current) {
-      const maxClip = {
-        x: 0,
-        y: 0,
-        width: 1,
-        height: 1,
-      };
-      setClip(maxClip);
-      setRecordingProps((prior) => ({ ...prior, cropArea: maxClip }));
-    }
-  };
-
-  const handleEditIconClick = () => {
-    if (isRectangleVisible) {
-      const guide1 = getSrcGuideCoords();
-      setRecordingProps((prior) => ({ ...prior, cropArea: clip }));
-      // Updte the guide position so it doesn't move when the crop changes
-      const guide2 = getSrcGuideCoords();
-      const dx = Math.round(guide1.pt1.x - guide2.pt1.x);
-      setGuide((prevGuide) => {
-        return {
-          pt1: prevGuide.pt1 + dx,
-          pt2: prevGuide.pt2 + dx,
-        };
-      });
-      if (isRecording) {
-        stopRecording().catch(showErrorDialog);
-        setTimeout(() => startRecording().catch(showErrorDialog), 100);
+      const maxClip = { ...DefaultCrop };
+      if (isDefaultCrop(clip) && !isAdjustingCrop) {
+        setIsAdjustingCrop(true);
+      } else {
+        setClip(maxClip);
+        setRecordingProps((prior) => ({ ...prior, cropArea: maxClip }));
+        setIsAdjustingCrop(!isAdjustingCrop);
+        applyChanges(maxClip);
       }
-    } else {
-      setClip(recordingProps.cropArea);
     }
-    setIsRectangleVisible(!isRectangleVisible);
   };
 
   const isInIcon = (
@@ -430,8 +450,6 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
 
     // Icon positions relative to the canvas width
     const { drawableRect } = videoScaling;
-    const toggleIconX =
-      drawableRect.x + drawableRect.width - 2 * (iconSize + iconPadding);
     const maxSizeIconX =
       drawableRect.x + drawableRect.width - (iconSize + iconPadding);
     if (e.button === 2) {
@@ -442,21 +460,27 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         y: offsetY,
       }); // mouse pos in src units
       let { zoomMode } = getVideoScaling();
-      zoomMode =
-        zoomMode === ZoomMode.Fit
-          ? ZoomMode.Maximize
-          : zoomMode === ZoomMode.Maximize
-            ? ZoomMode.Zoom
-            : ZoomMode.Fit;
-
+      switch (zoomMode) {
+        case ZoomMode.Fit:
+          if (isDefaultCrop(clip)) {
+            zoomMode = ZoomMode.Zoom;
+          } else {
+            zoomMode = ZoomMode.Maximize;
+          }
+          break;
+        case ZoomMode.Maximize:
+          zoomMode = ZoomMode.Zoom;
+          break;
+        case ZoomMode.Zoom:
+        default:
+          zoomMode = ZoomMode.Fit;
+          break;
+      }
       applyZoom({
         center,
         zoomMode,
+        cropRect: clip,
       });
-    } else if (isInIcon(offsetX, offsetY, toggleIconX, iconPadding)) {
-      ignoreClick.current = true;
-      e.stopPropagation();
-      handleEditIconClick();
     } else if (isInIcon(offsetX, offsetY, maxSizeIconX, iconPadding)) {
       ignoreClick.current = true;
       e.stopPropagation();
@@ -468,9 +492,10 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         pt1: 0,
         pt2: 0,
       });
-    } else if (isRectangleVisible) {
+    } else {
       const corner = isInCorner(offsetX, offsetY);
-      if (corner) {
+      // Only enable dragging if we're adjusting crop already or it's the finish line that is selected
+      if (corner && (isAdjustingCrop || corner?.name.startsWith('f'))) {
         ignoreClick.current = true;
         e.stopPropagation();
         setDraggingCorner(corner.name);
@@ -498,9 +523,12 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         draggingCornerRef.current === 'fb'
       ) {
         const rect = getNativeClip(clip);
+        const storedRect = getNativeClip(getRecordingProps().cropArea);
+
         // finish is always aligned on a pixel.
         const finishX = Math.round(
-          (mouseOffsetX - rect.x - rect.width / 2) / videoScaling.pixScale,
+          (mouseOffsetX - storedRect.x - storedRect.width / 2) /
+            videoScaling.pixScale,
         );
 
         setGuide((prevGuide) => {
@@ -513,6 +541,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
                 : finishX,
           };
         });
+        applyChanges(clip);
       } else {
         offsetX -= videoScaling.destX;
         offsetY -= videoScaling.destY;
@@ -552,6 +581,8 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
           newRect.y = clipValue(newRect.y);
           newRect.width = clipValue(newRect.width);
           newRect.height = clipValue(newRect.height);
+
+          applyChanges(newRect);
           return newRect;
         });
       }
@@ -668,18 +699,15 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       const nativeGuide = getNativeGuideCoords();
       const from = nativeGuide.pt1;
       const to = nativeGuide.pt2;
-      from.y = Math.max(from.y, videoScaling.drawableRect.y);
-      to.y = Math.min(
-        to.y,
-        videoScaling.drawableRect.y + videoScaling.drawableRect.height,
-      );
+      from.y = destClipRect.y;
+      to.y = destClipRect.y + destClipRect.height;
       ctx.beginPath();
       ctx.moveTo(from.x, from.y);
       ctx.lineTo(to.x, to.y);
       ctx.strokeStyle = 'red';
       ctx.lineWidth = 1;
       ctx.stroke();
-      if (isRectangleVisible) {
+      if (true || isAdjustingCrop) {
         drawBox(ctx, from.x, from.y, 12, 't');
         drawBox(ctx, to.x, to.y, 12, 'b');
       }
@@ -726,19 +754,15 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     const iconSize = 24;
     const iconPadding = 10;
     const { drawableRect } = videoScaling;
-    const toggleIconX =
-      drawableRect.x + drawableRect.width - 2 * (iconSize + iconPadding);
     const maxSizeIconX =
       drawableRect.x + drawableRect.width - (iconSize + iconPadding);
 
     drawSvgIcon(
       ctx,
-      isRectangleVisible ? checkImage : editImage,
-      toggleIconX,
+      isAdjustingCrop ? fullscreenImage : cropImage,
+      maxSizeIconX,
       iconPadding,
     );
-
-    drawSvgIcon(ctx, fullscreenImage, maxSizeIconX, iconPadding);
     drawSvgIcon(
       ctx,
       snapToCenterImage,
@@ -791,8 +815,8 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
           2,
     ); // Adjust for padding and text baseline
 
-    if (isRectangleVisible) {
-      // Draw selection rectangle
+    if (isAdjustingCrop) {
+      // Draw finish selection rectangle
       ctx.strokeStyle = '#ffffffb0';
       ctx.lineWidth = 3;
       ctx.strokeRect(
@@ -846,7 +870,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       );
     }
   }, [
-    isRectangleVisible,
+    isAdjustingCrop,
     frame,
     clip,
     divwidth,
@@ -854,8 +878,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     guide,
     isRecording,
     settings.showFinishGuide,
-    editImage,
-    checkImage,
+    cropImage,
     fullscreenImage,
     snapToCenterImage,
     videoScaling,
@@ -871,16 +894,10 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       }}
     >
       <CanvasIcon
-        icon={EditIcon}
+        icon={CropIcon}
         iconSize={24}
         color="white"
         setImage={setEditImage}
-      />
-      <CanvasIcon
-        icon={CheckIcon}
-        iconSize={24}
-        color="white"
-        setImage={setCheckImage}
       />
       <CanvasIcon
         icon={FullscreenIcon}

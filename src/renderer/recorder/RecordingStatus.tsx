@@ -6,6 +6,7 @@ import {
   setRecordingStatus,
   setIsRecording,
   useRecordingStatus,
+  getRecordingProps,
 } from './RecorderData';
 import { DefaultRecordingStatus } from './RecorderTypes';
 import { showErrorDialog } from '../components/ErrorDialog';
@@ -31,6 +32,7 @@ const checkStatus = () => {
 
 const RecordingStatus: React.FC = () => {
   const [recordingStatus] = useRecordingStatus();
+  const { cropArea } = getRecordingProps();
   const isRecording = recordingStatus.recording;
   const seconds = formatTime(recordingStatus.recordingDuration);
 
@@ -42,6 +44,11 @@ const RecordingStatus: React.FC = () => {
       if (interval) clearInterval(interval);
     };
   }, []);
+
+  let cropText = '';
+  if (cropArea.width != 1 || cropArea.height != 1) {
+    cropText = ` -> ${Math.round((cropArea.width * recordingStatus.frameProcessor.width) / 4) * 4}x${Math.round((cropArea.height * recordingStatus.frameProcessor.height) / 4) * 4}`;
+  }
 
   return isRecording ? (
     <Stack direction="column">
@@ -55,8 +62,12 @@ const RecordingStatus: React.FC = () => {
       </Stack>
       {recordingStatus.frameProcessor.filename ? (
         <>
-          <Typography variant="body2">{`${recordingStatus.frameProcessor.filename}`}</Typography>
-          <Typography variant="body2">{`${recordingStatus.frameProcessor.width}x${recordingStatus.frameProcessor.height} ${recordingStatus.frameProcessor.fps} fps`}</Typography>
+          <Typography
+            sx={{ fontSize: 12 }}
+          >{`${recordingStatus.frameProcessor.filename}`}</Typography>
+          <Typography
+            sx={{ fontSize: 11 }}
+          >{`${recordingStatus.frameProcessor.width}x${recordingStatus.frameProcessor.height}${cropText} ${recordingStatus.frameProcessor.fps} fps`}</Typography>
         </>
       ) : null}
     </Stack>

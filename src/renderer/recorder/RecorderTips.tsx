@@ -1,4 +1,4 @@
-import EditIcon from '@mui/icons-material/Edit';
+import CropIcon from '@mui/icons-material/Crop';
 import CheckIcon from '@mui/icons-material/Check';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter';
@@ -13,12 +13,12 @@ const RecorderTips = () => {
         <Typography>Right click to zoom</Typography>
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <EditIcon />
-        <Typography>Edit finish line and crop region</Typography>
+        <CropIcon />
+        <Typography>Define crop region</Typography>
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <CheckIcon />
-        <Typography>Save edit changes</Typography>
+        <Typography>Apply crop region</Typography>
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <FullscreenIcon />
