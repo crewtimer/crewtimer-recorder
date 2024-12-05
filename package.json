@@ -52,7 +52,7 @@
     "start:renderer": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack serve --config ./.erb/configs/webpack.config.renderer.dev.ts",
     "test": "jest",
     "winbuild": "npm run build && node_modules/.bin/electron-builder --win",
-    "macbuild": "npm run build && node_modules/.bin/electron-builder --mac",
+    "macbuild": "npm run build && APPLE_KEYCHAIN_PROFILE=crewtimer-app-signing node_modules/.bin/electron-builder --mac",
     "macx64build": "npm run build && node_modules/.bin/electron-builder --mac --arch x64",
     "kill": "kill -9 `lsof -i:1213 -t`",
     "build:native": "cd release/app && yarn add ../../native/recorder"
@@ -206,11 +206,20 @@
     "files": [
       "dist",
       "node_modules",
-      "package.json"
+      "package.json",
+      "!node_modules/**/*.txt",
+      "!node_modules/**/*.cpp",
+      "!node_modules/**/*.c",
+      "!node_modules/**/*.hpp",
+      "!node_modules/**/*.h",
+      "!node_modules/**/bin/**",
+      "!node_modules/**/prebuilds/**",
+      "!node_modules/**/lib/**",
+      "!node_modules/**/scripts/**",
+      "!node_modules/**/lib-build/**/*"
     ],
     "mac": {
-      "sign": ".erb/scripts/notarize.js",
-      "notarize": false,
+      "notarize": {},
       "target": {
         "target": "default",
         "arch": [
