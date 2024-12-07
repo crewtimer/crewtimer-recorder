@@ -12,27 +12,21 @@
     "hot",
     "reload"
   ],
-  "homepage": "https://github.com/electron-react-boilerplate/electron-react-boilerplate#readme",
+  "homepage": "https://github.com/crewtimer/crewtimer-recorder/#readme",
   "bugs": {
-    "url": "https://github.com/electron-react-boilerplate/electron-react-boilerplate/issues"
+    "url": "https://github.com/crewtimer/crewtimer-recorder/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/electron-react-boilerplate/electron-react-boilerplate.git"
+    "url": "git+https://github.com/crewtimer/crewtimer-recorder.git"
   },
   "license": "MIT",
   "author": {
-    "name": "Electron React Boilerplate Maintainers",
-    "email": "electronreactboilerplate@gmail.com",
-    "url": "https://electron-react-boilerplate.js.org"
+    "name": "Glenn Engel",
+    "email": "glenne@crewtimer.com",
+    "url": "https://www.linkedin.com/in/glenn-engel-610a3625/"
   },
-  "contributors": [
-    {
-      "name": "Amila Welihinda",
-      "email": "amilajack@gmail.com",
-      "url": "https://github.com/amilajack"
-    }
-  ],
+  "contributors": [],
   "main": "./.erb/dll/main.bundle.dev.js",
   "scripts": {
     "build": "concurrently \"npm run build:main\" \"npm run build:renderer\"",
@@ -55,7 +49,9 @@
     "macbuild": "npm run build && APPLE_KEYCHAIN_PROFILE=crewtimer-app-signing node_modules/.bin/electron-builder --mac",
     "macx64build": "npm run build && node_modules/.bin/electron-builder --mac --arch x64",
     "kill": "kill -9 `lsof -i:1213 -t`",
-    "build:native": "cd release/app && yarn add ../../native/recorder"
+    "build:native": "cd release/app && yarn add ../../native/recorder",
+    "cleanbasic": "ts-node ./.erb/scripts/clean.js && rm -rf release/build",
+    "clean": "rm -rf .erb/node_modules .erb/dll node_modules src/node_modules release/build release/app/node_modules && yarn install"
   },
   "browserslist": [
     "extends browserslist-config-erb"
@@ -108,24 +104,24 @@
   },
   "dependencies": {
     "@electron/notarize": "^2.3.2",
+    "electron-debug": "^3.2.0",
+    "electron-log": "^5.1.2",
+    "electron-updater": "^6.1.8",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.3",
     "@emotion/react": "^11.11.4",
     "@emotion/styled": "^11.11.5",
     "@fontsource/roboto": "^5.0.13",
     "@mui/icons-material": "^5.15.15",
     "@mui/material": "^5.15.15",
     "crewtimer-common": "^1.0.14",
-    "electron-debug": "^3.2.0",
-    "electron-log": "^5.1.2",
     "electron-store": "^8.2.0",
-    "electron-updater": "^6.1.8",
     "firebase": "^9.9.0",
     "github-markdown-css": "^5.8.1",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
     "react-markdown": "^9.0.1",
     "react-markdown-css": "^1.0.2",
     "react-measure": "^2.5.2",
-    "react-router-dom": "^6.22.3",
     "react-usedatum": "^1.0.7",
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.0"
@@ -141,9 +137,7 @@
     "@types/node": "20.6.2",
     "@types/react": "^18.2.21",
     "@types/react-dom": "^18.2.7",
-    "@types/react-measure": "^2.0.12",
     "@types/react-test-renderer": "^18.0.1",
-    "@types/terser-webpack-plugin": "^5.0.4",
     "@types/webpack-bundle-analyzer": "^4.6.0",
     "@typescript-eslint/eslint-plugin": "^6.7.0",
     "@typescript-eslint/parser": "^6.7.0",
@@ -178,7 +172,6 @@
     "jest-environment-jsdom": "^29.7.0",
     "mini-css-extract-plugin": "^2.7.6",
     "prettier": "^3.0.3",
-    "raw-loader": "^4.0.2",
     "react-refresh": "^0.14.0",
     "react-test-renderer": "^18.2.0",
     "rimraf": "^5.0.1",
@@ -196,7 +189,10 @@
     "webpack-bundle-analyzer": "^4.9.1",
     "webpack-cli": "^5.1.4",
     "webpack-dev-server": "^4.15.1",
-    "webpack-merge": "^5.9.0"
+    "webpack-merge": "^5.9.0",
+    "@types/react-measure": "^2.0.12",
+    "@types/terser-webpack-plugin": "^5.0.4",
+    "raw-loader": "^4.0.2"
   },
   "build": {
     "productName": "CrewTimer Video Recorder",

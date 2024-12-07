@@ -100,6 +100,8 @@ Add firebase render filter in configs/webpack.config.renderer.dev.dll.ts:
  renderer: Object.keys(dependencies || {}).filter((it) => it !== 'firebase'),
 ```
 
+See [stackoverflow](https://stackoverflow.com/a/72220505/924369) for issue it resolves.
+
 ### Markdown md file support
 
 Add md file suffix as a raw-loader to the module.config section of webpack.config.renderer.\*.ts:
