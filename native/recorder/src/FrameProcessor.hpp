@@ -15,19 +15,23 @@
 /**
  * Class responsible for processing video frames.
  */
-class FrameProcessor {
+class FrameProcessor
+{
 
 public:
-  struct StatusInfo {
+  struct StatusInfo
+  {
     bool recording;
     std::string error;
     std::string filename;
     std::uint32_t width;
     std::uint32_t height;
     float fps;
+    std::uint32_t frameBacklog;
   };
 
-  struct Rectangle {
+  struct Rectangle
+  {
     int x;
     int y;
     int width;
@@ -36,7 +40,8 @@ public:
         : x(x), y(y), width(width), height(height) {}
   };
 
-  struct FRectangle {
+  struct FRectangle
+  {
     float x;
     float y;
     float width;
@@ -45,7 +50,8 @@ public:
         : x(x), y(y), width(width), height(height) {}
   };
 
-  struct Guide {
+  struct Guide
+  {
     float pt1;
     float pt2;
     Guide() : pt1(0), pt2(0) {}
@@ -99,13 +105,12 @@ private:
   uint64_t durationSecs;
   uint64_t nextStartTime = 0;
   std::atomic<bool> splitRequested;
-  std::queue<FramePtr> frameQueue; ///< Queue to hold the frames.
-  std::mutex queueMutex; ///< Mutex for synchronizing access to the frame queue.
+  std::queue<FramePtr> frameQueue;        ///< Queue to hold the frames.
+  std::mutex queueMutex;                  ///< Mutex for synchronizing access to the frame queue.
   std::condition_variable frameAvailable; ///< Condition variable to notify
                                           ///< when frames are available.
-  std::atomic<bool> running =
-      false; ///< Atomic flag to control the running state of threads.
-  std::thread processThread; ///< Threads for capturing and processing frames.
+  std::atomic<bool> running;              ///< Atomic flag to control the running state of threads.
+  std::thread processThread;              ///< Threads for capturing and processing frames.
   FramePtr lastFrame;
 
   // JSON file props

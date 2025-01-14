@@ -26,25 +26,29 @@ bool running;
 #ifdef _WIN32
 void daemonize() {}
 #else
-void daemonize() {
+void daemonize()
+{
   pid_t pid;
 
   // Fork off the parent process
   pid = fork();
 
-  if (pid < 0) {
+  if (pid < 0)
+  {
     exit(EXIT_FAILURE);
   }
 
   // If we got a good PID, exit the parent process
-  if (pid > 0) {
+  if (pid > 0)
+  {
     exit(EXIT_SUCCESS);
   }
 
   // At this point, we are in the child process
 
   // Create a new SID for the child process
-  if (setsid() < 0) {
+  if (setsid() < 0)
+  {
     exit(EXIT_FAILURE);
   }
 
@@ -60,15 +64,23 @@ void daemonize() {
 }
 #endif
 std::function<void()> stopHandler = []() {};
-void signalHandler(int signal) {
-  if (signal == SIGINT) {
-    std::cout << std::endl << "SIGINT received, shutting down" << std::endl;
-    if (stopHandler) {
-      std::cout << std::endl << "Calling stop handler" << std::endl;
+void signalHandler(int signal)
+{
+  if (signal == SIGINT)
+  {
+    std::cout << std::endl
+              << "SIGINT received, shutting down" << std::endl;
+    if (stopHandler)
+    {
+      std::cout << std::endl
+                << "Calling stop handler" << std::endl;
       stopHandler();
-      std::cout << std::endl << "Exiting program" << std::endl;
+      std::cout << std::endl
+                << "Exiting program" << std::endl;
       exit(0);
-    } else {
+    }
+    else
+    {
       exit(0);
     }
   }
@@ -76,11 +88,13 @@ void signalHandler(int signal) {
 
 void testopencv();
 
-void testrecorder(std::shared_ptr<VideoRecorder> recorder) {
+void testrecorder(std::shared_ptr<VideoRecorder> recorder)
+{
   std::cout << "testrecorder start" << std::endl;
   recorder->openVideoStream("./", "test", 640, 480, 30);
   const auto image = new uint8_t[640 * 480 * 3];
-  for (int pixel = 0; pixel < 640 * 480 * 3; pixel += 3) {
+  for (int pixel = 0; pixel < 640 * 480 * 3; pixel += 3)
+  {
     image[pixel] = pixel > 640 * 480 && pixel < 640 * 480 * 2 ? 255 : 0;
     image[pixel + 1] = pixel > 640 * 480 * 2 ? 255 : 0;
     image[pixel + 2] = 255;
@@ -94,7 +108,8 @@ void testrecorder(std::shared_ptr<VideoRecorder> recorder) {
   frame->frame_rate_N = 30;
   frame->frame_rate_D = 1;
   frame->pixelFormat = Frame::PixelFormat::BGR;
-  for (int i = 0; i < 30; i++) {
+  for (int i = 0; i < 30; i++)
+  {
     recorder->writeVideoFrame(frame);
   }
   recorder->stop();
@@ -103,7 +118,8 @@ void testrecorder(std::shared_ptr<VideoRecorder> recorder) {
 }
 
 std::shared_ptr<VideoController> recorder;
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
   std::shared_ptr<VideoRecorder> videoRecorder;
   std::signal(SIGINT, signalHandler);
 
@@ -123,18 +139,21 @@ int main(int argc, char *argv[]) {
   std::string defaultRecorder = "null";
 #ifdef USE_FFMPEG
   recorders += " | ffmpeg";
-  if (defaultRecorder == "null") {
+  if (defaultRecorder == "null")
+  {
     defaultRecorder = "ffmpeg";
   }
 #endif
 #ifdef USE_OPENCV
-  if (defaultRecorder == "null") {
+  if (defaultRecorder == "null")
+  {
     defaultRecorder = "opencv";
   }
   recorders += " | opencv";
 #endif
 #ifdef USE_APPLE
-  if (defaultRecorder == "null") {
+  if (defaultRecorder == "null")
+  {
     defaultRecorder = "apple";
   }
   recorders += " | apple";
@@ -143,16 +162,22 @@ int main(int argc, char *argv[]) {
   args["-encoder"] = defaultRecorder;
 
   // Parse command-line arguments
-  for (int i = 1; i < argc; ++i) {
+  for (int i = 1; i < argc; ++i)
+  {
     std::string arg = argv[i];
     if ((arg == "-encoder" || arg == "-dir" || arg == "-prefix" ||
          arg == "-i" || arg == "-ndi" || arg == "-timeout") &&
-        i + 1 < argc) {
+        i + 1 < argc)
+    {
       args[arg] =
           argv[++i]; // Increment 'i' to skip next argument since it's a value
-    } else if (arg == "-daemon" || arg == "-u") {
+    }
+    else if (arg == "-daemon" || arg == "-u")
+    {
       args[arg] = "true";
-    } else {
+    }
+    else
+    {
       auto msg = "Unknown or incomplete option: " + arg;
       std::cerr << msg << std::endl;
       return -1;
@@ -161,13 +186,15 @@ int main(int argc, char *argv[]) {
 
   // Check for required arguments
   if (args.find("-encoder") == args.end() || args.find("-dir") == args.end() ||
-      args.find("-prefix") == args.end() || args.find("-i") == args.end()) {
+      args.find("-prefix") == args.end() || args.find("-i") == args.end())
+  {
     auto msg = "Missing required arguments.";
     std::cerr << msg << std::endl;
     return -1;
   }
 
-  if (args["-u"] == "true") {
+  if (args["-u"] == "true")
+  {
     std::cout << "Usage: -encoder <" << recorders
               << "> -dir <dir> -prefix "
                  "<prefix> -i <interval secs> -ndi <name> -timeout <secs>"
@@ -177,7 +204,8 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-  if (args["-daemon"] == "true") {
+  if (args["-daemon"] == "true")
+  {
     std::cout << "Running in unattended mode." << std::endl;
     daemonize();
   }
@@ -192,9 +220,10 @@ int main(int argc, char *argv[]) {
 
   recorder = std::shared_ptr<VideoController>(new VideoController("ndi"));
   recorder->start(srcName, encoder, directory, prefix, interval,
-                  {1280 / 4, 720 / 4, 1280 / 2, 720 / 2});
+                  {0, 0, 1, 1}, {});
 
-  auto startShutdown = []() {
+  auto startShutdown = []()
+  {
     recorder->stop();
     recorder = nullptr;
     running = false;
@@ -205,11 +234,14 @@ int main(int argc, char *argv[]) {
   running = true;
 
   int count = 0;
-  while (running) {
+  while (running)
+  {
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-    if (timeout != 0) {
+    if (timeout != 0)
+    {
       count += 1;
-      if (count >= timeout) {
+      if (count >= timeout)
+      {
         startShutdown();
         break;
       }

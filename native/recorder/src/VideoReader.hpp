@@ -1,12 +1,16 @@
 #pragma once
 
-#include "FrameProcessor.hpp"
+#include <functional>
 #include <memory>
 #include <string>
+#include "VideoUtils.hpp"
 
-class VideoReader {
+class VideoReader
+{
 public:
-  typedef struct CameraInfo {
+  using AddFrameFunction = std::function<void(FramePtr)>;
+  typedef struct CameraInfo
+  {
     std::string name;
     std::string address;
     CameraInfo() {}
@@ -15,9 +19,10 @@ public:
   } CameraInfo;
 
   virtual std::string start(const std::string srcName,
-                            std::shared_ptr<FrameProcessor> frameProcessor) = 0;
+                            AddFrameFunction addFrameFunction) = 0;
   virtual std::string stop() = 0;
-  virtual std::vector<CameraInfo> getCameraList() {
+  virtual std::vector<CameraInfo> getCameraList()
+  {
     return std::vector<CameraInfo>();
   };
   virtual ~VideoReader() {}

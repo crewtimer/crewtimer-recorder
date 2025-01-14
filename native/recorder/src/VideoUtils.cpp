@@ -1,13 +1,15 @@
 #include <algorithm>
 #include <iostream>
 #include <stdint.h>
+#include "VideoUtils.hpp"
 
-#include "FrameProcessor.hpp"
 FramePtr cropFrame(const FramePtr &frame, int cropX, int cropY, int cropWidth,
-                   int cropHeight) {
+                   int cropHeight)
+{
   if (!frame || cropX < 0 || cropY < 0 || cropX + cropWidth > frame->xres ||
-      cropY + cropHeight > frame->yres) {
-        std::cerr << "Invalid crop.  frame: " << !frame << " cropX < 0:" << (cropX < 0) << " cropY < 0:" << (cropY < 0) << "cropX + cropWidth > frame->xres:" << (cropX + cropWidth > frame->xres) << " cropY + cropHeight > frame->yres:" << (cropY + cropHeight > frame->yres) <<  " xres: " << frame->xres << " yres: " << frame->yres << std::endl;
+      cropY + cropHeight > frame->yres)
+  {
+    std::cerr << "Invalid crop.  frame: " << !frame << " cropX < 0:" << (cropX < 0) << " cropY < 0:" << (cropY < 0) << "cropX + cropWidth > frame->xres:" << (cropX + cropWidth > frame->xres) << " cropY + cropHeight > frame->yres:" << (cropY + cropHeight > frame->yres) << " xres: " << frame->xres << " yres: " << frame->yres << std::endl;
     return nullptr; // Return null if invalid crop dimensions
   }
 
@@ -21,7 +23,8 @@ FramePtr cropFrame(const FramePtr &frame, int cropX, int cropY, int cropWidth,
                           ? 2
                           : (frame->pixelFormat == Frame::RGBX ? 4 : 3);
 
-  for (int y = 0; y < cropHeight; ++y) {
+  for (int y = 0; y < cropHeight; ++y)
+  {
     uint8_t *srcPtr =
         frame->data + ((cropY + y) * frame->stride) + (cropX * bytesPerPixel);
     uint8_t *dstPtr = croppedFrame->data + (y * croppedFrame->stride);
@@ -31,7 +34,8 @@ FramePtr cropFrame(const FramePtr &frame, int cropX, int cropY, int cropWidth,
   return croppedFrame;
 }
 
-static uint32_t uyvy422(uint8_t r, uint8_t g, uint8_t b) {
+static uint32_t uyvy422(uint8_t r, uint8_t g, uint8_t b)
+{
   // https://github.com/lplassman/V4L2-to-NDI/blob/4dd5e9594acc4f154658283ee52718fa58018ac9/PixelFormatConverter.cpp
   auto Y0 = (0.299f * r + 0.587f * g + 0.114f * b);
   auto Y1 = (0.299f * r + 0.587f * g + 0.114f * b);
@@ -53,23 +57,28 @@ const static auto green = uyvy422(0, 255, 0);
 const static auto white = uyvy422(255, 255, 255);
 
 static void setArea(uint32_t *screen, int stride, int startX, int startY,
-                    int width, int height, uint32_t color) {
+                    int width, int height, uint32_t color)
+{
   // std::cout << "setArea" << width << "x" << height << " stride" << stride
   //           << " ptr" << std::hex << (void *)screen << std::dec << std::endl;
-  for (int x = startX / 2; x < startX / 2 + width / 2; x++) {
-    for (int y = startY; y < startY + height; y++) {
+  for (int x = startX / 2; x < startX / 2 + width / 2; x++)
+  {
+    for (int y = startY; y < startY + height; y++)
+    {
       screen[x + y * stride / 4] = color;
     }
   }
 }
 
-void encodeTimestamp(uint8_t *ptr, int stride, uint64_t ts100ns) {
+void encodeTimestamp(uint8_t *ptr, int stride, uint64_t ts100ns)
+{
   // std::cout << "overlayTime" << std::endl;
   // return;
   uint32_t *screen = (uint32_t *)(ptr);
   setArea(screen, stride, 0, 0, 128, 3, black);
   uint64_t mask = 0x8000000000000000L;
-  for (int bit = 0; bit < 64; bit++) {
+  for (int bit = 0; bit < 64; bit++)
+  {
     const bool val = (ts100ns & mask) != 0;
     mask >>= 1;
     setArea(screen, stride, bit * 2, 1, 2, 1, val ? white : black);

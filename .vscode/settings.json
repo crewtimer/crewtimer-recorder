@@ -82,7 +82,9 @@
     "__errc": "cpp",
     "cstdarg": "cpp",
     "semaphore": "cpp",
-    "regex": "cpp"
+    "regex": "cpp",
+    "__availability": "cpp",
+    "valarray": "cpp"
   },
 
   "eslint.validate": [

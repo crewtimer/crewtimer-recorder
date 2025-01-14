@@ -1,6 +1,6 @@
 {
   "name": "crewtimer_video_recorder",
-  "version": "1.0.6-module",
+  "version": "1.0.7-module",
   "description": "A node electron utility to write mp4 files for CrewTimer Video Review",
   "main": "index.js",
   "types": "index.d.ts",
@@ -14,14 +14,13 @@
     "upload": "prebuild --tag module --verbose --runtime napi",
     "build": "node-gyp rebuild",
     "testrebuild": "echo 'Building recorder' && mkdir -p ./release/Build &&cp ../../../../native/recorder/prebuilds/build/Release/crewtimer_video_recorder.node ./release/Build",
-
     "build:mac-x64": "prebuild --prerelease --napi --napi-version 6 --runtime napi --arch x64 --platform darwin",
     "build:mac-arm": "prebuild --prerelease --napi --napi-version 6 --runtime napi --arch arm64 --platform darwin",
-    "build:mac" : "yarn build:mac-x64 && yarn build:mac-arm",
+    "build:mac": "yarn build:mac-x64 && yarn build:mac-arm",
     "build:win": "prebuild --napi --napi-version 6 --runtime napi --arch=x64 --platform win32",
     "build:ffmpeg": "bash ./scripts/build-ffmpeg.sh",
-
-    "clean": "rm -rf node_modules yarn.lock prebuilds build"
+    "clean": "rm -rf node_modules yarn.lock prebuilds build",
+    "cleanbuild": "yarn clean && yarn install && yarn prebuild"
   },
   "keywords": [],
   "author": "Glenn Engel (glenne)",

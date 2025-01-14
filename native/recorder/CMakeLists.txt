@@ -1,5 +1,8 @@
-cmake_minimum_required(VERSION 3.5) # Set minimum CMake version
+cmake_minimum_required(VERSION 3.15) # Set minimum CMake version
 project(ctrecorder VERSION 1.0 LANGUAGES CXX)
+
+# Add the path to the directory containing CMake modules
+set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 # Set a default build type if none was specified
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -35,10 +38,17 @@ set(SOURCE_FILES
 
 # prefer static libs
 if(APPLE)
-    set(CMAKE_FIND_LIBRARY_SUFFIXES ".a" ".dylib")
+    set(CMAKE_FIND_LIBRARY_SUFFIXES ".dylib" ".a")
     set(EXTRA_LIBS z bz2 lzma pthread)
-    set(FFMPEG_FOLDER "/Users/glenne/ffmpeg-built-mac")
+    # set(FFMPEG_FOLDER "./lib-build/ffmpeg-static-mac-arm64")
+    set(FFMPEG_FOLDER "/opt/homebrew")
     # set(USE_OPENCV OFF CACHE BOOL "Use OPENCV features" FORCE)
+    find_package(NDI REQUIRED)
+    if(NDI_FOUND)
+        message(STATUS "NDI found: Library=${NDI_LIBRARIES}, Include=${NDI_INCLUDE_DIR}")
+    else()
+        message(FATAL_ERROR "NDI not found!")
+    endif()
     find_library(NDI_LIBRARIES ndi REQUIRED)
 elseif(WIN32)
     message(STATUS "Win32 section")
@@ -98,6 +108,7 @@ if (USE_OPENCV)
 endif()
 
 if (USE_FFMPEG)
+    message(STATUS "Adding ffmpeg libraries")
     add_compile_definitions(USE_FFMPEG)
     list(APPEND SOURCE_FILES
         src/FFRecorder.cpp
@@ -116,6 +127,7 @@ if (USE_FFMPEG)
     find_library(AVUTIL_LIBRARY ${LIB_PREFIX}avutil REQUIRED)
     find_library(SWSCALE_LIBRARY ${LIB_PREFIX}swscale REQUIRED)
     find_library(SWSRESAMPLE_LIBRARY ${LIB_PREFIX}swresample REQUIRED)
+
     set(FFMPEG_LIBS ${AVFORMAT_LIBRARY} ${AVCODEC_LIBRARY} ${AVUTIL_LIBRARY} ${SWSCALE_LIBRARY} ${SWSRESAMPLE_LIBRARY})
 
     message(STATUS "avlibs found at ${FFMPEG_LIBS}")

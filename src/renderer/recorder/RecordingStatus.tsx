@@ -46,10 +46,11 @@ const RecordingStatus: React.FC = () => {
   }, []);
 
   let cropText = '';
-  if (cropArea.width != 1 || cropArea.height != 1) {
+  if (cropArea.width !== 1 || cropArea.height !== 1) {
     cropText = ` -> ${Math.round((cropArea.width * recordingStatus.frameProcessor.width) / 4) * 4}x${Math.round((cropArea.height * recordingStatus.frameProcessor.height) / 4) * 4}`;
   }
 
+  const { frameBacklog } = recordingStatus.frameProcessor;
   return isRecording ? (
     <Stack direction="column">
       <Stack
@@ -59,6 +60,20 @@ const RecordingStatus: React.FC = () => {
       >
         <RecordIcon style={{ color: '#ff0000' }} />
         <Typography variant="body2">{`${seconds}`}</Typography>
+        <Typography
+          sx={{
+            marginLeft: '0.5em',
+            paddingLeft: '0.5em',
+            paddingRight: '0.5em',
+            background:
+              frameBacklog > 100
+                ? '#ffff00'
+                : frameBacklog > 200
+                  ? '#ff0000'
+                  : undefined,
+            color: frameBacklog > 100 ? '#000000' : undefined,
+          }}
+        >{` backlog: ${frameBacklog}`}</Typography>
       </Stack>
       {recordingStatus.frameProcessor.filename ? (
         <>

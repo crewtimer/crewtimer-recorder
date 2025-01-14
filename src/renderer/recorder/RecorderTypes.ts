@@ -54,6 +54,7 @@ export interface RecordingStatus extends HandlerResponse {
     width: number;
     height: number;
     fps: number;
+    frameBacklog: number;
   };
 }
 

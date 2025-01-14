@@ -12,9 +12,11 @@
 #include "VideoReader.hpp"
 #include "VideoRecorder.hpp"
 
-class VideoController {
+class VideoController
+{
 public:
-  struct StatusInfo {
+  struct StatusInfo
+  {
     bool recording;
     std::string error;
     std::uint32_t recordingDuration;
@@ -41,12 +43,16 @@ private:
   StatusInfo statusInfo;
 
 public:
-  VideoController(const std::string _camType) {
+  VideoController(const std::string _camType)
+  {
 
 #ifdef HAVE_BASLER
-    if (camType == "basler") { // basler camera
+    if (camType == "basler")
+    { // basler camera
       videoReader = createBaslerReader();
-    } else {
+    }
+    else
+    {
       videoReader = createNdiReader();
     }
 #else
@@ -56,24 +62,29 @@ public:
     monitorStopRequested = false;
     monitorThread = std::thread(&VideoController::monitorLoop, this);
   }
-  ~VideoController() {
+  ~VideoController()
+  {
     monitorStopRequested = true;
     stop();
     videoReader = nullptr;
-    if (monitorThread.joinable()) {
+    if (monitorThread.joinable())
+    {
       monitorThread.join();
     }
   }
 
-  std::vector<VideoReader::CameraInfo> getCameraList() {
+  std::vector<VideoReader::CameraInfo> getCameraList()
+  {
     std::lock_guard<std::recursive_mutex> lock(controlMutex);
-    if (videoReader) {
+    if (videoReader)
+    {
       return videoReader->getCameraList();
     }
     return std::vector<VideoReader::CameraInfo>();
   }
 
-  StatusInfo getStatus() {
+  StatusInfo getStatus()
+  {
     std::lock_guard<std::recursive_mutex> lock(controlMutex);
     std::chrono::steady_clock::time_point endTime =
         std::chrono::steady_clock::now();
@@ -93,7 +104,8 @@ public:
                     const std::string dir, const std::string prefix,
                     const int interval,
                     const FrameProcessor::FRectangle cropArea,
-                    const FrameProcessor::Guide guide) {
+                    const FrameProcessor::Guide guide)
+  {
     std::lock_guard<std::recursive_mutex> lock(controlMutex);
     this->srcName = srcName;
     this->encoder = encoder;
@@ -102,37 +114,43 @@ public:
     this->interval = interval;
     statusInfo.error = "";
     statusInfo.frameProcessor.error = "";
-    if (videoRecorder) {
+    if (videoRecorder)
+    {
       return "Video Controller already running";
     }
     status = "";
     std::string retval = "";
 #ifdef USE_APPLE
-    if (encoder == "apple") {
+    if (encoder == "apple")
+    {
       SystemEventQueue::push("VID", "Using Apple VideoToolbox encoder.");
       videoRecorder = createAppleRecorder();
     }
 #endif
 
 #ifdef USE_OPENCV
-    if (encoder == "opencv") {
+    if (encoder == "opencv")
+    {
       SystemEventQueue::push("VID", "Using opencv encoder.");
       videoRecorder = createOpenCVRecorder();
       // default
     }
 #endif
 
-    if (encoder == "ffmpeg") {
+    if (encoder == "ffmpeg")
+    {
       SystemEventQueue::push("VID", "Using ffmpeg encoder.");
       videoRecorder = createFfmpegRecorder();
     }
 
-    if (encoder == "null") {
+    if (encoder == "null")
+    {
       SystemEventQueue::push("VID", "Using null encoder.");
       videoRecorder = createNullRecorder();
     }
 
-    if (!videoRecorder) {
+    if (!videoRecorder)
+    {
       auto msg = "Unknown encoder type: " + encoder;
       SystemEventQueue::push("VID", msg);
       return msg;
@@ -141,36 +159,42 @@ public:
     frameProcessor = std::shared_ptr<FrameProcessor>(new FrameProcessor(
         dir, prefix, videoRecorder, interval, cropArea, guide));
 
-    retval = videoReader->start(srcName, frameProcessor);
-    if (!retval.empty()) {
+    retval = videoReader->start(srcName, [this](FramePtr frame)
+                                { this->frameProcessor->addFrame(frame); });
+    if (!retval.empty())
+    {
       return retval;
     }
 
     auto fpStatus = frameProcessor->getStatus();
-    if (!fpStatus.recording) {
+    if (!fpStatus.recording)
+    {
       return fpStatus.error;
     }
 
     mcastListener = std::shared_ptr<MulticastReceiver>(
         new MulticastReceiver("239.215.23.42", 52342));
-    mcastListener->setMessageCallback([this](const json &j) {
-      // std::cerr << "Received JSON: " << j.dump() << std::endl;
-      auto command = j.value<std::string>("cmd", "");
-      if (command == "split-video") {
-        this->frameProcessor->splitFile();
-      }
-      // if (command == "guide-config") {
-      //   json config = {{"pt1", 0}, {"pt2", 0}};
-      //   auto guide = j.value("guide", config);
-      //   if (!guide.is_null()) {
-      //     std::shared_ptr<json> msg = std::make_shared<json>(guide);
-      //     SendMessageToElectron("guide-config", msg);
-      //   }
-      // }
-    });
+    mcastListener->setMessageCallback([this](const json &j)
+                                      {
+                                        // std::cerr << "Received JSON: " << j.dump() << std::endl;
+                                        auto command = j.value<std::string>("cmd", "");
+                                        if (command == "split-video")
+                                        {
+                                          this->frameProcessor->splitFile();
+                                        }
+                                        // if (command == "guide-config") {
+                                        //   json config = {{"pt1", 0}, {"pt2", 0}};
+                                        //   auto guide = j.value("guide", config);
+                                        //   if (!guide.is_null()) {
+                                        //     std::shared_ptr<json> msg = std::make_shared<json>(guide);
+                                        //     SendMessageToElectron("guide-config", msg);
+                                        //   }
+                                        // }
+                                      });
 
     retval = mcastListener->start();
-    if (!retval.empty()) {
+    if (!retval.empty())
+    {
       return retval;
     }
 
@@ -178,9 +202,11 @@ public:
     return "";
   }
 
-  std::string stop() {
+  std::string stop()
+  {
     statusInfo.recording = false;
-    if (!frameProcessor) {
+    if (!frameProcessor)
+    {
       return "";
     }
     SystemEventQueue::push("VID", "Shutting down...");
@@ -205,20 +231,28 @@ public:
     return "";
   }
 
-  FramePtr getLastFrame() {
-    if (frameProcessor) {
+  FramePtr getLastFrame()
+  {
+    if (frameProcessor)
+    {
       return frameProcessor->getLastFrame();
-    } else {
+    }
+    else
+    {
       return nullptr;
     }
   }
-  void monitorLoop() {
-    while (!monitorStopRequested) {
+  void monitorLoop()
+  {
+    while (!monitorStopRequested)
+    {
       std::this_thread::sleep_for(std::chrono::milliseconds(1000));
       std::lock_guard<std::recursive_mutex> lock(controlMutex);
-      if (videoRecorder && frameProcessor) {
+      if (videoRecorder && frameProcessor)
+      {
         statusInfo.frameProcessor = frameProcessor->getStatus();
-        if (!statusInfo.frameProcessor.error.empty()) {
+        if (!statusInfo.frameProcessor.error.empty())
+        {
           statusInfo.error = statusInfo.frameProcessor.error;
           SystemEventQueue::push("system", statusInfo.error);
           stop();
