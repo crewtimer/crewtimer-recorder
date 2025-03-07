@@ -84,20 +84,27 @@
     "semaphore": "cpp",
     "regex": "cpp",
     "__availability": "cpp",
-    "valarray": "cpp"
+    "valarray": "cpp",
+    "any": "cpp",
+    "charconv": "cpp",
+    "clocale": "cpp",
+    "execution": "cpp",
+    "forward_list": "cpp",
+    "print": "cpp",
+    "set": "cpp",
+    "span": "cpp",
+    "stack": "cpp",
+    "unordered_set": "cpp"
   },
-
   "eslint.validate": [
     "javascript",
     "javascriptreact",
     "html",
     "typescriptreact"
   ],
-
   "javascript.validate.enable": false,
   "javascript.format.enable": false,
   "typescript.format.enable": false,
-
   "search.exclude": {
     ".git": true,
     ".eslintcache": true,

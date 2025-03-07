@@ -43,6 +43,18 @@ function SideNavMenu() {
           <ListItemText primary="Event Log" />
         </ListItem>
       </Tooltip>
+      <Tooltip title="Camera Control" placement="right">
+        <ListItem>
+          <ListItemIcon
+            onClick={() => {
+              setSelectedPage('/camcontrol');
+            }}
+          >
+            <ListAltIcon />
+          </ListItemIcon>
+          <ListItemText primary="Camera Control" />
+        </ListItem>
+      </Tooltip>
     </List>
   );
 }

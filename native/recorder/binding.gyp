@@ -9,7 +9,8 @@
                   "src/NdiReader.cpp",
                   "src/NullRecorder.cpp",
                   "src/VideoUtils.cpp",
-                  "src/util.cpp"],
+                  "src/util.cpp",
+                  "src/visca/ViscaTcpClient.cpp"],
       "defines": [ "USE_FFMPEG" ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")",

@@ -9,6 +9,7 @@ import MenuItem from '@mui/material/MenuItem';
 import { IconButton, ListItemIcon, ListItemText } from '@mui/material';
 import { useSelectedPage } from '../pages/MainPage';
 import { setToast } from './Toast';
+import { sendViscaCommandToDevice } from '../recorder/RecorderApi';
 
 const AboutText = `CrewTimer Video Recorder ${window.platform.appVersion}`;
 
@@ -26,6 +27,16 @@ const HamburgerMenu = () => {
   const closeAndGo = (path: string) => () => {
     setAnchorEl(null);
     setSelectedPage(path);
+  };
+
+  const testVisca = () => {
+    sendViscaCommandToDevice({
+      ip: '10.0.1.188',
+      port: 52381,
+      data: Uint8Array.from([1, 2, 3, 255]),
+    })
+      .then((result) => console.log(`got ${JSON.stringify(result)}`))
+      .catch((reason) => console.log(`got err ${reason}`));
   };
 
   return (
@@ -60,6 +71,12 @@ const HamburgerMenu = () => {
             <SecurityIcon />
           </ListItemIcon>
           <ListItemText>Privacy Policy</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={testVisca}>
+          <ListItemIcon>
+            <SecurityIcon />
+          </ListItemIcon>
+          <ListItemText>Test Visca</ListItemText>
         </MenuItem>
         <MenuItem
           onClick={() => {

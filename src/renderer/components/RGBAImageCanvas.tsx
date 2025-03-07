@@ -610,7 +610,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   useEffect(() => {
     const timer = setInterval(() => {
       requestVideoFrame().catch(showErrorDialog);
-    }, 200);
+    }, 32);
     return () => clearInterval(timer);
   }, []);
 

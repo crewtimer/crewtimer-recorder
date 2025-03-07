@@ -10,7 +10,7 @@
  */
 import path from 'path';
 import { app, BrowserWindow, shell } from 'electron';
-import { setLogFile } from 'crewtimer_video_recorder';
+import { setLogFile, setNativeMessageCallback } from 'crewtimer_video_recorder';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
 import './store/store';
@@ -162,3 +162,10 @@ app
     });
   })
   .catch(console.log);
+
+app.on('ready', () => {
+  setNativeMessageCallback((message) => {
+    // Forward the message to the renderer
+    mainWindow?.webContents.send('native-message', message);
+  });
+});

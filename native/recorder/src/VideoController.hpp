@@ -187,7 +187,7 @@ public:
                                         //   auto guide = j.value("guide", config);
                                         //   if (!guide.is_null()) {
                                         //     std::shared_ptr<json> msg = std::make_shared<json>(guide);
-                                        //     SendMessageToElectron("guide-config", msg);
+                                        //     sendMessageToRenderer("guide-config", msg);
                                         //   }
                                         // }
                                       });

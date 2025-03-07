@@ -20,7 +20,7 @@ node_modules
 
 release/app/dist
 release/build
-build/
+build*/
 .erb/dll
 temp/
 

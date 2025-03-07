@@ -23,9 +23,11 @@ extern "C"
 #include "SystemEventQueue.hpp"
 #include "VideoController.hpp"
 #include "nlohmann/json.hpp"
+#include "visca/IViscaTcpClient.hpp"
 
 using json = nlohmann::json;
 std::shared_ptr<VideoController> recorder;
+std::unique_ptr<IViscaTcpClient> viscaClient;
 
 // Utility function to clamp a value between 0 and 255
 inline uint8_t clamp(int value)
@@ -157,7 +159,16 @@ void FinalizeBuffer(Napi::Env env, void *data)
   // Clean up memory if necessary
   delete[] static_cast<uint8_t *>(data);
 }
-Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info)
+
+auto viscaStatusLogger = [](const std::string &msg)
+{
+  std::cout << "[STATUS] " << msg << std::endl;
+  json config = {{"msg", msg}};
+  sendMessageToRenderer("visca-status", std::make_shared<json>(config));
+};
+
+Napi::Object
+nativeVideoRecorder(const Napi::CallbackInfo &info)
 {
 
   Napi::Env env = info.Env();
@@ -183,6 +194,14 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info)
     if (!recorder)
     {
       recorder = std::shared_ptr<VideoController>(new VideoController("ndi"));
+    }
+    if (!viscaClient)
+    {
+      viscaClient = createViscaTcpClient(
+          viscaStatusLogger,
+          5, // connect timeout
+          2  // send timeout
+      );
     }
     if (op == "start-recording")
     {
@@ -356,6 +375,77 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info)
       ret.Set("totalBytes", Napi::Number::New(env, totalBytes));
       return ret;
     }
+    else if (op == "send-visca-cmd")
+    {
+      if (!args.Has("props"))
+      {
+        Napi::TypeError::New(env, "Missing props field")
+            .ThrowAsJavaScriptException();
+        return ret;
+      }
+
+      auto props = args.Get("props").As<Napi::Object>();
+      if (!props.Has("data"))
+      {
+        Napi::TypeError::New(env, "Missing data field for send-visca-cmd")
+            .ThrowAsJavaScriptException();
+        return ret;
+      }
+      if (!props.Has("id"))
+      {
+        Napi::TypeError::New(env, "Missing ip field for send-visca-cmd")
+            .ThrowAsJavaScriptException();
+        return ret;
+      }
+      if (!props.Has("ip"))
+      {
+        Napi::TypeError::New(env, "Missing ip field for send-visca-cmd")
+            .ThrowAsJavaScriptException();
+        return ret;
+      }
+      uint16_t port = 52381;
+      if (props.Has("port"))
+      {
+        port = props.Get("port").As<Napi::Number>().Uint32Value();
+      }
+      auto id = props.Get("id").As<Napi::String>().Utf8Value();
+      auto ip = props.Get("ip").As<Napi::String>().Utf8Value();
+      auto payloadVal = props.Get("data");
+
+      // Check if 'payload' exists and is a typed array
+      if (payloadVal.IsUndefined() || !payloadVal.IsTypedArray())
+      {
+        Napi::TypeError::New(env, "'data' field must be a Uint8Array").ThrowAsJavaScriptException();
+        return ret;
+      }
+
+      Napi::Buffer<uint8_t> buffer = payloadVal.As<Napi::Buffer<uint8_t>>();
+      uint8_t *dataPtr = buffer.Data();
+      size_t length = buffer.ElementLength();
+
+      // Copy the data into a std::vector<uint8_t>
+      std::vector<uint8_t> nativeVector(length);
+      std::memcpy(nativeVector.data(), dataPtr, length);
+
+      viscaClient->start(ip, port);
+      viscaClient->sendCommand(nativeVector, [id](const ViscaResult &focusResult)
+                               {
+                                 if (focusResult.status == ViscaResult::Status::OK)
+                                 {
+                                   std::cout << "[FocusInquiry Callback] SUCCESS. Received "
+                                             << focusResult.response.size() << " bytes.\n  Hex: ";
+                                   for (auto b : focusResult.response)
+                                   {
+                                     std::cout << "0x" << std::hex << (int)b << " ";
+                                   }
+                                   std::cout << std::dec << std::endl;
+                                 }
+                                 json result = {{"id", id}, {"status", focusResult.status}};
+                                 sendMessageToRenderer("visca-result", std::make_shared<json>(result)); });
+
+      ret.Set("status", Napi::String::New(env, "OK"));
+      return ret;
+    }
 
     std::cerr << "Unrecognized op: " << op << std::endl;
     Napi::TypeError::New(env, "Unrecognized op field")
@@ -380,7 +470,7 @@ Napi::Object nativeVideoRecorder(const Napi::CallbackInfo &info)
 Napi::ThreadSafeFunction tsfn;
 
 // Function to send message to Electron main process
-void SendMessageToElectron(const std::string &sender,
+void sendMessageToRenderer(const std::string &sender,
                            std::shared_ptr<json> content)
 {
   uv_async_t *async = new uv_async_t;
@@ -427,6 +517,8 @@ Napi::Value shutdownRecorder(const Napi::CallbackInfo &info)
   recorder = nullptr;
   tsfn = Napi::ThreadSafeFunction();
   logFile.close();
+  // viscaClient->stop();
+  // viscaClient = nullptr;
   return env.Undefined();
 }
 

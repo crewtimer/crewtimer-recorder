@@ -96,6 +96,8 @@ contextBridge.exposeInMainWorld('Util', {
   openFileExplorer,
   deleteFile,
   getDocumentsFolder,
+  onNativeMessage: (callback) =>
+    ipcRenderer.on('native-message', (event, message) => callback(message)),
 });
 
 const appVersion = require('../../../release/app/package.json').version;

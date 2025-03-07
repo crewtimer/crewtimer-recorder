@@ -6,6 +6,7 @@ import RecorderConfig from '../recorder/RecorderConfig';
 import RecordingLogTable from './RecordingLogTable';
 import { FullSizeWindow } from '../components/FullSizeWindow';
 import RGBAImageCanvas from '../components/RGBAImageCanvas';
+import ViscaControlPanel from '../visca/ViscaControlPanel';
 
 export const [useSelectedPage] = UseDatum<string>('/');
 const MainPage = () => {
@@ -17,6 +18,8 @@ const MainPage = () => {
       return <RecorderConfig />;
     case '/log':
       return <RecordingLogTable />;
+    case '/camcontrol':
+      return <ViscaControlPanel />;
     case '/video':
       return <FullSizeWindow component={RGBAImageCanvas} />;
     case '/privacy':

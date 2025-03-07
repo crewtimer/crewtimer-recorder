@@ -22,6 +22,9 @@ declare global {
       getFilesInDirectory(dirPath: string): Promise<DirListReturn>;
       deleteFile(filename: string): Promise<CloseFileReturn>;
       getDocumentsFolder(): Promise<string>;
+      onNativeMessage(
+        callback: (message: { sender: string; content: any }) => void,
+      ): void;
     };
     platform: {
       platform: string;

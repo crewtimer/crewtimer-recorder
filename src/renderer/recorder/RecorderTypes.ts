@@ -1,4 +1,5 @@
 import { HandlerResponse } from '../msgbus/MsgbusTypes';
+import { ViscaMessage, ViscaResponse } from './ViscaTypes';
 
 export interface Rect {
   x: number;
@@ -23,7 +24,8 @@ export interface RecorderMessage {
     | 'recording-status'
     | 'recording-log'
     | 'grab-frame'
-    | 'get-camera-list';
+    | 'get-camera-list'
+    | 'send-visca-cmd';
 }
 
 export interface StartRecorderMessage extends RecorderMessage {
@@ -70,6 +72,7 @@ export const DefaultRecordingStatus: RecordingStatus = {
     width: 0,
     height: 0,
     fps: 0,
+    frameBacklog: 0,
   },
 };
 
@@ -98,11 +101,15 @@ export interface CameraListResponse extends HandlerResponse {
   }[];
 }
 
-export type RecorderMessageTypes = StartRecorderMessage | RecorderMessage;
+export type RecorderMessageTypes =
+  | StartRecorderMessage
+  | RecorderMessage
+  | ViscaMessage;
 export type RecorderMessageResponseType =
   | HandlerResponse
   | RecorderResponse
   | GrabFrameResponse
   | CameraListResponse
   | RecordingStatus
-  | RecordingLog;
+  | RecordingLog
+  | ViscaResponse;

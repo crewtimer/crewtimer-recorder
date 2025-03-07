@@ -117,6 +117,49 @@ void testrecorder(std::shared_ptr<VideoRecorder> recorder)
   std::cout << "testrecorder end" << std::endl;
 }
 
+void zoomIn() { std::cout << "Zoom In triggered\n"; }
+void zoomOut() { std::cout << "Zoom Out triggered\n"; }
+void focusIn() { std::cout << "Focus In triggered\n"; }
+void focusOut() { std::cout << "Focus Out triggered\n"; }
+void storePreset() { std::cout << "Preset Stored\n"; }
+void recallPreset() { std::cout << "Preset Recalled\n"; }
+
+// A thread-safe queue for incoming characters
+std::queue<char> inputQueue;
+std::mutex queueMutex;
+std::atomic<bool> runInputThread{true};
+
+// Function that runs in a separate thread
+void inputThreadFunc()
+{
+  std::cout << "===================== Starting loop..." << std::endl;
+  while (runInputThread)
+  {
+    char c;
+    // If std::cin fails, break the loop
+    if (!std::cin.get(c))
+    {
+      // If EOF or some other error, we can choose to exit or handle it
+      if (std::cin.eof())
+      {
+        std::cerr << "EOF reached. Exiting input thread...\n";
+      }
+      else
+      {
+        std::cerr << "Input error. Exiting input thread...\n";
+      }
+      break;
+    }
+    std::cout << "got a char" << std::endl;
+
+    // Lock the queue before pushing
+    {
+      std::lock_guard<std::mutex> lock(queueMutex);
+      inputQueue.push(c);
+    }
+  }
+}
+
 std::shared_ptr<VideoController> recorder;
 int main(int argc, char *argv[])
 {
@@ -231,12 +274,14 @@ int main(int argc, char *argv[])
   };
   stopHandler = startShutdown;
 
+  // Start the input thread
+  std::thread inputThread(inputThreadFunc);
   running = true;
 
   int count = 0;
   while (running)
   {
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
     if (timeout != 0)
     {
       count += 1;
@@ -246,8 +291,59 @@ int main(int argc, char *argv[])
         break;
       }
     }
+
+    // Check if there's any input queued
+    bool gotInput = false;
+    char c;
+
+    {
+      // Lock the queue for thread-safe access
+      std::lock_guard<std::mutex> lock(queueMutex);
+      if (!inputQueue.empty())
+      {
+        c = inputQueue.front();
+        inputQueue.pop();
+        gotInput = true;
+      }
+    }
+
+    // If we got a character, handle it
+    if (gotInput)
+    {
+      switch (c)
+      {
+      case 'z':
+        zoomIn();
+        break;
+      case 'x':
+        zoomOut();
+        break;
+      case 'f':
+        focusIn();
+        break;
+      case 'g':
+        focusOut();
+        break;
+      case 's':
+        storePreset();
+        break;
+      case 'r':
+        recallPreset();
+        break;
+      // case 'q':
+      //   std::cout << "Quit command received. Exiting...\n";
+      //   // Signal the input thread to stop and then join it
+      //   runInputThread = false;
+      //   inputThread.join();
+      //   return 0;
+      default:
+        break;
+      }
+    }
   }
 
+  runInputThread = false;
+  inputThread.join();
   std::cout << "Main thread exiting." << std::endl;
   // Finished
   return 0;
