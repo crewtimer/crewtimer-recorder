@@ -1,30 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import {
   Box,
   Button,
   Grid,
   Slider,
   Typography,
-  FormControlLabel,
-  Switch,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Select,
+  SelectChangeEvent,
 } from '@mui/material';
-import { sendViscaCommand, CameraState, ViscaCommand } from './ViscaAPI';
+import {
+  sendViscaCommand,
+  ViscaCommand,
+  updateCameraState,
+  getCameraState,
+  shutterLabels,
+  irisLabels,
+} from './ViscaAPI';
 import { setToast } from '../components/Toast';
+import { CameraState, ExposureMode, useCameraState } from './ViscaState';
+import ViscaValueButton from './ViscaValueButton';
+import ViscaNumberRange from './RangeStepper';
+import RangeStepper from './RangeStepper';
 
 const ViscaControlPanel = () => {
-  const [cameraState, setCameraState] = useState<CameraState>({
-    autoFocus: false,
-    autoExposure: false,
-    iris: 0,
-    shutter: 0,
-    gain: 0,
-  });
+  const [cameraState, setCameraState] = useCameraState();
 
   const handleCommand = async (command: ViscaCommand) => {
     try {
-      const result = await sendViscaCommand({ data: command });
+      const result = await sendViscaCommand(command);
       if (result) {
-        setCameraState(result);
+        // const state = await getCameraState();
+        // if (state) {
+        //   setCameraState(state);
+        // }
       }
     } catch (error) {
       setToast({
@@ -37,9 +48,7 @@ const ViscaControlPanel = () => {
 
   const handleSetState = async (newState: Partial<CameraState>) => {
     try {
-      await sendViscaCommand({
-        data: { type: 'SET_ALL_STATES', value: newState },
-      });
+      await updateCameraState(newState);
       setCameraState((prev) => ({ ...prev, ...newState }));
     } catch (error) {
       setToast({
@@ -54,10 +63,9 @@ const ViscaControlPanel = () => {
   useEffect(() => {
     const fetchCameraState = async () => {
       try {
-        const result = await sendViscaCommand({
-          data: { type: 'QUERY_ALL_STATES' },
-        });
+        const result = await getCameraState();
         if (result) {
+          console.log(JSON.stringify(result));
           setCameraState(result);
         }
       } catch (error) {
@@ -69,169 +77,132 @@ const ViscaControlPanel = () => {
       }
     };
     fetchCameraState();
-  }, []);
+  }, [setCameraState]);
+
+  const onExposureModeChange = (event: SelectChangeEvent<ExposureMode>) => {
+    const exposureMode = event.target.value as ExposureMode;
+    setCameraState((prev) => ({ ...prev, exposureMode }));
+    sendViscaCommand({ type: 'EXPOSURE_MODE', value: exposureMode });
+  };
 
   return (
     <Box sx={{ p: 2 }}>
-      <Typography variant="h6" gutterBottom>
-        VISCA Camera Controls
-      </Typography>
-
       <Grid container spacing={2}>
         {/* Focus Controls */}
-        <Grid item xs={12} md={4}>
-          <Typography variant="subtitle1">Focus</Typography>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={cameraState.autoFocus}
-                onChange={(event) =>
-                  handleSetState({ autoFocus: event.target.checked })
-                }
-              />
-            }
-            label="Auto Focus"
+        <Grid item xs={12} md={3}>
+          <ViscaValueButton
+            title="Focus"
+            decrement={{ type: 'FOCUS_OUT' }}
+            increment={{ type: 'FOCUS_IN' }}
+            reset={{ type: 'FOCUS_RESET' }}
+            value={cameraState.autoFocus}
+            autoOn={{ type: 'AUTO_FOCUS', value: true }}
+            autoOff={{ type: 'AUTO_FOCUS', value: false }}
+            autoOnce={{ type: 'FOCUS_ONCE' }}
           />
-          <Button
-            variant="contained"
-            onClick={() => handleCommand({ type: 'FOCUS_IN' })}
-            disabled={cameraState.autoFocus}
-          >
-            Focus In
-          </Button>
-          <Button
-            variant="contained"
-            onClick={() => handleCommand({ type: 'FOCUS_OUT' })}
-            disabled={cameraState.autoFocus}
-          >
-            Focus Out
-          </Button>
         </Grid>
-
-        {/* Zoom Controls */}
-        <Grid item xs={12} md={4}>
-          <Typography variant="subtitle1">Zoom</Typography>
-          <Button
-            variant="contained"
-            onClick={() => handleCommand({ type: 'ZOOM_IN' })}
-          >
-            Zoom In
-          </Button>
-          <Button
-            variant="contained"
-            onClick={() => handleCommand({ type: 'ZOOM_OUT' })}
-          >
-            Zoom Out
-          </Button>
+        <Grid item xs={12} md={3}>
+          <ViscaValueButton
+            title="Zoom"
+            decrement={{ type: 'ZOOM_OUT' }}
+            increment={{ type: 'ZOOM_IN' }}
+            reset={{ type: 'ZOOM_RESET' }}
+          />
         </Grid>
 
         {/* Exposure Controls */}
-        <Grid item xs={12} md={4}>
-          <Typography variant="subtitle1">Exposure</Typography>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={cameraState.autoExposure}
-                onChange={(event) =>
-                  handleSetState({ autoExposure: event.target.checked })
-                }
-              />
-            }
-            label="Auto Exposure"
-          />
-          {/* Iris Controls */}
-          <Box sx={{ mt: 2 }}>
-            <Typography id="iris-slider" gutterBottom>
-              Iris: {cameraState.iris}
-            </Typography>
-            <Slider
-              aria-labelledby="iris-slider"
+        <Grid item xs={12} md={3}>
+          <FormControl
+            margin="dense"
+            size="small" // makes form components (including Select) smaller
+            sx={{ minWidth: 120 }}
+          >
+            <InputLabel id="select-label">Exposure Mode</InputLabel>
+            <Select
+              id="select-id"
+              labelId="select-label"
+              label="Exposure Mode"
+              value={cameraState.exposureMode}
+              onChange={onExposureModeChange}
+              // Option A: put smaller padding via sx
+              sx={{
+                // The select container; tweak as you like
+                // smaller vertical & horizontal padding
+                '.MuiSelect-select': {
+                  padding: '6px 14px',
+                },
+              }}
+              // Option B: if you prefer an inline style for the displayed value
+              // SelectDisplayProps={{ style: { padding: '6px 14px' } }}
+            >
+              <MenuItem value={ExposureMode.EXPOSURE_AUTO}>Full Auto</MenuItem>
+              <MenuItem value={ExposureMode.EXPOSURE_MANUAL}>Manual</MenuItem>
+              <MenuItem value={ExposureMode.EXPOSURE_SHUTTER}>
+                Shutter Priority
+              </MenuItem>
+              <MenuItem value={ExposureMode.EXPOSURE_IRIS}>
+                Iris Priority
+              </MenuItem>
+              <MenuItem value={ExposureMode.EXPOSURE_BRIGHT}>
+                Brightness Priority
+              </MenuItem>
+            </Select>
+          </FormControl>
+        </Grid>
+        <Grid item xs={12} md={3}>
+          {(cameraState.exposureMode === ExposureMode.EXPOSURE_MANUAL ||
+            cameraState.exposureMode === ExposureMode.EXPOSURE_IRIS) && (
+            <RangeStepper
+              title="Iris"
+              min={0}
+              max={13}
+              step={-1}
+              labels={irisLabels}
               value={cameraState.iris}
-              min={0}
-              max={15}
-              step={1}
-              onChange={(event, newValue) =>
-                handleSetState({ iris: newValue as number })
-              }
-              disabled={cameraState.autoExposure}
+              onChange={(value) => {
+                setCameraState((prev) => ({ ...prev, iris: value }));
+                sendViscaCommand({ type: 'SET_IRIS', value });
+              }}
             />
-            <Button
-              variant="contained"
-              onClick={() => handleCommand({ type: 'IRIS_UP' })}
-              disabled={cameraState.autoExposure}
-            >
-              Iris Up
-            </Button>
-            <Button
-              variant="contained"
-              onClick={() => handleCommand({ type: 'IRIS_DOWN' })}
-              disabled={cameraState.autoExposure}
-            >
-              Iris Down
-            </Button>
-          </Box>
-          {/* Shutter Controls */}
-          <Box sx={{ mt: 2 }}>
-            <Typography id="shutter-slider" gutterBottom>
-              Shutter: {cameraState.shutter}
-            </Typography>
-            <Slider
-              aria-labelledby="shutter-slider"
+          )}
+          {(cameraState.exposureMode === ExposureMode.EXPOSURE_MANUAL ||
+            cameraState.exposureMode === ExposureMode.EXPOSURE_SHUTTER) && (
+            <RangeStepper
+              title="Shutter"
+              min={5}
+              max={21}
+              labels={shutterLabels}
               value={cameraState.shutter}
+              onChange={(value) => {
+                setCameraState((prev) => ({ ...prev, shutter: value }));
+                sendViscaCommand({ type: 'SET_SHUTTER', value });
+              }}
+            />
+          )}
+          {cameraState.exposureMode === ExposureMode.EXPOSURE_MANUAL && (
+            <RangeStepper
+              title="Gain"
               min={0}
               max={15}
-              step={1}
-              onChange={(event, newValue) =>
-                handleSetState({ shutter: newValue as number })
-              }
-              disabled={cameraState.autoExposure}
-            />
-            <Button
-              variant="contained"
-              onClick={() => handleCommand({ type: 'SHUTTER_UP' })}
-              disabled={cameraState.autoExposure}
-            >
-              Shutter Up
-            </Button>
-            <Button
-              variant="contained"
-              onClick={() => handleCommand({ type: 'SHUTTER_DOWN' })}
-              disabled={cameraState.autoExposure}
-            >
-              Shutter Down
-            </Button>
-          </Box>
-          {/* Gain controls */}
-          <Box sx={{ mt: 2 }}>
-            <Typography id="gain-slider" gutterBottom>
-              Gain: {cameraState.gain}
-            </Typography>
-            <Slider
-              aria-labelledby="gain-slider"
               value={cameraState.gain}
-              min={0}
-              max={15}
-              step={1}
-              onChange={(event, newValue) =>
-                handleSetState({ gain: newValue as number })
-              }
-              disabled={cameraState.autoExposure}
+              onChange={(value) => {
+                setCameraState((prev) => ({ ...prev, gain: value }));
+                sendViscaCommand({ type: 'SET_GAIN', value });
+              }}
             />
-            <Button
-              variant="contained"
-              onClick={() => handleCommand({ type: 'GAIN_UP' })}
-              disabled={cameraState.autoExposure}
-            >
-              Gain Up
-            </Button>
-            <Button
-              variant="contained"
-              onClick={() => handleCommand({ type: 'GAIN_DOWN' })}
-              disabled={cameraState.autoExposure}
-            >
-              Gain Down
-            </Button>
-          </Box>
+          )}
+          {cameraState.exposureMode === ExposureMode.EXPOSURE_BRIGHT && (
+            <RangeStepper
+              title="Bright"
+              min={0}
+              max={27}
+              value={cameraState.brightness}
+              onChange={(value) => {
+                setCameraState((prev) => ({ ...prev, brightness: value }));
+                sendViscaCommand({ type: 'SET_BRIGHTNESS', value });
+              }}
+            />
+          )}
         </Grid>
       </Grid>
     </Box>

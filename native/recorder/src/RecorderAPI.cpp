@@ -141,13 +141,17 @@ Napi::Object ConvertJsonToNapiObject(Napi::Env env, const json &j)
     }
     else if (it.value().is_array())
     {
-      Napi::Array arr = Napi::Array::New(env, it.value().size());
+      // For now, assume uint8_t
+      std::vector<uint8_t> dataVec = it.value().get<std::vector<uint8_t>>();
+      std::cerr << "Encoding Array of len " << dataVec.size() << std::endl;
+      Napi::Array arr = Napi::Array::New(env, dataVec.size());
       size_t index = 0;
-      for (auto &el : it.value())
+      for (auto &el : dataVec)
       {
-        arr.Set(index++, ConvertJsonToNapiObject(env, el));
+        arr.Set(index++, el);
       }
       obj.Set(it.key(), arr);
+      std::cerr << "Encoding array done" << std::endl;
     }
   }
   return obj;
@@ -432,7 +436,7 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
                                {
                                  if (focusResult.status == ViscaResult::Status::OK)
                                  {
-                                   std::cout << "[FocusInquiry Callback] SUCCESS. Received "
+                                   std::cout << "Camera Command SUCCESS. Received "
                                              << focusResult.response.size() << " bytes.\n  Hex: ";
                                    for (auto b : focusResult.response)
                                    {
@@ -441,6 +445,11 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
                                    std::cout << std::dec << std::endl;
                                  }
                                  json result = {{"id", id}, {"status", focusResult.status}};
+                                 if (focusResult.response.size() > 0)
+                                 {
+                                   result["data"] = focusResult.response;
+                                 }
+
                                  sendMessageToRenderer("visca-result", std::make_shared<json>(result)); });
 
       ret.Set("status", Napi::String::New(env, "OK"));

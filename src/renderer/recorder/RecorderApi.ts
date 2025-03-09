@@ -92,7 +92,8 @@ export const sendViscaCommandToDevice = async ({
   port,
   data,
 }: ViscaMessageProps) => {
-  return new Promise((resolve, reject) => {
+  return new Promise<ViscaResponse>((resolve, reject) => {
+    // console.log(JSON.stringify({ ip, port, data }));
     const id = uuidgen.generate();
     viscaHandlers[id] = resolve;
     window.msgbus
@@ -105,10 +106,7 @@ export const sendViscaCommandToDevice = async ({
           data,
         },
       })
-      .then((result) => {
-        if (result.status === 'OK') {
-          console.log('visca sent OK');
-        }
+      .then((/* result */) => {
         return undefined;
       })
       .catch((reason) => {
