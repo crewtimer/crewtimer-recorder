@@ -125,76 +125,11 @@ class NdiReader : public VideoReader
         // NDIlib_recv_ptz_recall_preset(ndiRecv->pNDI_recv, 3, 1.0);
         // NDIlib_recv_ptz_store_preset(ndiRecv->pNDI_recv, 3);
         // NDIlib_recv_ptz_exposure_manual_v2(ndiRecv->pNDI_recv, 1, 1, 1);
-        NDIlib_recv_ptz_exposure_manual_v2(ndiRecv->pNDI_recv, 0.5, 0.5, 0.5);
+        // NDIlib_recv_ptz_exposure_manual_v2(ndiRecv->pNDI_recv, 0.5, 0.5, 0.5);
         // NDIlib_recv_ptz_exposure_manual_v2(ndiRecv->pNDI_recv, 0.0, 0.0, 0.0);
       }
     }
   }
-#if 0
-  void focusTest(std::string name)
-  {
-    // Create an NDI sender instance. While we won't actually send video,
-    // we need a sender instance to issue PTZ control commands.
-    NDIlib_send_create_t send_create_desc;
-    send_create_desc.p_ndi_name = "NDI PTZ Controller"; // Arbitrary name for this controller
-    NDIlib_send_instance_t pNDI_send = NDIlib_send_create(&send_create_desc);
-
-    if (!pNDI_send)
-    {
-      std::cerr << "Failed to create NDI send instance." << std::endl;
-      NDIlib_destroy();
-      return 1;
-    }
-
-    // The name of your NDI camera source (as discovered in Studio Monitor, etc.)
-    const char *camera_name = "My NDI Camera";
-
-    // 1) Check if PTZ control is available on this device
-    if (!NDIlib_recv_ptz_is_supported(pNDI_send, name.c_str()))
-    {
-      std::cerr << "PTZ is not available or not supported by "
-                << camera_name << std::endl;
-    }
-    else
-    {
-      // 2) Read current PTZ (including focus) information
-      NDIlib_ptz_inquiry_t ptz_inquiry;
-      if (NDIlib_ptz_inquiry(pNDI_send, camera_name, &ptz_inquiry))
-      {
-        std::cout << "Current Focus: " << ptz_inquiry.focus << std::endl;
-        std::cout << "Auto Focus: "
-                  << (ptz_inquiry.auto_focus ? "Enabled" : "Disabled")
-                  << std::endl;
-      }
-      else
-      {
-        std::cerr << "Failed to retrieve PTZ inquiry data." << std::endl;
-      }
-
-      // 3) Set the focus to a new value, for example 0.5 (range is typically 0.0 to 1.0).
-      float new_focus_value = 0.5f;
-      if (NDIlib_ptz_focus(pNDI_send, camera_name, new_focus_value))
-      {
-        std::cout << "Successfully set focus to " << new_focus_value
-                  << std::endl;
-      }
-      else
-      {
-        std::cerr << "Failed to set the focus." << std::endl;
-      }
-
-      // (Optional) Enable or disable auto-focus if supported:
-      // bool enableAutoFocus = true;
-      // if (!NDIlib_ptz_auto_focus(pNDI_send, camera_name, enableAutoFocus))
-      // {
-      //     std::cerr << "Failed to enable auto-focus." << std::endl;
-      // }
-    }
-
-    // Destroy the NDI sender instance
-    NDIlib_send_destroy(pNDI_send);
-  }
-#endif
 
   void scanLoop()
   {

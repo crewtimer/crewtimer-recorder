@@ -18,6 +18,7 @@ import {
 } from './RecorderData';
 import { showErrorDialog } from '../components/ErrorDialog';
 import { ViscaMessage, ViscaMessageProps, ViscaResponse } from './ViscaTypes';
+import { setViscaState } from '../visca/ViscaState';
 
 export const startRecording = () => {
   setRecordingStartTime(Date.now());
@@ -145,6 +146,14 @@ window.Util.onNativeMessage((message: NativeMessage) => {
           resolve(content);
           delete viscaHandlers[id];
         }
+      }
+      break;
+
+    case 'visca-state':
+      {
+        const { state } = content;
+        setViscaState(state);
+        console.log(`Visca state: ${state} `);
       }
       break;
     // case 'VID':

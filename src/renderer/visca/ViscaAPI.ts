@@ -225,7 +225,9 @@ export const sendViscaCommand = async (
   const packet = buildViscaPacket(cmd);
   const ip = getViscaIp();
   const port = getViscaPort();
-  return sendViscaCommandToDevice({ ip, port, data: packet });
+  if (ip) {
+    return sendViscaCommandToDevice({ ip, port, data: packet });
+  }
 };
 
 const extractViscaValue = (
@@ -236,7 +238,7 @@ const extractViscaValue = (
   if (visca === undefined || !visca.data) {
     return defaultValue;
   }
-  console.log(JSON.stringify(visca));
+  // console.log(JSON.stringify(visca));
   const start = visca.data.length - 1 - numBytes;
   if (start < 2) {
     return defaultValue;
@@ -258,8 +260,11 @@ const extractViscaValue = (
   }
 };
 
+export const initCameraConnection = async () => {
+  await sendViscaCommand({ type: 'AUTO_FOCUS_VALUE' });
+};
+
 export const getCameraState = async (): Promise<CameraState> => {
-  const af = await sendViscaCommand({ type: 'AUTO_FOCUS_VALUE' });
   const autoFocus =
     extractViscaValue(
       await sendViscaCommand({ type: 'AUTO_FOCUS_VALUE' }),
@@ -267,7 +272,6 @@ export const getCameraState = async (): Promise<CameraState> => {
       2,
     ) === 2;
 
-  console.log(`af: ${JSON.stringify(af)}, autoFocus: ${autoFocus}`);
   const exposureMode = extractViscaValue(
     await sendViscaCommand({ type: 'EXPOSURE_MODE_VALUE' }),
     1,

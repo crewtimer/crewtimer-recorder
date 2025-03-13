@@ -14,6 +14,7 @@ import HamburgerMenu from './HamburgerMenu';
 import RecordingStatus from '../recorder/RecordingStatus';
 import { useFirebaseDatum } from '../util/UseFirebase';
 import { setDialogConfig } from './ConfirmDialog';
+import { StartButton } from './StartButton';
 
 export const drawerWidth = 240;
 export const [useDrawerOpen] = UseDatum(false);
@@ -96,6 +97,7 @@ export function TopBar() {
         </Button>
       )}
       <Box sx={{ alignItems: 'center' }}>
+        <StartButton hideStopButton />
         <RecordingStatus />
       </Box>
       <Box

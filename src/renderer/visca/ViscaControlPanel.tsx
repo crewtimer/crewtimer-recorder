@@ -1,10 +1,7 @@
 import React, { useEffect } from 'react';
 import {
   Box,
-  Button,
   Grid,
-  Slider,
-  Typography,
   MenuItem,
   FormControl,
   InputLabel,
@@ -13,59 +10,38 @@ import {
 } from '@mui/material';
 import {
   sendViscaCommand,
-  ViscaCommand,
-  updateCameraState,
   getCameraState,
   shutterLabels,
   irisLabels,
+  initCameraConnection,
 } from './ViscaAPI';
 import { setToast } from '../components/Toast';
-import { CameraState, ExposureMode, useCameraState } from './ViscaState';
+import {
+  ExposureMode,
+  useCameraState,
+  useViscaIP,
+  useViscaState,
+} from './ViscaState';
 import ViscaValueButton from './ViscaValueButton';
-import ViscaNumberRange from './RangeStepper';
 import RangeStepper from './RangeStepper';
 
 const ViscaControlPanel = () => {
   const [cameraState, setCameraState] = useCameraState();
+  const [viscaState] = useViscaState();
+  const [viscaIP] = useViscaIP();
 
-  const handleCommand = async (command: ViscaCommand) => {
-    try {
-      const result = await sendViscaCommand(command);
-      if (result) {
-        // const state = await getCameraState();
-        // if (state) {
-        //   setCameraState(state);
-        // }
-      }
-    } catch (error) {
-      setToast({
-        severity: 'error',
-        msg: `Error sending VISCA command: ${error}`,
-      });
-      console.error('Error sending VISCA command:', error);
-    }
-  };
+  useEffect(() => {
+    /** This starts a TCP connection to the camera */
+    initCameraConnection();
+  }, [viscaIP]);
 
-  const handleSetState = async (newState: Partial<CameraState>) => {
-    try {
-      await updateCameraState(newState);
-      setCameraState((prev) => ({ ...prev, ...newState }));
-    } catch (error) {
-      setToast({
-        severity: 'error',
-        msg: `Error setting VISCA state: ${error}`,
-      });
-      console.error('Error setting VISCA state:', error);
-    }
-  };
-
-  // Query camera state on mount
+  // Query camera state when connected
   useEffect(() => {
     const fetchCameraState = async () => {
       try {
         const result = await getCameraState();
         if (result) {
-          console.log(JSON.stringify(result));
+          // console.log(JSON.stringify(result));
           setCameraState(result);
         }
       } catch (error) {
@@ -76,8 +52,10 @@ const ViscaControlPanel = () => {
         console.error('Error querying camera state:', error);
       }
     };
-    fetchCameraState();
-  }, [setCameraState]);
+    if (viscaState === 'Connected') {
+      fetchCameraState();
+    }
+  }, [setCameraState, viscaState]);
 
   const onExposureModeChange = (event: SelectChangeEvent<ExposureMode>) => {
     const exposureMode = event.target.value as ExposureMode;
@@ -86,7 +64,7 @@ const ViscaControlPanel = () => {
   };
 
   return (
-    <Box sx={{ p: 2 }}>
+    <Box sx={{ p: 2, position: 'relative' }}>
       <Grid container spacing={2}>
         {/* Focus Controls */}
         <Grid item xs={12} md={3}>
@@ -205,6 +183,25 @@ const ViscaControlPanel = () => {
           )}
         </Grid>
       </Grid>
+      {/* Conditionally render "Disconnected" overlay if not connected */}
+      {viscaState !== 'Connected' && (
+        <Box
+          position="absolute"
+          top={0}
+          left={0}
+          width="100%"
+          height="100%"
+          display="flex"
+          justifyContent="center"
+          alignItems="center"
+          bgcolor="rgba(0, 0, 0, 0.6)"
+          color="#fff"
+          fontSize="1.5rem"
+          zIndex={9999}
+        >
+          Camera control channel not connected
+        </Box>
+      )}
     </Box>
   );
 };

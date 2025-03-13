@@ -51,6 +51,8 @@ const RangeStepper: React.FC<RangeStepperProps> = ({
   return (
     <Grid
       container
+      direction="row" // Explicitly use row direction
+      wrap="nowrap" // Prevent wrapping to a new line
       alignItems="center"
       justifyContent="center"
       spacing={1}
@@ -69,9 +71,10 @@ const RangeStepper: React.FC<RangeStepperProps> = ({
           size="small"
           disabled={step > 0 ? value === min : value === max}
           onClick={handleDecrement}
+          color="primary"
           sx={{
             padding: '4px',
-            backgroundColor: 'rgba(0, 0, 0, 0.04)',
+            // backgroundColor: 'rgba(0, 0, 0, 0.04)',
             border: '1px solid rgba(0,0,0,0.23)',
             '&:active': {
               backgroundColor: 'rgba(0, 0, 0, 0.20)',
@@ -81,24 +84,15 @@ const RangeStepper: React.FC<RangeStepperProps> = ({
           <RemoveIcon fontSize="small" />
         </IconButton>
       </Grid>
-
-      <Grid item>
-        <Typography
-          variant="body2"
-          sx={{ minWidth: '2rem', textAlign: 'center' }}
-        >
-          {labels ? labels[value] : value}
-        </Typography>
-      </Grid>
-
       <Grid item>
         <IconButton
           disabled={step > 0 ? value === max : value === min}
           size="small"
           onClick={handleIncrement}
+          color="primary"
           sx={{
             padding: '4px',
-            backgroundColor: 'rgba(0, 0, 0, 0.04)',
+            // backgroundColor: 'rgba(0, 0, 0, 0.04)',
             border: '1px solid rgba(0,0,0,0.23)',
             '&:active': {
               backgroundColor: 'rgba(0, 0, 0, 0.20)',
@@ -107,6 +101,14 @@ const RangeStepper: React.FC<RangeStepperProps> = ({
         >
           <AddIcon fontSize="small" />
         </IconButton>
+      </Grid>
+      <Grid item>
+        <Typography
+          variant="body2"
+          sx={{ minWidth: '2rem', textAlign: 'center' }}
+        >
+          {labels ? labels[value] : value}
+        </Typography>
       </Grid>
     </Grid>
   );

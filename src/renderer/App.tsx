@@ -19,6 +19,7 @@ import MainPage from './pages/MainPage';
 import { drawerWidth, TopBar, useDrawerOpen } from './components/TopBar';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import Toast from './components/Toast';
+import CameraMonitor from './recorder/CameraMonitor';
 
 createTheme();
 
@@ -110,6 +111,7 @@ function App() {
           <CssBaseline />
           <ConfirmDialog />
           <Toast />
+          <CameraMonitor />
           <AppBar position="fixed" open={open}>
             <TopBar />
           </AppBar>

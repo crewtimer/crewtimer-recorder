@@ -8,24 +8,17 @@ import {
   FormControlLabel,
   Tooltip,
   IconButton,
-  Button,
 } from '@mui/material';
-import { UseDatum } from 'react-usedatum';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import StopIcon from '@mui/icons-material/Stop';
-import { queryCameraList, startRecording, stopRecording } from './RecorderApi';
-import {
-  useRecordingStatus,
-  useIsRecording,
-  useRecordingProps,
-} from './RecorderData';
+import { useRecordingStatus, useRecordingProps } from './RecorderData';
 import { FullSizeWindow } from '../components/FullSizeWindow';
 import RGBAImageCanvas from '../components/RGBAImageCanvas';
 import { showErrorDialog } from '../components/ErrorDialog';
 import InfoPopup from '../components/InfoPopup';
 import RecorderTips from './RecorderTips';
+import { useViscaIP } from '../visca/ViscaState';
+import { useCameraList } from './CameraMonitor';
 
 const { openDirDialog, openFileExplorer } = window.Util;
 
@@ -46,28 +39,20 @@ const RecordingError = () => {
   ) : null;
 };
 
-const [useCameraList, setCameraList] = UseDatum<
-  { name: string; address: string }[]
->([]);
 const RecorderConfig: React.FC = () => {
-  const [isRecording] = useIsRecording();
   const [recordingProps, setRecordingProps] = useRecordingProps();
   const [cameraList] = useCameraList();
+  const [viscaIP, setViscaIP] = useViscaIP();
+
+  const selectedCamIP = cameraList
+    .find((c) => c.name === recordingProps.networkCamera)
+    ?.address.replace(/:.*/, '');
 
   useEffect(() => {
-    if (isRecording) {
-      return () => {};
+    if (selectedCamIP && selectedCamIP !== viscaIP) {
+      setViscaIP(selectedCamIP);
     }
-    const timer = setInterval(() => {
-      queryCameraList()
-        .then((result) => {
-          setCameraList(result?.cameras || []);
-          return null;
-        })
-        .catch(showErrorDialog);
-    }, 5000);
-    return () => clearInterval(timer);
-  }, [isRecording]);
+  }, [selectedCamIP, setViscaIP, viscaIP]);
 
   const chooseDir = () => {
     openDirDialog('Choose Video Folder', recordingProps.recordingFolder)
@@ -84,42 +69,22 @@ const RecorderConfig: React.FC = () => {
   };
 
   const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    let value =
+    const value =
       event.target.type === 'checkbox'
         ? event.target.checked
         : event.target.value;
-
-    if (value === 'First Camera Discovered') {
-      value = '';
-    }
 
     setRecordingProps({
       ...recordingProps,
       [event.target.name]: value,
     });
   };
+  const selectedCamera = recordingProps.networkCamera;
+  const camFound = cameraList.some((c) => c.name === selectedCamera);
 
-  const cameraSelectItems = [
-    { name: 'First Camera Discovered', address: '1st' },
-    ...cameraList,
-  ];
-  if (
-    recordingProps.networkCamera &&
-    !cameraSelectItems.find((c) => c.name === recordingProps.networkCamera)
-  ) {
-    cameraSelectItems.push({
-      name: recordingProps.networkCamera,
-      address: '',
-    });
-  }
-
-  const handleToggleRecording = () => {
-    if (isRecording) {
-      stopRecording().catch(showErrorDialog);
-    } else {
-      startRecording().catch(showErrorDialog);
-    }
-  };
+  console.log(
+    JSON.stringify({ cameraList, camFound, selectedCamera, viscaIP }, null, 2),
+  );
 
   return (
     <div
@@ -139,33 +104,32 @@ const RecorderConfig: React.FC = () => {
             label="Camera"
             name="networkCamera"
             size="small"
-            value={recordingProps.networkCamera || 'First Camera Discovered'}
+            value={selectedCamera}
             onChange={handleChange}
             fullWidth
+            // Color the selected text red if invalid
+            sx={{
+              '& .MuiSelect-select': {
+                color: camFound ? 'inherit' : 'red',
+              },
+            }}
           >
-            {cameraSelectItems.map((camera) => (
+            {cameraList.map((camera) => (
               <MenuItem key={camera.name} value={camera.name}>
                 {camera.name}
               </MenuItem>
             ))}
+            {/* If the current value is not in the valid list, show a red fallback option */}
+            {!camFound && selectedCamera && (
+              <MenuItem value={selectedCamera} style={{ color: 'red' }}>
+                {selectedCamera}
+              </MenuItem>
+            )}
           </TextField>
         </Grid>
         <Grid item xs={2} container justifyContent="center" alignItems="center">
-          <Tooltip title="Explore Recording Folder">
-            <Button
-              variant="contained"
-              onClick={handleToggleRecording}
-              startIcon={isRecording ? <StopIcon /> : <PlayArrowIcon />}
-              sx={{
-                backgroundColor: isRecording ? 'red' : 'green',
-                '&:hover': {
-                  backgroundColor: isRecording ? 'darkred' : 'darkgreen',
-                },
-              }}
-            >
-              {isRecording ? 'Stop' : 'Start'}
-            </Button>
-          </Tooltip>
+          {/* take up space if no start button */}
+          {/* <StartButton /> */}
         </Grid>
         <Grid item xs={10}>
           <TextField

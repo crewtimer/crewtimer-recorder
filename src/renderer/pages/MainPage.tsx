@@ -4,9 +4,6 @@ import PrivacyMarkdown from '../doc/PrivacyMarkdown.md';
 import CrewTimerVideoRecorder from '../doc/CrewTimerVideoRecorderHelp.md';
 import RecorderConfig from '../recorder/RecorderConfig';
 import RecordingLogTable from './RecordingLogTable';
-import { FullSizeWindow } from '../components/FullSizeWindow';
-import RGBAImageCanvas from '../components/RGBAImageCanvas';
-import ViscaControlPanel from '../visca/ViscaControlPanel';
 import { FullScreenVideo } from '../recorder/FullScreenVideo';
 
 export const [useSelectedPage] = UseDatum<string>('/');
@@ -19,8 +16,6 @@ const MainPage = () => {
       return <RecorderConfig />;
     case '/log':
       return <RecordingLogTable />;
-    case '/camcontrol':
-      return <ViscaControlPanel />;
     case '/video':
       return <FullScreenVideo />;
     case '/privacy':

@@ -41,10 +41,12 @@ class ViscaTcpClientImpl : public IViscaTcpClient
 {
 public:
   ViscaTcpClientImpl(StatusCallback statusCb,
+                     StatusCallback stateCb,
                      int connectTimeoutSec,
                      int sendTimeoutSec)
-      : statusCallback_(std::move(statusCb)), connectTimeoutSec_(connectTimeoutSec), sendTimeoutSec_(sendTimeoutSec), exitFlag_(false), connected_(false)
+      : statusCallback_(std::move(statusCb)), stateCallback_(std::move(stateCb)), connectTimeoutSec_(connectTimeoutSec), sendTimeoutSec_(sendTimeoutSec), exitFlag_(false), connected_(false)
   {
+    logState("Idle");
 #ifdef _WIN32
     // Optionally only once per process in practice
     static bool winsockInitialized = false;
@@ -75,7 +77,7 @@ public:
 
   void start(const std::string &ip, uint16_t port) override
   {
-    std::lock_guard<std::mutex> lock(queueMutex_);
+    std::lock_guard<std::recursive_mutex> lock(queueMutex_);
     if (workerThread_.joinable())
     {
       // If already running with the same config, do nothing
@@ -85,6 +87,7 @@ public:
       }
       // Otherwise stop old thread before starting new
       stop();
+      exitFlag_ = false;
     }
     ipAddress_ = ip;
     port_ = port;
@@ -93,12 +96,14 @@ public:
 
   void stop() override
   {
+    logState("Stopping");
     {
-      std::lock_guard<std::mutex> lock(queueMutex_);
+      std::lock_guard<std::recursive_mutex> lock(queueMutex_);
       if (!workerThread_.joinable())
       {
         return; // Already stopped
       }
+
       exitFlag_ = true;
       flushQueue();
       queueCondVar_.notify_all();
@@ -108,6 +113,7 @@ public:
       workerThread_.join();
     }
     closeSocket();
+    logState("Stopped");
   }
 
   void sendCommand(const std::vector<uint8_t> &commandBytes,
@@ -118,7 +124,7 @@ public:
     req.callback = std::move(callback);
 
     {
-      std::lock_guard<std::mutex> lock(queueMutex_);
+      std::lock_guard<std::recursive_mutex> lock(queueMutex_);
       commandQueue_.push(req);
     }
     queueCondVar_.notify_one();
@@ -134,6 +140,7 @@ private:
   void runThread()
   {
     logStatus("[ViscaTcpClient] Thread started.");
+    logState("Starting");
 
     while (!exitFlag_)
     {
@@ -154,7 +161,7 @@ private:
       // Wait for command or up to 10s
       CommandRequest req;
       {
-        std::unique_lock<std::mutex> lock(queueMutex_);
+        std::unique_lock<std::recursive_mutex> lock(queueMutex_);
         queueCondVar_.wait_for(lock, std::chrono::seconds(10),
                                [this]
                                { return !commandQueue_.empty() || exitFlag_; });
@@ -181,6 +188,7 @@ private:
         logStatus("[ViscaTcpClient] Communication error; marking disconnected.");
         connected_ = false;
         closeSocket();
+        logState("Disconnected");
       }
 
       // Callback
@@ -196,17 +204,19 @@ private:
    */
   void flushQueue()
   {
-    std::lock_guard<std::mutex> lock(queueMutex_);
-
+    std::lock_guard<std::recursive_mutex> lock(queueMutex_);
     while (!commandQueue_.empty())
     {
       CommandRequest req = commandQueue_.front();
       commandQueue_.pop();
 
-      ViscaResult result;
-      result.status = ViscaResult::Status::NotConnected;
-      result.message = "Flushed command queue due to failed connection.";
-      req.callback(result);
+      if (!exitFlag_)
+      {
+        ViscaResult result;
+        result.status = ViscaResult::Status::NotConnected;
+        result.message = "Flushed command queue due to failed connection.";
+        req.callback(result);
+      }
     }
   }
 
@@ -313,6 +323,7 @@ private:
     setsockopt(sock_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 #endif
 
+    logState("Connected");
     return true;
   }
 
@@ -586,11 +597,20 @@ private:
     }
   }
 
+  void logState(const std::string &state)
+  {
+    if (stateCallback_)
+    {
+      stateCallback_(state);
+    }
+  }
+
 private:
   std::string ipAddress_;
   uint16_t port_{0};
 
   StatusCallback statusCallback_;
+  StatusCallback stateCallback_;
 
   int connectTimeoutSec_{10};
   int sendTimeoutSec_{5};
@@ -602,8 +622,8 @@ private:
 #endif
 
   std::thread workerThread_;
-  std::mutex queueMutex_;
-  std::condition_variable queueCondVar_;
+  std::recursive_mutex queueMutex_;
+  std::condition_variable_any queueCondVar_;
   std::queue<CommandRequest> commandQueue_;
 
   std::atomic<bool> exitFlag_;
@@ -613,11 +633,12 @@ private:
 // -----------------------------------------------------------------------------
 std::unique_ptr<IViscaTcpClient> createViscaTcpClient(
     IViscaTcpClient::StatusCallback statusCb,
+    IViscaTcpClient::StatusCallback stateCb,
     int connectTimeoutSec,
     int sendTimeoutSec)
 {
   return std::unique_ptr<IViscaTcpClient>(
-      new ViscaTcpClientImpl(std::move(statusCb),
+      new ViscaTcpClientImpl(std::move(statusCb), std::move(stateCb),
                              connectTimeoutSec,
                              sendTimeoutSec));
 }

@@ -171,6 +171,13 @@ auto viscaStatusLogger = [](const std::string &msg)
   sendMessageToRenderer("visca-status", std::make_shared<json>(config));
 };
 
+auto viscaStateLogger = [](const std::string &msg)
+{
+  std::cout << "[VISCA STATE] " << msg << std::endl;
+  json config = {{"state", msg}};
+  sendMessageToRenderer("visca-state", std::make_shared<json>(config));
+};
+
 Napi::Object
 nativeVideoRecorder(const Napi::CallbackInfo &info)
 {
@@ -203,6 +210,7 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
     {
       viscaClient = createViscaTcpClient(
           viscaStatusLogger,
+          viscaStateLogger,
           5, // connect timeout
           2  // send timeout
       );
@@ -482,6 +490,10 @@ Napi::ThreadSafeFunction tsfn;
 void sendMessageToRenderer(const std::string &sender,
                            std::shared_ptr<json> content)
 {
+  if (!tsfn)
+  {
+    return;
+  }
   uv_async_t *async = new uv_async_t;
   uv_loop_t *loop = uv_default_loop();
   auto *data =
@@ -522,12 +534,24 @@ std::ofstream logFile;
 
 Napi::Value shutdownRecorder(const Napi::CallbackInfo &info)
 {
+  if (tsfn)
+  {
+    tsfn.Abort(); // or tsfn.Release();
+  }
+
+  tsfn = Napi::ThreadSafeFunction(); // return to uninitialized state
+
   Napi::Env env = info.Env();
   recorder = nullptr;
-  tsfn = Napi::ThreadSafeFunction();
+  std::cerr << "Recorder shutdown" << std::endl;
+  if (viscaClient)
+  {
+    std::cerr << "Requesting VISCA client to stop" << std::endl;
+    viscaClient->stop();
+    viscaClient = nullptr;
+  }
+  std::cerr << "VISCA client stopped" << std::endl;
   logFile.close();
-  // viscaClient->stop();
-  // viscaClient = nullptr;
   return env.Undefined();
 }
 
