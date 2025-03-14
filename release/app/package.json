@@ -15,7 +15,9 @@
     "link-modules": "node -r ts-node/register ../../.erb/scripts/link-modules.ts"
   },
   "dependencies": {
-    "crewtimer_video_recorder": "../../native/recorder"
+    "crewtimer_video_recorder": "../../native/recorder",
+    "start": "^5.1.0",
+    "yarn": "^1.22.22"
   },
   "devDependencies": {
     "@electron/rebuild": "^3.6.0"

@@ -16,9 +16,16 @@ import {
   updateCameraState,
 } from './ViscaAPI';
 import { setToast } from '../components/Toast';
-import { ExposureMode, useCameraState, useViscaState } from './ViscaState';
+import {
+  ExposureMode,
+  getCameraPresets,
+  setCameraPresets,
+  useCameraState,
+  useViscaState,
+} from './ViscaState';
 import ViscaValueButton from './ViscaValueButton';
 import RangeStepper from './RangeStepper';
+import ViscaPresets from './ViscaPresets';
 
 const ViscaControlPanel = () => {
   const [cameraState, setCameraState] = useCameraState();
@@ -49,6 +56,9 @@ const ViscaControlPanel = () => {
   const onExposureModeChange = async (
     event: SelectChangeEvent<ExposureMode>,
   ) => {
+    const presets = [...getCameraPresets()];
+    presets[5] = cameraState;
+    setCameraPresets(presets);
     const exposureMode = event.target.value as ExposureMode;
     setCameraState((prev) => ({ ...prev, exposureMode }));
     await sendViscaCommand({ type: 'EXPOSURE_MODE', value: exposureMode });
@@ -56,10 +66,18 @@ const ViscaControlPanel = () => {
   };
 
   return (
-    <Box sx={{ p: 2, position: 'relative' }}>
+    <Box sx={{ paddingBottom: 1, position: 'relative' }}>
       <Grid container spacing={2}>
         {/* Focus Controls */}
-        <Grid item xs={12} md={3}>
+        <Grid
+          item
+          xs={12}
+          md={2}
+          container
+          alignItems="flex-start"
+          justifyContent="flex-start"
+          sx={{ marginTop: '8px' }}
+        >
           <ViscaValueButton
             title="Focus"
             decrement={{ type: 'FOCUS_OUT' }}
@@ -71,7 +89,16 @@ const ViscaControlPanel = () => {
             autoOnce={{ type: 'FOCUS_ONCE' }}
           />
         </Grid>
-        <Grid item xs={12} md={3}>
+
+        <Grid
+          item
+          xs={12}
+          md={2}
+          container
+          alignItems="flex-start"
+          justifyContent="flex-start"
+          sx={{ marginTop: '8px' }}
+        >
           <ViscaValueButton
             title="Zoom"
             decrement={{ type: 'ZOOM_OUT' }}
@@ -81,7 +108,7 @@ const ViscaControlPanel = () => {
         </Grid>
 
         {/* Exposure Controls */}
-        <Grid item xs={12} md={3}>
+        <Grid item xs={12} md={2}>
           <FormControl
             margin="dense"
             size="small" // makes form components (including Select) smaller
@@ -100,6 +127,7 @@ const ViscaControlPanel = () => {
                 // smaller vertical & horizontal padding
                 '.MuiSelect-select': {
                   padding: '6px 14px',
+                  fontSize: '0.8rem',
                 },
               }}
               // Option B: if you prefer an inline style for the displayed value
@@ -173,6 +201,16 @@ const ViscaControlPanel = () => {
               }}
             />
           )}
+        </Grid>
+        <Grid
+          item
+          xs={12}
+          md={2}
+          container
+          alignItems="flex-start"
+          justifyContent="flex-start"
+        >
+          <ViscaPresets />
         </Grid>
       </Grid>
       {/* Conditionally render "Disconnected" overlay if not connected */}

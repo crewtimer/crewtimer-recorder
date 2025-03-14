@@ -60,7 +60,7 @@ const RangeStepper: React.FC<RangeStepperProps> = ({
     >
       {/* Title (fixed width to align multiple panels) */}
       {title && (
-        <Grid item sx={{ width: '65px' }}>
+        <Grid item sx={{ width: '55px' }}>
           <Typography variant="subtitle2" noWrap>
             {title}
           </Typography>

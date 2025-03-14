@@ -331,7 +331,7 @@ export const updateCameraState = async (
     });
   }
 
-  if (typeof states.exposureMode === 'boolean') {
+  if (typeof states.exposureMode === 'number') {
     await sendViscaCommand({
       type: 'EXPOSURE_MODE',
       value: states.exposureMode,

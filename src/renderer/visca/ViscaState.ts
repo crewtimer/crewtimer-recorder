@@ -1,4 +1,5 @@
 import { UseDatum } from 'react-usedatum';
+import { UseStoredDatum } from '../store/UseElectronDatum';
 
 export enum ExposureMode {
   EXPOSURE_AUTO = 0,
@@ -23,6 +24,8 @@ export interface CameraState {
 export const [useViscaIP, setViscaIP, getViscaIp] = UseDatum('192.168.1.188');
 export const [useViscaPort, , getViscaPort] = UseDatum(52381);
 export const [useViscaState, setViscaState, getViscastate] = UseDatum('Idle');
+export const [useCameraPresets, setCameraPresets, getCameraPresets] =
+  UseStoredDatum<CameraState[]>('presets', []);
 export const [useCameraState, setCameraState, getCameraState] =
   UseDatum<CameraState>({
     autoFocus: false,

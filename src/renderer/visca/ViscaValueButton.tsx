@@ -139,58 +139,67 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
     <Grid
       container
       alignItems="center"
-      justifyContent="flex-start"
+      justifyContent="center"
       spacing={1}
       sx={{ width: 'fit-content' }}
     >
-      {title && (
-        <Grid item sx={{ width: '65px' }}>
-          <Typography variant="subtitle1" noWrap>
-            {title}
-          </Typography>
+      <Grid
+        container
+        direction="row" // Explicitly use row direction
+        wrap="nowrap" // Prevent wrapping to a new line
+        alignItems="center"
+        justifyContent="flex-start"
+        spacing={1}
+        sx={{ width: 'fit-content' }}
+      >
+        {title && (
+          <Grid item sx={{ width: '50px' }}>
+            <Typography variant="subtitle2" noWrap>
+              {title}
+            </Typography>
+          </Grid>
+        )}
+
+        {/* Decrement Button */}
+        <Grid item>
+          <IconButton
+            onMouseDown={handleDecrementPress}
+            onMouseUp={handleDecrementRelease}
+            onTouchStart={handleDecrementPress}
+            onTouchEnd={handleDecrementRelease}
+            size="small"
+            color="primary"
+            sx={{
+              padding: '4px',
+              // backgroundColor: 'rgba(0, 0, 0, 0.04)',
+              border: '1px solid rgba(0,0,0,0.23)',
+              '&:active': { backgroundColor: 'rgba(0, 0, 0, 0.20)' },
+            }}
+          >
+            <RemoveIcon fontSize="small" />
+          </IconButton>
         </Grid>
-      )}
 
-      {/* Decrement Button */}
-      <Grid item>
-        <IconButton
-          onMouseDown={handleDecrementPress}
-          onMouseUp={handleDecrementRelease}
-          onTouchStart={handleDecrementPress}
-          onTouchEnd={handleDecrementRelease}
-          size="small"
-          color="primary"
-          sx={{
-            padding: '4px',
-            // backgroundColor: 'rgba(0, 0, 0, 0.04)',
-            border: '1px solid rgba(0,0,0,0.23)',
-            '&:active': { backgroundColor: 'rgba(0, 0, 0, 0.20)' },
-          }}
-        >
-          <RemoveIcon fontSize="small" />
-        </IconButton>
+        {/* Increment Button */}
+        <Grid item>
+          <IconButton
+            onMouseDown={handleIncrementPress}
+            onMouseUp={handleIncrementRelease}
+            onTouchStart={handleIncrementPress}
+            onTouchEnd={handleIncrementRelease}
+            size="small"
+            color="primary"
+            sx={{
+              padding: '4px',
+              // backgroundColor: 'rgba(0, 0, 0, 0.04)',
+              border: '1px solid rgba(0,0,0,0.23)',
+              '&:active': { backgroundColor: 'rgba(0, 0, 0, 0.20)' },
+            }}
+          >
+            <AddIcon fontSize="small" />
+          </IconButton>
+        </Grid>
       </Grid>
-
-      {/* Increment Button */}
-      <Grid item>
-        <IconButton
-          onMouseDown={handleIncrementPress}
-          onMouseUp={handleIncrementRelease}
-          onTouchStart={handleIncrementPress}
-          onTouchEnd={handleIncrementRelease}
-          size="small"
-          color="primary"
-          sx={{
-            padding: '4px',
-            // backgroundColor: 'rgba(0, 0, 0, 0.04)',
-            border: '1px solid rgba(0,0,0,0.23)',
-            '&:active': { backgroundColor: 'rgba(0, 0, 0, 0.20)' },
-          }}
-        >
-          <AddIcon fontSize="small" />
-        </IconButton>
-      </Grid>
-
       {/* Toggle Button Group (Optional) */}
       {autoOn && (
         <Grid item>

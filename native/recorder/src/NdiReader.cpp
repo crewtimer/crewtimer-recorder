@@ -113,24 +113,6 @@ class NdiReader : public VideoReader
     return list;
   };
 
-  void focusTest()
-  {
-    { // Get the Web UR
-      if (NDIlib_recv_ptz_is_supported(ndiRecv->pNDI_recv))
-      { // Display the details
-        // NDIlib_recv_ptz_zoom(ndiRecv->pNDI_recv, 0.5);
-        // NDIlib_recv_ptz_focus(ndiRecv->pNDI_recv, 0.5);
-        // printf("This source supports PTZ functionality.\n");
-        // Move it to preset number  as quickly as it can go !
-        // NDIlib_recv_ptz_recall_preset(ndiRecv->pNDI_recv, 3, 1.0);
-        // NDIlib_recv_ptz_store_preset(ndiRecv->pNDI_recv, 3);
-        // NDIlib_recv_ptz_exposure_manual_v2(ndiRecv->pNDI_recv, 1, 1, 1);
-        // NDIlib_recv_ptz_exposure_manual_v2(ndiRecv->pNDI_recv, 0.5, 0.5, 0.5);
-        // NDIlib_recv_ptz_exposure_manual_v2(ndiRecv->pNDI_recv, 0.0, 0.0, 0.0);
-      }
-    }
-  }
-
   void scanLoop()
   {
     std::cout << "Scan loop started" << std::endl;
@@ -216,17 +198,21 @@ class NdiReader : public VideoReader
     {
       NDIlib_video_frame_v2_t video_frame;
       NDIlib_audio_frame_v3_t audio_frame;
+      if (!ndiRecv)
+      {
+        connect();
+      }
 
       auto frameType = NDIlib_recv_capture_v3(ndiRecv->pNDI_recv, &video_frame, nullptr,
                                               nullptr, 5000);
       switch (frameType)
       {
       case NDIlib_frame_type_status_change:
-        focusTest();
         break;
       // No data
       case NDIlib_frame_type_none:
         printf("No data received.\n");
+        ndiRecv = nullptr;
         break;
 
         // Video data
