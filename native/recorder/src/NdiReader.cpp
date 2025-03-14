@@ -120,7 +120,7 @@ class NdiReader : public VideoReader
       { // Display the details
         // NDIlib_recv_ptz_zoom(ndiRecv->pNDI_recv, 0.5);
         // NDIlib_recv_ptz_focus(ndiRecv->pNDI_recv, 0.5);
-        // printf("This source supports PTZ functionality. Moving to preset #3.\n");
+        // printf("This source supports PTZ functionality.\n");
         // Move it to preset number  as quickly as it can go !
         // NDIlib_recv_ptz_recall_preset(ndiRecv->pNDI_recv, 3, 1.0);
         // NDIlib_recv_ptz_store_preset(ndiRecv->pNDI_recv, 3);

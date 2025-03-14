@@ -13,8 +13,19 @@ export interface ViscaMessage {
   props: ViscaSendMessageProps;
 }
 
+// export interface ViscaBaseResponse {
+//   status: string; // OK if all is well
+//   msg?: string;
+// }
+
+// export interface ViscaResponse extends ViscaBaseResponse {
+//   id: string;
+//   data: Uint8Array;
+// }
+
 export interface ViscaResponse {
-  status: string;
-  id: string;
-  data: Uint8Array;
+  status: string; // OK if all is well
+  msg?: string;
+  id?: string;
+  data?: Uint8Array;
 }

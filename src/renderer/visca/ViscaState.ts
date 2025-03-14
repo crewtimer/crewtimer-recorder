@@ -20,7 +20,7 @@ export interface CameraState {
   zoom: number;
 }
 
-export const [useViscaIP, , getViscaIp] = UseDatum('192.168.1.188');
+export const [useViscaIP, setViscaIP, getViscaIp] = UseDatum('192.168.1.188');
 export const [useViscaPort, , getViscaPort] = UseDatum(52381);
 export const [useViscaState, setViscaState, getViscastate] = UseDatum('Idle');
 export const [useCameraState, setCameraState, getCameraState] =

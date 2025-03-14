@@ -44,16 +44,6 @@ const RecorderConfig: React.FC = () => {
   const [cameraList] = useCameraList();
   const [viscaIP, setViscaIP] = useViscaIP();
 
-  const selectedCamIP = cameraList
-    .find((c) => c.name === recordingProps.networkCamera)
-    ?.address.replace(/:.*/, '');
-
-  useEffect(() => {
-    if (selectedCamIP && selectedCamIP !== viscaIP) {
-      setViscaIP(selectedCamIP);
-    }
-  }, [selectedCamIP, setViscaIP, viscaIP]);
-
   const chooseDir = () => {
     openDirDialog('Choose Video Folder', recordingProps.recordingFolder)
       .then((result) => {
@@ -79,12 +69,28 @@ const RecorderConfig: React.FC = () => {
       [event.target.name]: value,
     });
   };
+
+  const handleCameraChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const networkIP =
+      cameraList
+        .find((c) => c.name === event.target.value)
+        ?.address.replace(/:.*/, '') || '';
+    setRecordingProps({
+      ...recordingProps,
+      networkCamera: event.target.value,
+      networkIP,
+    });
+    // update the Camera IP
+
+    setViscaIP(networkIP || '');
+  };
+
   const selectedCamera = recordingProps.networkCamera;
   const camFound = cameraList.some((c) => c.name === selectedCamera);
 
-  console.log(
-    JSON.stringify({ cameraList, camFound, selectedCamera, viscaIP }, null, 2),
-  );
+  // console.log(
+  //   JSON.stringify({ cameraList, camFound, selectedCamera, viscaIP }, null, 2),
+  // );
 
   return (
     <div
@@ -105,7 +111,7 @@ const RecorderConfig: React.FC = () => {
             name="networkCamera"
             size="small"
             value={selectedCamera}
-            onChange={handleChange}
+            onChange={handleCameraChange}
             fullWidth
             // Color the selected text red if invalid
             sx={{

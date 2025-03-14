@@ -97,7 +97,6 @@ export interface ViscaMessageProps {
 function buildViscaPacket(cmd: ViscaCommand): Uint8Array {
   switch (cmd.type) {
     case 'AUTO_FOCUS':
-      console.log(`building: ${JSON.stringify(cmd)}`);
       return cmd.value
         ? new Uint8Array([0x81, 0x01, 0x04, 0x38, 0x02, 0xff]) // AF on
         : new Uint8Array([0x81, 0x01, 0x04, 0x38, 0x03, 0xff]); // AF off
@@ -220,7 +219,7 @@ function buildViscaPacket(cmd: ViscaCommand): Uint8Array {
  */
 export const sendViscaCommand = async (
   cmd: ViscaCommand,
-): Promise<undefined | ViscaResponse> => {
+): Promise<ViscaResponse> => {
   // Normal single set command
   const packet = buildViscaPacket(cmd);
   const ip = getViscaIp();
@@ -228,6 +227,7 @@ export const sendViscaCommand = async (
   if (ip) {
     return sendViscaCommandToDevice({ ip, port, data: packet });
   }
+  return { status: 'Fail', msg: 'Visca IP Address not set' };
 };
 
 const extractViscaValue = (
@@ -258,10 +258,6 @@ const extractViscaValue = (
     default:
       return defaultValue;
   }
-};
-
-export const initCameraConnection = async () => {
-  await sendViscaCommand({ type: 'AUTO_FOCUS_VALUE' });
 };
 
 export const getCameraState = async (): Promise<CameraState> => {

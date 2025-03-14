@@ -1,6 +1,6 @@
 /* eslint-disable no-bitwise */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Box } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import CropIcon from '@mui/icons-material/Crop';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter';
@@ -886,7 +886,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
 
   return (
     <Box
-      sx={{ width: divwidth, height: divheight }}
+      sx={{ width: divwidth, height: divheight, position: 'relative' }}
       onMouseDown={handleMouseDown}
       onMouseUp={handleMouseUp}
       onContextMenu={(event) => {
@@ -911,7 +911,28 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         color="white"
         setImage={setSnapToCenterImage}
       />
-
+      {isRecording ? (
+        <Box />
+      ) : (
+        <Box
+          position="absolute"
+          top={0}
+          left={0}
+          width="100%"
+          height="100%"
+          display="flex"
+          justifyContent="center"
+          alignItems="center"
+          bgcolor="rgba(0, 0, 0, 0.4)"
+          color="#fff"
+          fontSize="1.5rem"
+          zIndex={100}
+        >
+          <Typography sx={{ background: '#888a' }}>
+            Video stopped. Press Start to resume.
+          </Typography>
+        </Box>
+      )}
       <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }} />
     </Box>
   );

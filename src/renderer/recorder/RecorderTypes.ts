@@ -13,6 +13,7 @@ export interface RecordingProps {
   recordingPrefix: string;
   recordingDuration: number;
   networkCamera: string;
+  networkIP: string;
   showFinishGuide: boolean;
   cropArea: Rect;
 }
@@ -81,6 +82,7 @@ export const DefaultRecordingProps: RecordingProps = {
   recordingPrefix: 'CT_',
   recordingDuration: 120,
   networkCamera: '',
+  networkIP: '',
   showFinishGuide: true,
   cropArea: { x: 0, y: 0, width: 1, height: 1 },
 };

@@ -152,8 +152,8 @@ private:
           // Flush the queue with NotConnected status
           flushQueue();
 
-          // Wait 10 seconds before retry
-          waitForRetry(10);
+          // Wait a bit before retry
+          waitForRetry(2);
           continue;
         }
       }

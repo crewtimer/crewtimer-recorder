@@ -13,27 +13,16 @@ import {
   getCameraState,
   shutterLabels,
   irisLabels,
-  initCameraConnection,
+  updateCameraState,
 } from './ViscaAPI';
 import { setToast } from '../components/Toast';
-import {
-  ExposureMode,
-  useCameraState,
-  useViscaIP,
-  useViscaState,
-} from './ViscaState';
+import { ExposureMode, useCameraState, useViscaState } from './ViscaState';
 import ViscaValueButton from './ViscaValueButton';
 import RangeStepper from './RangeStepper';
 
 const ViscaControlPanel = () => {
   const [cameraState, setCameraState] = useCameraState();
   const [viscaState] = useViscaState();
-  const [viscaIP] = useViscaIP();
-
-  useEffect(() => {
-    /** This starts a TCP connection to the camera */
-    initCameraConnection();
-  }, [viscaIP]);
 
   // Query camera state when connected
   useEffect(() => {
@@ -57,10 +46,13 @@ const ViscaControlPanel = () => {
     }
   }, [setCameraState, viscaState]);
 
-  const onExposureModeChange = (event: SelectChangeEvent<ExposureMode>) => {
+  const onExposureModeChange = async (
+    event: SelectChangeEvent<ExposureMode>,
+  ) => {
     const exposureMode = event.target.value as ExposureMode;
     setCameraState((prev) => ({ ...prev, exposureMode }));
-    sendViscaCommand({ type: 'EXPOSURE_MODE', value: exposureMode });
+    await sendViscaCommand({ type: 'EXPOSURE_MODE', value: exposureMode });
+    await updateCameraState({ ...cameraState, exposureMode }); // Apply memorized values after mode changes
   };
 
   return (
@@ -93,7 +85,7 @@ const ViscaControlPanel = () => {
           <FormControl
             margin="dense"
             size="small" // makes form components (including Select) smaller
-            sx={{ minWidth: 120 }}
+            sx={{ minWidth: 120, zIndex: 101 }}
           >
             <InputLabel id="select-label">Exposure Mode</InputLabel>
             <Select
@@ -194,12 +186,12 @@ const ViscaControlPanel = () => {
           display="flex"
           justifyContent="center"
           alignItems="center"
-          bgcolor="rgba(0, 0, 0, 0.6)"
+          bgcolor="rgba(0, 0, 0, 0.4)"
           color="#fff"
           fontSize="1.5rem"
           zIndex={9999}
         >
-          Camera control channel not connected
+          Camera control channel disconnected
         </Box>
       )}
     </Box>

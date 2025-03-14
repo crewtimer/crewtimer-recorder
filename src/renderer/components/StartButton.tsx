@@ -29,20 +29,23 @@ export const StartButton: React.FC<StartButtonProps> = ({ hideStopButton }) => {
 
   return !isRecording || !hideStopButton ? (
     <Tooltip title={isRecording ? 'Stop Recording' : 'Start Recording'}>
-      <Button
-        variant="contained"
-        disabled={!camFound}
-        onClick={handleToggleRecording}
-        startIcon={isRecording ? <StopIcon /> : <PlayArrowIcon />}
-        sx={{
-          backgroundColor: isRecording ? 'red' : 'green',
-          '&:hover': {
-            backgroundColor: isRecording ? 'darkred' : 'darkgreen',
-          },
-        }}
-      >
-        {isRecording ? 'Stop' : 'Start'}
-      </Button>
+      {/* span provides child when button disabled */}
+      <span>
+        <Button
+          variant="contained"
+          disabled={!camFound}
+          onClick={handleToggleRecording}
+          startIcon={isRecording ? <StopIcon /> : <PlayArrowIcon />}
+          sx={{
+            backgroundColor: isRecording ? 'red' : 'green',
+            '&:hover': {
+              backgroundColor: isRecording ? 'darkred' : 'darkgreen',
+            },
+          }}
+        >
+          {isRecording ? 'Stop' : 'Start'}
+        </Button>
+      </span>
     </Tooltip>
   ) : (
     // eslint-disable-next-line react/jsx-no-useless-fragment

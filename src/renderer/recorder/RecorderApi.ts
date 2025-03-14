@@ -108,7 +108,7 @@ export const sendViscaCommandToDevice = async ({
         },
       })
       .then((/* result */) => {
-        return undefined;
+        return undefined; // the promise is completed with either resolve or reject so this is a no-op
       })
       .catch((reason) => {
         showErrorDialog(reason);
