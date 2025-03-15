@@ -20,7 +20,11 @@ static int16_t getTimezoneOffset()
   std::tm utc_tm = *std::gmtime(&now_c);
 
   // Calculate the difference in seconds
+  // -1 tm_isdst ensures the system determines whether DST is in effect
+  local_tm.tm_isdst = -1;
   std::time_t local_time = std::mktime(&local_tm);
+
+  utc_tm.tm_isdst = -1;
   std::time_t utc_time = std::mktime(&utc_tm);
   double offset_seconds = std::difftime(local_time, utc_time);
 
@@ -28,6 +32,7 @@ static int16_t getTimezoneOffset()
   auto offset_minutes = static_cast<int16_t>(offset_seconds / 60);
   return offset_minutes;
 }
+
 FrameProcessor::FrameProcessor(const std::string directory,
                                const std::string prefix,
                                std::shared_ptr<VideoRecorder> videoRecorder,
