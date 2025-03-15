@@ -47,7 +47,7 @@ const isDefaultCrop = (r: Rect) => {
     r.x === DefaultCrop.x &&
     r.y === DefaultCrop.y &&
     r.width === DefaultCrop.width &&
-    (r.height = DefaultCrop.height)
+    r.height === DefaultCrop.height
   );
 };
 
