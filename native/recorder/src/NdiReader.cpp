@@ -136,7 +136,7 @@ class NdiReader : public VideoReader
 
   std::string connect()
   {
-    SystemEventQueue::push("NDI", "Searching for NDI sources...");
+    SystemEventQueue::push("Debug", "Searching for NDI sources...");
     NDIlib_source_t p_source;
     CameraInfo foundCamera;
     std::vector<CameraInfo> cameras;
@@ -175,9 +175,9 @@ class NdiReader : public VideoReader
       ndiRecv = std::make_shared<NdiRecv>(pNDI_recv);
     }
     // Connect to the source
-    SystemEventQueue::push("NDI", std::string("Connecting to ") +
-                                      foundCamera.name + " at " +
-                                      foundCamera.address);
+    SystemEventQueue::push("Debug", std::string("Connecting to ") +
+                                        foundCamera.name + " at " +
+                                        foundCamera.address);
     // Connect to our sources
     p_source.p_ndi_name = foundCamera.name.c_str();
     p_source.p_url_address = foundCamera.address.c_str();
@@ -211,7 +211,7 @@ class NdiReader : public VideoReader
         break;
       // No data
       case NDIlib_frame_type_none:
-        printf("No data received.\n");
+        SystemEventQueue::push("NDI", std::string("Error: No data received"));
         ndiRecv = nullptr;
         break;
 
@@ -223,7 +223,7 @@ class NdiReader : public VideoReader
           frameCount++;
           if (frameCount == 1)
           {
-            SystemEventQueue::push("NDI", std::string("Stream active"));
+            SystemEventQueue::push("Debug", std::string("Stream active"));
             break; // 1st frame often old frame cached from ndi sender.
                    // Ignore.
           }
@@ -246,17 +246,26 @@ class NdiReader : public VideoReader
 
           // Convert to local time
           std::tm *local_time = std::localtime(&raw_time);
-          auto delta = video_frame.timestamp - lastTS;
+          auto deltaMs = (video_frame.timestamp - lastTS) / 10000;
 
           auto msPerFrame =
               1000 * video_frame.frame_rate_D / video_frame.frame_rate_N;
-          if (delta == 0 || (lastTS != 0 && delta >= 10000 * 2 * msPerFrame))
+          if (deltaMs == 0 || (lastTS != 0 && deltaMs >= 2 * msPerFrame))
           {
-            std::stringstream ss;
-            ss << "Gap: " << delta / 10000 << "ms at "
-               << std::put_time(local_time, "%H:%M:%S") << "." << std::setw(3)
-               << std::setfill('0') << milli % 1000 << " Local";
-            SystemEventQueue::push("NDI", ss.str());
+            std::stringstream timestring;
+            timestring << std::put_time(local_time, "%H:%M:%S") << "." << std::setw(3)
+                       << std::setfill('0') << milli % 1000;
+
+            // For diagnostic purposes
+            std::cerr << "Gap=" << deltaMs << "ms, msPerFrame=" << msPerFrame << " at " << timestring.str() << std::endl;
+
+            if (lastTS != 0 && deltaMs >= 100)
+            {
+              // Only designate an error if past the 2s frame mark as startup often misses some
+              std::stringstream ss;
+              ss << (frameCount > (2000 / msPerFrame) ? "Error: " : "") << "Gap of " << deltaMs << "ms at " << timestring.str();
+              SystemEventQueue::push("NDI", ss.str());
+            }
           }
 
           lastTS = video_frame.timestamp;

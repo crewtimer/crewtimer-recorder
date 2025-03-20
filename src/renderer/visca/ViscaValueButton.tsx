@@ -10,6 +10,7 @@ import RemoveIcon from '@mui/icons-material/Remove';
 import AddIcon from '@mui/icons-material/Add';
 import { sendViscaCommand, ViscaCommand } from './ViscaAPI';
 import { setToast } from '../components/Toast';
+import { snooze } from '../util/Util';
 
 interface ViscaValueButtonProps {
   title: string;
@@ -69,6 +70,7 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
     // Send a quick decrement and then stop
     const sendDecrement = async () => {
       await handleCommand(decrement);
+      await snooze(50);
       await handleCommand(reset);
     };
 
@@ -93,6 +95,7 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
     // Send a quick increment and then stop
     const sendIncrement = async () => {
       await handleCommand(increment);
+      await snooze(50);
       await handleCommand(reset);
     };
 

@@ -5,14 +5,16 @@ import {
   Box,
   ToggleButton,
   ToggleButtonGroup,
+  CircularProgress,
 } from '@mui/material';
 import { useCameraPresets, useCameraState } from './ViscaState';
-import { updateCameraState } from './ViscaAPI';
+import { getCameraState, updateCameraState } from './ViscaAPI';
 import { setToast } from '../components/Toast';
 
 const ViscaPresets: React.FC = () => {
-  const [cameraState, setCameraState] = useCameraState();
+  const [, setCameraState] = useCameraState();
   const [cameraPresets, setCameraPresets] = useCameraPresets();
+  const [showProgress, setshowProgress] = useState(false);
 
   // Tracks whether "load" or "save" is currently selected (or null if none).
   const [mode, setMode] = useState<string | null>(null);
@@ -43,29 +45,38 @@ const ViscaPresets: React.FC = () => {
   };
 
   // User selects a preset from the menu
-  const handleSelectPreset = (presetNumber: number) => {
-    if (mode === 'load') {
-      const newPreset = cameraPresets[presetNumber];
-      if (newPreset) {
-        setCameraState(newPreset);
-        updateCameraState(newPreset);
-        setToast({ severity: 'info', msg: `Preset ${presetNumber} loaded` });
+  const handleSelectPreset = async (presetNumber: number) => {
+    setshowProgress(true);
+    try {
+      if (mode === 'load') {
+        const newPreset = cameraPresets[presetNumber];
+        if (newPreset) {
+          setCameraState(newPreset); // in-memory settings
+          await updateCameraState(newPreset); // send to cameras
+          setToast({ severity: 'info', msg: `Preset ${presetNumber} loaded` });
+          console.log(`Load: ${JSON.stringify(newPreset)}`);
+        }
+      } else if (mode === 'save') {
+        const camState = await getCameraState(); // read from camera
+        const newPresets = [...cameraPresets];
+        newPresets[presetNumber] = camState;
+        console.log(`Save: ${JSON.stringify(camState)}`);
+        setCameraPresets(newPresets); // save to disk
+
+        setToast({ severity: 'info', msg: `Preset ${presetNumber} saved` });
       }
-    } else if (mode === 'save') {
-      setCameraPresets((prev) => {
-        const newPresets = [...prev];
-        newPresets[presetNumber] = cameraState;
-        setCameraPresets(newPresets);
-        return newPresets;
-      });
-      setToast({ severity: 'info', msg: `Preset ${presetNumber} saved` });
+    } catch {
+      /* ignore */
     }
     // Close menu and reset toggle
+
+    setshowProgress(false);
     handleMenuClose();
   };
 
   return (
     <Box display="flex" gap={2}>
+      {showProgress && <CircularProgress />}
       {/* Toggle Button Group for Load/Save */}
       <ToggleButtonGroup
         value={mode}
@@ -94,7 +105,7 @@ const ViscaPresets: React.FC = () => {
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
       >
-        {[1, 2, 3, 4].map((num) => (
+        {[0, 1, 2, 3, 4].map((num) => (
           <MenuItem
             key={num}
             disabled={mode === 'load' && cameraPresets[num] === undefined}

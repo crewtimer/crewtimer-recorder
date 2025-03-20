@@ -5,7 +5,8 @@
 #include <sstream>
 #include <vector>
 
-extern "C" {
+extern "C"
+{
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavutil/imgutils.h>
@@ -16,7 +17,8 @@ extern "C" {
 #include "SystemEventQueue.hpp"
 #include "VideoRecorder.hpp"
 
-class FFVideoRecorder : public VideoRecorder {
+class FFVideoRecorder : public VideoRecorder
+{
   int frame_index;
   AVFrame *pFrame = nullptr;
   AVPacket *pkt = nullptr;
@@ -29,7 +31,8 @@ class FFVideoRecorder : public VideoRecorder {
   std::string codecName;
 
 public:
-  FFVideoRecorder() {
+  FFVideoRecorder()
+  {
     // Get the version of the libavutil library
     unsigned version = avutil_version();
 
@@ -39,7 +42,8 @@ public:
     SystemEventQueue::push("ffmpeg", ss.str());
   }
   std::string openVideoStream(std::string directory, std::string filename,
-                              int width, int height, float fps) {
+                              int width, int height, float fps)
+  {
     frame_index = 0;
     outputFile = filename + ".mp4";
     tmpFile = directory + "/" + "tmp-" + outputFile;
@@ -51,14 +55,16 @@ public:
 
     /* allocate the output media context */
     avformat_alloc_output_context2(&pFormatCtx, NULL, NULL, tmpFile.c_str());
-    if (!pFormatCtx) {
+    if (!pFormatCtx)
+    {
       const auto msg = "Could not deduce output format from file extension: "
                        "using MPEG.";
       SystemEventQueue::push("ffmpeg", msg);
       avformat_alloc_output_context2(&pFormatCtx, NULL, "mpeg",
                                      tmpFile.c_str());
     }
-    if (!pFormatCtx) {
+    if (!pFormatCtx)
+    {
       auto msg = "Could not allocate format context";
       SystemEventQueue::push("ffmpeg", msg);
       return msg;
@@ -67,7 +73,7 @@ public:
     const AVOutputFormat *oformat = pFormatCtx->oformat;
 
     // Codec names in hardware accelerated preferred order
-    std::vector<std::string> codec_names = {"h264_v4l2m2m", // Raspberry Pi 4
+    std::vector<std::string> codec_names = {"h264_v4l2m2m",      // Raspberry Pi 4
                                             "h264_videotoolbox", // Apple
                                             "h264_nvenc",        // NVIDIA
                                             "h264_qsv",          // Intel
@@ -76,39 +82,46 @@ public:
                                             "libx264rgb"};
 
     const AVCodec *codec = nullptr;
-    for (const auto &name : codec_names) {
+    for (const auto &name : codec_names)
+    {
       codec = avcodec_find_encoder_by_name(
           name.c_str()); // Convert std::string to const char*
-      if (codec) {
+      if (codec)
+      {
         break;
       }
     }
 
-    if (!codec) {
+    if (!codec)
+    {
       codec = avcodec_find_encoder(oformat->video_codec);
     }
-    if (!codec) {
-      auto msg = "Codec for mp4 not found";
+    if (!codec)
+    {
+      auto msg = "Error: Codec for mp4 not found";
       SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
 
-    if (codecName.empty()) {
+    if (codecName.empty())
+    {
       codecName = codec->name;
       SystemEventQueue::push("ffmpeg", "Using codec " + codecName);
     }
 
     video_st = avformat_new_stream(pFormatCtx, NULL);
-    if (!video_st) {
-      auto msg = "Could not allocate video stream";
+    if (!video_st)
+    {
+      auto msg = "Error: Could not allocate video stream";
       SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
     video_st->id = pFormatCtx->nb_streams - 1;
 
     pCodecCtx = avcodec_alloc_context3(codec);
-    if (!pCodecCtx) {
-      auto msg = "Could not allocate video codec context";
+    if (!pCodecCtx)
+    {
+      auto msg = "Error: Could not allocate video codec context";
       SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
@@ -125,7 +138,8 @@ public:
     pCodecCtx->max_b_frames = 0;
     pCodecCtx->thread_count = 2;
     pCodecCtx->gop_size = 12;
-    if (std::string("h264_videotoolbox") == codec->name) {
+    if (std::string("h264_videotoolbox") == codec->name)
+    {
       pCodecCtx->qmin = -1;
       pCodecCtx->qmax = -1;
     }
@@ -143,37 +157,42 @@ public:
     // windows av_dict_set(&codec_options, "preset", "slow", 0); // 80% cpu
     // 90MB/min av_dict_set(&codec_options, "profile", "main", 0);
 
-    if (avcodec_open2(pCodecCtx, codec, &codec_options) < 0) {
-      auto msg = "Could not open codec using preset medium";
+    if (avcodec_open2(pCodecCtx, codec, &codec_options) < 0)
+    {
+      auto msg = "Error: Could not open codec using preset medium";
       SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
 
     av_dict_free(&codec_options);
 
-    if (avcodec_parameters_from_context(video_st->codecpar, pCodecCtx) < 0) {
-      const auto msg = "Could not copy codec parameters";
-      SystemEventQueue::push("ffmpeg", msg);
+    if (avcodec_parameters_from_context(video_st->codecpar, pCodecCtx) < 0)
+    {
+      const auto msg = "Error: Could not copy codec parameters";
       SystemEventQueue::push("ffmpeg", msg);
     }
 
-    if (!(pFormatCtx->oformat->flags & AVFMT_NOFILE)) {
-      if (avio_open(&pFormatCtx->pb, tmpFile.c_str(), AVIO_FLAG_WRITE) < 0) {
-        auto msg = "Could not open " + tmpFile;
+    if (!(pFormatCtx->oformat->flags & AVFMT_NOFILE))
+    {
+      if (avio_open(&pFormatCtx->pb, tmpFile.c_str(), AVIO_FLAG_WRITE) < 0)
+      {
+        auto msg = "Error: Could not open " + tmpFile;
         SystemEventQueue::push("ffmpeg", msg);
         return msg;
       }
     }
 
-    if (avformat_write_header(pFormatCtx, NULL) < 0) {
-      auto msg = "Error occurred when opening output file";
+    if (avformat_write_header(pFormatCtx, NULL) < 0)
+    {
+      auto msg = "Error: Cannot write mp4 header";
       SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
 
     pFrame = av_frame_alloc();
-    if (!pFrame) {
-      auto msg = "Could not allocate video frame";
+    if (!pFrame)
+    {
+      auto msg = "Error: Could not allocate video frame";
       SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
@@ -181,15 +200,17 @@ public:
     pFrame->width = pCodecCtx->width;
     pFrame->height = pCodecCtx->height;
     pFrame->color_range = AVCOL_RANGE_MPEG;
-    if (av_frame_get_buffer(pFrame, 0) < 0) {
-      auto msg = "Could not allocate the video frame data";
+    if (av_frame_get_buffer(pFrame, 0) < 0)
+    {
+      auto msg = "Error: Could not allocate the video frame data";
       SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
 
     pkt = av_packet_alloc();
-    if (!pkt) {
-      auto msg = "Error allocating AVPacket";
+    if (!pkt)
+    {
+      auto msg = "Error: Unable to allocate AVPacket";
       SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
@@ -200,11 +221,14 @@ public:
     return "";
   }
 
-  std::string writeVideoFrame(FramePtr video_frame) {
+  std::string writeVideoFrame(FramePtr video_frame)
+  {
     int inLinesize[1] = {video_frame->stride};
-    if (sws_ctx == nullptr) {
+    if (sws_ctx == nullptr)
+    {
       auto src_fmt = AV_PIX_FMT_UYVY422;
-      switch (video_frame->pixelFormat) {
+      switch (video_frame->pixelFormat)
+      {
       case Frame::PixelFormat::RGBX:
         src_fmt = AV_PIX_FMT_RGBA;
         inLinesize[0] = {4 * video_frame->xres};
@@ -238,24 +262,28 @@ public:
     pFrame->pts =
         av_rescale_q(frame_index, pCodecCtx->time_base, video_st->time_base);
 
-    if (avcodec_send_frame(pCodecCtx, pFrame) < 0) {
-      auto msg = "Error sending a frame for encoding";
+    if (avcodec_send_frame(pCodecCtx, pFrame) < 0)
+    {
+      auto msg = "Error: Cannot send a frame for encoding";
       SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
 
-    while (1) {
+    while (1)
+    {
       int ret = avcodec_receive_packet(pCodecCtx, pkt);
       if (ret == AVERROR(EAGAIN) || ret == AVERROR_EOF)
         break;
-      else if (ret < 0) {
-        auto msg = "Error during encoding";
+      else if (ret < 0)
+      {
+        auto msg = "Error: encoding error";
         SystemEventQueue::push("ffmpeg", msg);
         return msg;
       }
 
-      if (av_interleaved_write_frame(pFormatCtx, pkt) < 0) {
-        auto msg = "Error while writing video frame.";
+      if (av_interleaved_write_frame(pFormatCtx, pkt) < 0)
+      {
+        auto msg = "Error: Cannot write video frame";
         SystemEventQueue::push("ffmpeg", msg);
         return msg;
       }
@@ -265,31 +293,38 @@ public:
     return "";
   }
 
-  std::string stop() {
+  std::string stop()
+  {
     std::string retval = "";
-    if (pCodecCtx) {
+    if (pCodecCtx)
+    {
       // Flush the encoder
-      if (avcodec_send_frame(pCodecCtx, NULL) < 0) {
-        auto msg = "Error sending a frame for encoding";
+      if (avcodec_send_frame(pCodecCtx, NULL) < 0)
+      {
+        auto msg = "Error: send frame to encoder failed";
         SystemEventQueue::push("ffmpeg", msg);
         retval = msg;
       }
     }
 
     // If pkt is null, it is uninitialized so we haven't read anything yet.
-    if (pkt) {
-      while (1) {
+    if (pkt)
+    {
+      while (1)
+      {
         int ret = avcodec_receive_packet(pCodecCtx, pkt);
         if (ret == AVERROR_EOF)
           break;
-        else if (ret < 0) {
-          auto msg = "Error during encoding";
+        else if (ret < 0)
+        {
+          auto msg = "Error: avcodec receive packet fail";
           SystemEventQueue::push("ffmpeg", msg);
           retval = msg;
           break;
         }
-        if (av_interleaved_write_frame(pFormatCtx, pkt) < 0) {
-          auto msg = "Error while writing video frame.";
+        if (av_interleaved_write_frame(pFormatCtx, pkt) < 0)
+        {
+          auto msg = "Error: Cannot write video frame";
           SystemEventQueue::push("ffmpeg", msg);
           retval = msg;
           break;
@@ -299,24 +334,30 @@ public:
       // Properly close the output file
       av_write_trailer(pFormatCtx);
 
-      if (!(pFormatCtx->oformat->flags & AVFMT_NOFILE)) {
+      if (!(pFormatCtx->oformat->flags & AVFMT_NOFILE))
+      {
         avio_closep(&pFormatCtx->pb);
       }
     }
 
-    if (pCodecCtx) {
+    if (pCodecCtx)
+    {
       avcodec_free_context(&pCodecCtx);
     }
-    if (pFormatCtx) {
+    if (pFormatCtx)
+    {
       avformat_free_context(pFormatCtx);
     }
-    if (pFrame) {
+    if (pFrame)
+    {
       av_frame_free(&pFrame);
     }
-    if (pkt) {
+    if (pkt)
+    {
       av_packet_free(&pkt);
     }
-    if (sws_ctx) {
+    if (sws_ctx)
+    {
       sws_freeContext(sws_ctx);
     }
 
@@ -327,14 +368,18 @@ public:
     sws_ctx = nullptr;
     video_st = nullptr;
 
-    if (tmpFile.length() > 0) {
+    if (tmpFile.length() > 0)
+    {
       // Attempt to rename the file
-      if (std::rename(tmpFile.c_str(), outputFile.c_str()) == 0) {
+      if (std::rename(tmpFile.c_str(), outputFile.c_str()) == 0)
+      {
         // std::cout << "File successfully renamed from " << tmpFile << " to "
         //           << outputFile << std::endl;
-      } else {
+      }
+      else
+      {
         // If renaming failed, print an error message
-        auto msg = "Error renaming file";
+        auto msg = "Error: Cannot rename file";
         SystemEventQueue::push("ffmpeg", msg);
         retval = msg;
       }
@@ -345,6 +390,7 @@ public:
   ~FFVideoRecorder() {}
 };
 
-std::shared_ptr<VideoRecorder> createFfmpegRecorder() {
+std::shared_ptr<VideoRecorder> createFfmpegRecorder()
+{
   return std::shared_ptr<FFVideoRecorder>(new FFVideoRecorder());
 }

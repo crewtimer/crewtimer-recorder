@@ -37,6 +37,7 @@ export interface StartRecorderMessage extends RecorderMessage {
     recordingDuration: number;
     networkCamera: string;
     cropArea: Rect;
+    guide: { pt1: number; pt2: number };
   };
 }
 export interface RecorderResponse extends HandlerResponse {}
@@ -45,6 +46,7 @@ export interface GrabFrameResponse extends HandlerResponse {
   width: number;
   height: number;
   totalBytes: number;
+  tsMilli: number;
 }
 
 export interface RecordingStatus extends HandlerResponse {
@@ -58,6 +60,7 @@ export interface RecordingStatus extends HandlerResponse {
     height: number;
     fps: number;
     frameBacklog: number;
+    lastTsMilli: number;
   };
 }
 
@@ -74,6 +77,7 @@ export const DefaultRecordingStatus: RecordingStatus = {
     height: 0,
     fps: 0,
     frameBacklog: 0,
+    lastTsMilli: 0,
   },
 };
 

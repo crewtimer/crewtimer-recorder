@@ -51,6 +51,7 @@ FrameProcessor::FrameProcessor(const std::string directory,
   statusInfo.height = 0;
   statusInfo.fps = 0;
   statusInfo.frameBacklog = 0;
+  statusInfo.lastTsMilli = 0;
   tzOffset = getTimezoneOffset();
 }
 
@@ -183,6 +184,8 @@ void FrameProcessor::processFrames()
       lastXres = video_frame->xres;
       lastYres = video_frame->yres;
       lastFPS = fps;
+
+      statusInfo.lastTsMilli = video_frame->timestamp / 10000;
 
       if (propChange || count == 0 ||
           (useEmbeddedTimestamp && video_frame->timestamp >= nextStartTime) ||

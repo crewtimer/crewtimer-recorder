@@ -57,7 +57,8 @@ Build the module and upload to github:
 
 ```bash
 yarn install
-yarn prebuild
+yarn build:mac # if mac
+yarn build:win # if windows
 ```
 
 The result is placed into a file such as prebuilds/crewtimer_video_reader-v1.0.2-napi-v6-win32-x64.tar.gz.

@@ -26,6 +26,7 @@ public:
     std::string filename;
     std::uint32_t width;
     std::uint32_t height;
+    std::uint64_t lastTsMilli;
     float fps;
     std::uint32_t frameBacklog;
   };

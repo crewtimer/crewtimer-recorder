@@ -30,6 +30,16 @@ import ViscaPresets from './ViscaPresets';
 const ViscaControlPanel = () => {
   const [cameraState, setCameraState] = useCameraState();
   const [viscaState] = useViscaState();
+  useEffect(() => {
+    const monitor = () => {
+      sendViscaCommand({ type: 'AUTO_FOCUS_VALUE' })
+        .then(() => {
+          return true;
+        })
+        .catch(() => {});
+    };
+    monitor();
+  }, []);
 
   // Query camera state when connected
   useEffect(() => {
@@ -37,7 +47,7 @@ const ViscaControlPanel = () => {
       try {
         const result = await getCameraState();
         if (result) {
-          // console.log(JSON.stringify(result));
+          console.log(JSON.stringify(result));
           setCameraState(result);
         }
       } catch (error) {

@@ -1,27 +1,30 @@
 {
-    "configurations": [
-        {
-            "name": "Mac",
-            "includePath": [
-                "${default}",
-                "${workspaceFolder}/node_modules/node-addon-api",
-                "/usr/local/opt/ffmpeg@4/include",
-                "/home/glenne/ndi/NDI/include",
-                "/usr/include/ndi",
-                "/usr/local/opt/ndi",
-                "/Library/NDI SDK for Apple/include/",
-                "/usr/local/lib/cmake/opencv4",
-                "/Library/Frameworks/pylon.framework"
-            ],
-            "defines": [],
-            "macFrameworkPath": [
-                "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks"
-            ],
-            "compilerPath": "/usr/bin/clang",
-            "cStandard": "c17",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "macos-clang-x64"
-        }
-    ],
-    "version": 4
+  "configurations": [
+    {
+      "name": "Mac",
+      "includePath": [
+        "${default}",
+        "${workspaceFolder}/node_modules/node-addon-api",
+        "native/recorder/lib-build/ffmpeg-static-mac-arm64/include",
+        "native/recorder/src",
+        "/usr/local/opt/ffmpeg@4/include",
+        "/home/glenne/ndi/NDI/include",
+        "/usr/include/ndi",
+        "/usr/local/opt/ndi",
+        "/Library/NDI SDK for Apple/include/",
+        "/usr/local/lib/cmake/opencv4",
+        "/Library/Frameworks/pylon.framework",
+        "${HOME}/.nvm/versions/node/v18.20.5/include/node"
+      ],
+      "defines": [],
+      "macFrameworkPath": [
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks"
+      ],
+      "compilerPath": "/usr/bin/clang",
+      "cStandard": "c17",
+      "cppStandard": "c++17",
+      "intelliSenseMode": "macos-clang-x64"
+    }
+  ],
+  "version": 4
 }

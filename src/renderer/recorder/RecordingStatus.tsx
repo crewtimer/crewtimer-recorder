@@ -33,6 +33,7 @@ const checkStatus = () => {
 const RecordingStatus: React.FC = () => {
   const [recordingStatus] = useRecordingStatus();
   const { cropArea } = getRecordingProps();
+
   const isRecording = recordingStatus.recording;
   const seconds = formatTime(recordingStatus.recordingDuration);
 

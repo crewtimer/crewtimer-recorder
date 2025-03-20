@@ -1,6 +1,6 @@
 import { Buffer } from 'buffer';
 import { GrabFrameResponse } from '../recorder/RecorderTypes';
-import { Point, VideoScaling, getVideoScaling } from './VideoSettings';
+import { Point, getVideoScaling } from './VideoSettings';
 
 /**
  * Generate a 320x240 RGBA checkerboard pattern.
@@ -46,6 +46,7 @@ function generateTestPattern(): GrabFrameResponse {
     width,
     height,
     totalBytes: totalPixels * 4,
+    tsMilli: Date.now(),
   };
 }
 

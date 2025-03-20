@@ -151,7 +151,7 @@ public:
 
     if (!videoRecorder)
     {
-      auto msg = "Unknown encoder type: " + encoder;
+      auto msg = "Error: Unknown encoder type: " + encoder;
       SystemEventQueue::push("VID", msg);
       return msg;
     }

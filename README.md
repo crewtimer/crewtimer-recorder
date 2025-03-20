@@ -159,3 +159,10 @@ Signing is configured by setting the env variable APPLE_KEYCHAIN_PROFILE to the 
 If notarization fails, add console.log info to [macPackager.js](node_modules/app-builder-lib/out/macPackager.js).
 
 Note: As of 12/2024 the notarize.js script in .erb/scripts is not utilized.
+
+## Run-time files
+
+Debug Log: /Users/glenne/Library/Application Support/crewtimer-recorder/applog.txt
+Debug settings: /Users/glenne/Library/Application Support/crewtimer-recorder/ct-recorder.json
+Release Log:
+Release Settings: 

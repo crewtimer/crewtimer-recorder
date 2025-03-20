@@ -3,7 +3,6 @@ import { HandlerResponse } from '../msgbus/MsgbusTypes';
 import {
   StartRecorderMessage,
   RecorderMessage,
-  RecordingLog,
   GrabFrameResponse,
   RecordingStatus,
   CameraListResponse,
@@ -11,10 +10,14 @@ import {
 } from './RecorderTypes';
 import {
   getGuide,
+  getLoggerAlert,
   getRecordingProps,
+  getSystemLog,
   setFrameGrab,
   setIsRecording,
+  setLoggerAlert,
   setRecordingStartTime,
+  setSystemLog,
 } from './RecorderData';
 import { showErrorDialog } from '../components/ErrorDialog';
 import { ViscaMessage, ViscaMessageProps, ViscaResponse } from './ViscaTypes';
@@ -53,12 +56,6 @@ export const queryRecordingStatus = () => {
       op: 'recording-status',
     },
   );
-};
-
-export const queryRecordingLog = () => {
-  return window.msgbus.sendMessage<RecorderMessage, RecordingLog>('recorder', {
-    op: 'recording-log',
-  });
 };
 
 export const queryCameraList = () => {
@@ -117,13 +114,22 @@ export const sendViscaCommandToDevice = async ({
   });
 };
 
-interface NativeMessage {
+interface SysEventMessage {
+  sender: 'sysevent';
+  content: {
+    tsMilli: number;
+    subsystem: string;
+    message: string;
+  };
+}
+interface GenericMessage {
   sender: string;
   content: any;
 }
+type NativeMessage = SysEventMessage | GenericMessage;
 
-window.Util.onNativeMessage((message: NativeMessage) => {
-  const { sender, content } = message;
+window.Util.onNativeMessage((nativeMessage: NativeMessage) => {
+  const { sender, content } = nativeMessage;
 
   // Handle the message based on the sender and content
   switch (sender) {
@@ -134,6 +140,7 @@ window.Util.onNativeMessage((message: NativeMessage) => {
         // Update the UI or handle the status change
       }
       break;
+
     // case 'system':
     //   const errorMessage = content;
     //   console.error('SYSTEM ERROR:', errorMessage);
@@ -156,6 +163,18 @@ window.Util.onNativeMessage((message: NativeMessage) => {
         console.log(`Visca state: ${state} `);
       }
       break;
+
+    case 'sysevent':
+      {
+        console.log(content.message);
+        const { message } = content;
+        if (message.startsWith('Error:')) {
+          setLoggerAlert(getLoggerAlert() + 1);
+        }
+        setSystemLog([...getSystemLog(), content]);
+      }
+      break;
+
     // case 'VID':
     //   const videoMessage = content;
     //   console.log('VIDEO MESSAGE:', videoMessage);

@@ -22,7 +22,10 @@ export interface CameraState {
 }
 
 export const [useViscaIP, setViscaIP, getViscaIp] = UseDatum('192.168.1.188');
-export const [useViscaPort, , getViscaPort] = UseDatum(52381);
+export const [useViscaPort, , getViscaPort] = UseStoredDatum(
+  'viscaPort',
+  52381,
+); // UseDatum(52381);
 export const [useViscaState, setViscaState, getViscastate] = UseDatum('Idle');
 export const [useCameraPresets, setCameraPresets, getCameraPresets] =
   UseStoredDatum<CameraState[]>('presets', []);

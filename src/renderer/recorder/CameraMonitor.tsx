@@ -43,16 +43,17 @@ export const CameraMonitor = () => {
       return undefined;
     }
 
-    const monitor = () => {
-      sendViscaCommand({ type: 'AUTO_FOCUS_VALUE' })
-        .then(() => {
-          return true;
-        })
-        .catch(() => {});
-    };
-    monitor();
-    const timer = setInterval(monitor, 5000);
-    return () => clearInterval(timer);
+    // const monitor = () => {
+    //   sendViscaCommand({ type: 'AUTO_FOCUS_VALUE' })
+    //     .then(() => {
+    //       return true;
+    //     })
+    //     .catch(() => {});
+    // };
+    // monitor();
+    // const timer = setInterval(monitor, 5000);
+    // return () => clearInterval(timer);
+    return undefined;
   }, [recordingProps.networkIP, viscaIP]);
 
   // eslint-disable-next-line react/jsx-no-useless-fragment

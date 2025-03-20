@@ -6,8 +6,12 @@
 #include <string>
 
 #include "EventQueue.hpp"
+#ifndef STANDALONE
+#include "./event/NativeEvent.hpp"
+#endif
 
-struct SystemEvent {
+struct SystemEvent
+{
   const int64_t tsMilli;
   const std::string subsystem;
   const std::string message;
@@ -15,14 +19,17 @@ struct SystemEvent {
       : tsMilli(tsMilli), subsystem(subsystem), message(message) {}
 };
 
-class SystemEventQueue : public EventQueue<std::shared_ptr<SystemEvent>> {
+class SystemEventQueue : public EventQueue<std::shared_ptr<SystemEvent>>
+{
 public:
   SystemEventQueue() : EventQueue(200) {}
-  static SystemEventQueue &instance() {
+  static SystemEventQueue &instance()
+  {
     static SystemEventQueue singleton;
     return singleton;
   }
-  static void push(const std::string &subsystem, const std::string &message) {
+  static void push(const std::string &subsystem, const std::string &message)
+  {
 
     std::cout << "Event: " << subsystem << ": " << message << std::endl;
 
@@ -35,8 +42,13 @@ public:
     const auto &event = SystemEvent{now, subsystem, message};
     SystemEventQueue::instance().addEvent(
         std::shared_ptr<SystemEvent>(new SystemEvent(now, subsystem, message)));
+#ifndef STANDALONE
+    nlohmann::json msg = {{"tsMilli", now}, {"subsystem", subsystem}, {"message", message}};
+    sendMessageToRenderer("sysevent", std::make_shared<nlohmann::json>(msg));
+#endif
   }
-  static std::vector<std::shared_ptr<SystemEvent>> getEventList() {
+  static std::vector<std::shared_ptr<SystemEvent>> getEventList()
+  {
     std::lock_guard<std::recursive_mutex> lock(
         SystemEventQueue::instance().mutex_);
     return std::vector<std::shared_ptr<SystemEvent>>(

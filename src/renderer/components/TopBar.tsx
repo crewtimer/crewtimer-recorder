@@ -15,6 +15,7 @@ import RecordingStatus from '../recorder/RecordingStatus';
 import { useFirebaseDatum } from '../util/UseFirebase';
 import { setDialogConfig } from './ConfirmDialog';
 import { StartButton } from './StartButton';
+import LoggerAlert from './LoggerAlert';
 
 export const drawerWidth = 240;
 export const [useDrawerOpen] = UseDatum(false);
@@ -100,6 +101,7 @@ export function TopBar() {
         <StartButton hideStopButton />
         <RecordingStatus />
       </Box>
+      <LoggerAlert />
       <Box
         sx={{
           width: 48 + 8 + 8,

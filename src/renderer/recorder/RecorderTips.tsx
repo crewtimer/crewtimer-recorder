@@ -1,5 +1,4 @@
 import CropIcon from '@mui/icons-material/Crop';
-import CheckIcon from '@mui/icons-material/Check';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter';
 import MouseIcon from '@mui/icons-material/Mouse';
@@ -17,16 +16,17 @@ const RecorderTips = () => {
         <Typography>Define crop region</Typography>
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <CheckIcon />
-        <Typography>Apply crop region</Typography>
-      </Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <FullscreenIcon />
         <Typography>Set crop to fullscreen</Typography>
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <VerticalAlignCenterIcon sx={{ transform: 'rotate(90deg)' }} />
-        <Typography>Set finish to center</Typography>
+        <Typography>Set finish line to center</Typography>
+      </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Typography>
+          Shift to drag only top or bottom finish position
+        </Typography>
       </Box>
     </Box>
   );

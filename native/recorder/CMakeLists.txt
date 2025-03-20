@@ -24,6 +24,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 message(STATUS "${CMAKE_PREFIX_PATH}")
 message(STATUS "updated:${CMAKE_PREFIX_PATH}")
 
+add_definitions(-DSTANDALONE)
+
 set(SOURCE_FILES
     # If files are added to this list, also add to binding.gyp!
     src/ctrecorder.cpp
@@ -34,6 +36,7 @@ set(SOURCE_FILES
     src/NullRecorder.cpp
     src/MessageShim.cpp
     src/MulticastReceiver.cpp
+    src/visca/ViscaTcpClient.cpp
 )
 
 # prefer static libs

@@ -10,6 +10,7 @@
                   "src/NullRecorder.cpp",
                   "src/VideoUtils.cpp",
                   "src/util.cpp",
+                  "src/event/NativeEvent.cpp",
                   "src/visca/ViscaTcpClient.cpp"],
       "defines": [ "USE_FFMPEG" ],
       "include_dirs": [

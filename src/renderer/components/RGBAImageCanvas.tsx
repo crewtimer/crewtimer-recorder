@@ -86,40 +86,6 @@ export function convertTimestampToString(
   )}:${formatTimeComponent(seconds)}.${formatTimeComponent(milliseconds, 3)}`;
 }
 
-/**
- * Extract a 64 bit 100ns UTC timestamp from the video frame.  The timestamp
- * is encoded in the row as two pixels per bit with each bit being white for 1 and black for 0.
- * @param image A rgba image array
- * @param row The row to extract the timestamp from
- * @param width The number of columns in a row
- * @returns The extracted timestamp in milliseconds
- */
-function extractTimestampFromFrame(
-  image: Uint8Array,
-  row: number,
-  width: number,
-): number {
-  let number = 0n; // Initialize the 64-bit number as a BigInt
-
-  for (let col = 0; col < 64; col += 1) {
-    const pixel1 = image[4 * (row * width + col * 2)]; // Get the pixel at the current column
-    const pixel2 = image[4 * (row * width + col * 2 + 1)];
-
-    // Check the pixel's color values
-    const isGreen = pixel1 + pixel2 > 220;
-    const bit = isGreen ? 1n : 0n;
-
-    number <<= 1n;
-
-    // Set the corresponding bit in the 64-bit number
-    number |= bit;
-  }
-
-  number = (5000n + number) / 10000n; // Round 64-bit number to milliseconds
-
-  return Number(number); // Convert the BigInt number to a regular number
-}
-
 interface CanvasProps {
   divwidth: number;
   divheight: number;
@@ -193,7 +159,7 @@ enum ZoomMode {
 const applyZoom = ({
   center,
   zoomMode,
-  cropRect,
+  cropRect: cropRectArg,
 }: {
   center?: Point;
   zoomMode: ZoomMode;
@@ -217,10 +183,7 @@ const applyZoom = ({
     case ZoomMode.Maximize:
       {
         // Center and maximize the crop region
-        if (!cropRect) {
-          const { cropArea } = getRecordingProps();
-          cropRect = cropArea;
-        }
+        const cropRect = cropRectArg || getRecordingProps().cropArea;
 
         // Center of cropArea
         srcPoint.x = (cropRect.x + cropRect.width / 2) * srcWidth;
@@ -324,12 +287,16 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     useState<HTMLImageElement | null>(null);
   const [snapToCenterImage, setSnapToCenterImage] =
     useState<HTMLImageElement | null>(null);
+
+  const [timeoutMessage, setTimeoutMessage] = useState('');
+
   const [applyChanges] = retriggerableOneShot((cropArea: Rect) => {
     const oldGuide = getSrcGuideCoords();
     setRecordingProps((prior) => ({ ...prior, cropArea }));
     // Updte the guide position so it doesn't move when the crop changes
     const newGuide = getSrcGuideCoords();
     const dx = Math.round(oldGuide.pt1.x - newGuide.pt1.x);
+
     setGuide((prevGuide) => {
       return {
         pt1: prevGuide.pt1 + dx,
@@ -378,6 +345,19 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     // drawContentDebounced();
   }, [frame.width, frame.height, divwidth, divheight]);
 
+  useEffect(() => {
+    if (!isRecording) {
+      return () => {};
+    }
+    const timeout = setTimeout(() => {
+      setTimeoutMessage('No Data Received!!');
+    }, 1000);
+    return () => {
+      setTimeoutMessage('');
+      clearTimeout(timeout);
+    };
+  }, [frame, isRecording]);
+
   // Check if the point is within a rectangle corner
   const isInCorner = (x: number, y: number) => {
     const cropRect = getNativeClip(clip);
@@ -405,14 +385,14 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       },
     ];
 
-    const corner = corners.find(
+    const selectedCorner = corners.find(
       (corner) =>
         x >= corner.x - cornerSize &&
         x <= corner.x + cornerSize &&
         y >= corner.y - cornerSize &&
         y <= corner.y + cornerSize,
     );
-    return corner;
+    return selectedCorner;
   };
 
   const handleMaximizeIconClick = () => {
@@ -506,6 +486,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
       if (!draggingCornerRef.current || !canvasRef.current) return;
+      const shift = e.shiftKey;
 
       const componentRect = canvasRef.current.getBoundingClientRect();
       let offsetX = Math.max(
@@ -522,7 +503,6 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         draggingCornerRef.current === 'ft' ||
         draggingCornerRef.current === 'fb'
       ) {
-        const rect = getNativeClip(clip);
         const storedRect = getNativeClip(getRecordingProps().cropArea);
 
         // finish is always aligned on a pixel.
@@ -533,13 +513,13 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
 
         setGuide((prevGuide) => {
           const delta = Math.round(finishX - prevGuide.pt1);
-          return {
-            pt1: draggingCornerRef.current === 'fb' ? prevGuide.pt1 : finishX,
-            pt2:
-              draggingCornerRef.current === 'ft'
-                ? prevGuide.pt2 + delta
-                : finishX,
-          };
+          if (shift) {
+            return {
+              pt1: draggingCornerRef.current === 'fb' ? prevGuide.pt1 : finishX,
+              pt2: draggingCornerRef.current === 'fb' ? finishX : prevGuide.pt2,
+            };
+          }
+          return { pt1: prevGuide.pt1 + delta, pt2: prevGuide.pt2 + delta };
         });
         applyChanges(clip);
       } else {
@@ -587,7 +567,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         });
       }
     },
-    [clip, setGuide, videoScaling],
+    [clip, setGuide, videoScaling, applyChanges],
   );
 
   const handleMouseUp = () => setDraggingCorner(null);
@@ -610,7 +590,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   useEffect(() => {
     const timer = setInterval(() => {
       requestVideoFrame().catch(showErrorDialog);
-    }, 32);
+    }, 100);
     return () => clearInterval(timer);
   }, []);
 
@@ -625,18 +605,12 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       return;
     }
 
-    const { data, width, height } = frame;
+    const { data, width, height, tsMilli } = frame;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
 
     if (!ctx) {
       return;
-    }
-    let timestamp = extractTimestampFromFrame(data, 0, width);
-    if (timestamp === 0) {
-      timestamp = extractTimestampFromFrame(data, 1, width);
-    } else {
-      timestamp = 0;
     }
 
     // Adjust the canvas size to fill its parent
@@ -707,16 +681,14 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       ctx.strokeStyle = 'red';
       ctx.lineWidth = 1;
       ctx.stroke();
-      if (true || isAdjustingCrop) {
-        drawBox(ctx, from.x, from.y, 12, 't');
-        drawBox(ctx, to.x, to.y, 12, 'b');
-      }
+      drawBox(ctx, from.x, from.y, 12, 't');
+      drawBox(ctx, to.x, to.y, 12, 'b');
     }
 
-    if (timestamp !== 0) {
-      const tsString = convertTimestampToString(timestamp);
+    if (tsMilli !== 0) {
+      const tsString = convertTimestampToString(tsMilli);
       // Set the text properties
-      const textHeight = 20;
+      const textHeight = 16;
       const padding = 4;
       ctx.font = `${textHeight}px Arial`;
       ctx.textAlign = 'center';
@@ -884,6 +856,9 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     videoScaling,
   ]);
 
+  const alertMessage = isRecording
+    ? timeoutMessage
+    : 'Video stopped. Press Start to resume.';
   return (
     <Box
       sx={{ width: divwidth, height: divheight, position: 'relative' }}
@@ -911,15 +886,13 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         color="white"
         setImage={setSnapToCenterImage}
       />
-      {isRecording ? (
-        <Box />
-      ) : (
+      {alertMessage !== '' && (
         <Box
           position="absolute"
           top={0}
-          left={0}
-          width="100%"
-          height="100%"
+          left={(videoScaling.destWidth - videoScaling.scaledWidth) / 2}
+          width={videoScaling.scaledWidth}
+          height={videoScaling.scaledHeight}
           display="flex"
           justifyContent="center"
           alignItems="center"
@@ -928,8 +901,8 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
           fontSize="1.5rem"
           zIndex={100}
         >
-          <Typography sx={{ background: '#888a' }}>
-            Video stopped. Press Start to resume.
+          <Typography sx={{ background: '#888a', padding: '0.5em' }}>
+            {alertMessage}
           </Typography>
         </Box>
       )}

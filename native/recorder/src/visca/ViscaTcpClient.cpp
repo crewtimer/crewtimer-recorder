@@ -1,5 +1,3 @@
-#pragma once
-
 #include "IViscaTcpClient.hpp"
 
 #ifdef _WIN32

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import {
   Table,
   TableBody,
@@ -7,10 +7,12 @@ import {
   TableHead,
   TableRow,
   Paper,
+  IconButton,
+  Box,
+  Typography,
 } from '@mui/material';
-import { queryRecordingLog } from '../recorder/RecorderApi';
-import { RecordingLogEntry } from '../recorder/RecorderTypes';
-import { showErrorDialog } from '../components/ErrorDialog';
+import DeleteIcon from '@mui/icons-material/DeleteOutline';
+import { useSystemLog } from '../recorder/RecorderData';
 
 const formatTime = (tsMilli: number): string => {
   const date = new Date(tsMilli);
@@ -23,43 +25,47 @@ const formatTime = (tsMilli: number): string => {
 };
 
 const RecordingLogTable: React.FC = () => {
-  const [entries, setEntries] = useState<RecordingLogEntry[]>([]);
+  const [entries, setLogEntries] = useSystemLog();
+  const itemsToShow = entries.filter((entry) => entry.subsystem !== 'Debug');
 
-  useEffect(() => {
-    const queryLogs = () => {
-      queryRecordingLog()
-        .then((result) => setEntries(result?.list || []))
-        .catch(showErrorDialog);
-    };
-    queryLogs();
-    const interval = setInterval(() => {
-      queryLogs();
-    }, 5000);
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, []);
+  const handleClearLogs = () => {
+    setLogEntries([]); // Clear the table data
+  };
+
   return (
-    <TableContainer component={Paper}>
-      <Table aria-label="simple table" size="small">
-        <TableHead>
-          <TableRow>
-            <TableCell>Time</TableCell>
-            <TableCell>System</TableCell>
-            <TableCell>Message</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {entries.reverse().map((entry) => (
-            <TableRow key={`${entry.tsMilli}-${entry.message}`}>
-              <TableCell>{formatTime(entry.tsMilli)}</TableCell>
-              <TableCell>{entry.subsystem}</TableCell>
-              <TableCell>{entry.message}</TableCell>
+    <Paper>
+      <Box display="flex" justifyContent="space-between" alignItems="center">
+        <Typography variant="h6">Log Events</Typography>
+        <IconButton onClick={handleClearLogs} color="primary">
+          <DeleteIcon />
+        </IconButton>
+      </Box>
+      <TableContainer>
+        <Table aria-label="simple table" size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Time</TableCell>
+              <TableCell>System</TableCell>
+              <TableCell>Message</TableCell>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
+          </TableHead>
+          <TableBody>
+            {itemsToShow.reverse().map((entry) => {
+              const styles = entry.message.startsWith('Error')
+                ? { color: 'white', background: 'red' }
+                : undefined;
+              return (
+                <TableRow key={`${entry.tsMilli}-${entry.message}`}>
+                  <TableCell sx={styles}>{formatTime(entry.tsMilli)}</TableCell>
+                  <TableCell sx={styles}>{entry.subsystem}</TableCell>
+                  <TableCell sx={styles}>{entry.message}</TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Paper>
   );
 };
 

@@ -1,12 +1,19 @@
 #pragma once
 #include <stdint.h>
+#include <memory>
 
 /**
  * Class representing a single video frame.
  */
-class Frame {
+class Frame
+{
 public:
-  enum PixelFormat { UYVY422 = 0, RGBX = 1, BGR = 2 };
+  enum PixelFormat
+  {
+    UYVY422 = 0,
+    RGBX = 1,
+    BGR = 2
+  };
   int xres;
   int yres;
   int stride;
@@ -18,7 +25,8 @@ public:
   bool ownData;
   Frame() { ownData = false; }
   Frame(int width, int height, PixelFormat format)
-      : xres(width), yres(height), pixelFormat(format) {
+      : xres(width), yres(height), pixelFormat(format)
+  {
     // Calculate stride based on pixel format
     int bytesPerPixel = (format == UYVY422) ? 2 : (format == RGBX ? 4 : 3);
     stride = width * bytesPerPixel;
@@ -26,8 +34,10 @@ public:
     ownData = true;
   }
 
-  virtual ~Frame() {
-    if (data && ownData) {
+  virtual ~Frame()
+  {
+    if (data && ownData)
+    {
       delete[] data;
       data = nullptr;
     }

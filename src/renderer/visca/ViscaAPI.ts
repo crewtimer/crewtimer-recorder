@@ -1,8 +1,10 @@
+/* eslint-disable no-await-in-loop */
 /* eslint-disable no-bitwise */
 // ViscaCommand.ts
 
 import { sendViscaCommandToDevice } from '../recorder/RecorderApi';
 import { ViscaResponse } from '../recorder/ViscaTypes';
+import { snooze } from '../util/Util';
 import {
   ExposureMode,
   getViscaIp,
@@ -74,6 +76,8 @@ export type ViscaCommand =
   | { type: 'SET_IRIS'; value: number }
   | { type: 'SET_SHUTTER'; value: number }
   | { type: 'SET_GAIN'; value: number }
+  | { type: 'SET_ZOOM'; value: number }
+  | { type: 'SET_FOCUS'; value: number }
   | { type: 'SET_BRIGHTNESS'; value: number }
   // Value queries
   | { type: 'AUTO_FOCUS_VALUE' }
@@ -102,17 +106,17 @@ function buildViscaPacket(cmd: ViscaCommand): Uint8Array {
         : new Uint8Array([0x81, 0x01, 0x04, 0x38, 0x03, 0xff]); // AF off
 
     case 'FOCUS_IN':
-      return new Uint8Array([0x81, 0x01, 0x04, 0x08, 0x02, 0xff]);
+      return new Uint8Array([0x81, 0x01, 0x04, 0x08, 0x22, 0xff]);
     case 'FOCUS_OUT':
-      return new Uint8Array([0x81, 0x01, 0x04, 0x08, 0x03, 0xff]);
+      return new Uint8Array([0x81, 0x01, 0x04, 0x08, 0x32, 0xff]);
     case 'FOCUS_RESET':
       return new Uint8Array([0x81, 0x01, 0x04, 0x08, 0x00, 0xff]);
     case 'FOCUS_ONCE':
       return new Uint8Array([0x81, 0x01, 0x04, 0x18, 0x01, 0xff]);
     case 'ZOOM_IN':
-      return new Uint8Array([0x81, 0x01, 0x04, 0x07, 0x02, 0xff]);
+      return new Uint8Array([0x81, 0x01, 0x04, 0x07, 0x22, 0xff]);
     case 'ZOOM_OUT':
-      return new Uint8Array([0x81, 0x01, 0x04, 0x07, 0x03, 0xff]);
+      return new Uint8Array([0x81, 0x01, 0x04, 0x07, 0x32, 0xff]);
     case 'ZOOM_RESET':
       return new Uint8Array([0x81, 0x01, 0x04, 0x07, 0x00, 0xff]);
 
@@ -184,6 +188,30 @@ function buildViscaPacket(cmd: ViscaCommand): Uint8Array {
         0x4d,
         0x00,
         0x00,
+        (cmd.value >> 4) & 0x0f,
+        cmd.value & 0x0f,
+        0xff,
+      ]);
+    case 'SET_FOCUS':
+      return new Uint8Array([
+        0x81,
+        0x01,
+        0x04,
+        0x48,
+        (cmd.value >> 12) & 0x0f,
+        (cmd.value >> 8) & 0x0f,
+        (cmd.value >> 4) & 0x0f,
+        cmd.value & 0x0f,
+        0xff,
+      ]);
+    case 'SET_ZOOM':
+      return new Uint8Array([
+        0x81,
+        0x01,
+        0x04,
+        0x47,
+        (cmd.value >> 12) & 0x0f,
+        (cmd.value >> 8) & 0x0f,
         (cmd.value >> 4) & 0x0f,
         cmd.value & 0x0f,
         0xff,
@@ -323,15 +351,8 @@ export const updateCameraState = async (
    * is actually specified in `states`.
    */
 
-  // For example:
-  if (typeof states.autoFocus === 'boolean') {
-    await sendViscaCommand({
-      type: 'AUTO_FOCUS',
-      value: states.autoFocus,
-    });
-  }
-
   if (typeof states.exposureMode === 'number') {
+    await snooze(50);
     await sendViscaCommand({
       type: 'EXPOSURE_MODE',
       value: states.exposureMode,
@@ -339,6 +360,7 @@ export const updateCameraState = async (
   }
 
   if (typeof states.iris === 'number') {
+    await snooze(50);
     await sendViscaCommand({
       type: 'SET_IRIS',
       value: states.iris,
@@ -346,6 +368,7 @@ export const updateCameraState = async (
   }
 
   if (typeof states.shutter === 'number') {
+    await snooze(50);
     await sendViscaCommand({
       type: 'SET_SHUTTER',
       value: states.shutter,
@@ -353,16 +376,60 @@ export const updateCameraState = async (
   }
 
   if (typeof states.gain === 'number') {
+    await snooze(50);
     await sendViscaCommand({
       type: 'SET_GAIN',
       value: states.gain,
     });
   }
-
   if (typeof states.brightness === 'number') {
+    await snooze(50);
     await sendViscaCommand({
       type: 'SET_BRIGHTNESS',
       value: states.brightness,
+    });
+  }
+  if (typeof states.autoFocus === 'boolean') {
+    await snooze(50);
+    await sendViscaCommand({
+      type: 'AUTO_FOCUS',
+      value: states.autoFocus,
+    });
+  }
+
+  if (typeof states.zoom === 'number') {
+    // Zoom needs to be finished before we set focus.
+    // Poll zoom value until we reach specififed zoom then move on
+    await sendViscaCommand({
+      type: 'SET_ZOOM',
+      value: states.zoom,
+    });
+
+    let zoom = 0;
+    const startTime = Date.now();
+    do {
+      await snooze(1000);
+
+      // Break if we've been looping for 10 seconds (10000 ms).
+      if (Date.now() - startTime >= 10000) {
+        console.warn(
+          `Zoom operation timed out. current=${zoom}, target=${states.zoom}`,
+        );
+        break;
+      }
+      zoom = await extractViscaValue(
+        await sendViscaCommand({ type: 'ZOOM_VALUE' }),
+        4,
+        8,
+      );
+    } while (Math.abs(zoom - states.zoom) > 100);
+  }
+
+  if (typeof states.focus === 'number') {
+    // Note zoom must be stablized before applying focus
+    await sendViscaCommand({
+      type: 'SET_FOCUS',
+      value: states.focus,
     });
   }
 };

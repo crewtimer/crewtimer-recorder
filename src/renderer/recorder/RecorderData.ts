@@ -6,12 +6,13 @@ import {
   DefaultRecordingProps,
   DefaultRecordingStatus,
   GrabFrameResponse,
+  RecordingLogEntry,
   RecordingProps,
   RecordingStatus,
 } from './RecorderTypes';
 
 export const [useRecordingProps, _setRecordingProps, getRecordingProps] =
-  UseStoredDatum<RecordingProps>('recording', DefaultRecordingProps);
+  UseStoredDatum<RecordingProps>('record', DefaultRecordingProps);
 
 window.Util.getDocumentsFolder()
   .then((folder) => {
@@ -43,3 +44,9 @@ export const [useGuide, setGuide, getGuide] = UseStoredDatum('guide', {
   pt1: 0,
   pt2: 0,
 });
+
+export const [useSystemLog, setSystemLog, getSystemLog] = UseDatum<
+  RecordingLogEntry[]
+>([]);
+
+export const [useLoggerAlert, setLoggerAlert, getLoggerAlert] = UseDatum(0);

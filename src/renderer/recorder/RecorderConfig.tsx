@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import {
   TextField,
   Typography,
@@ -19,6 +19,7 @@ import InfoPopup from '../components/InfoPopup';
 import RecorderTips from './RecorderTips';
 import { useViscaIP } from '../visca/ViscaState';
 import { useCameraList } from './CameraMonitor';
+import { ViscaPortSelector } from '../visca/ViscaPortSelector';
 
 const { openDirDialog, openFileExplorer } = window.Util;
 
@@ -42,7 +43,7 @@ const RecordingError = () => {
 const RecorderConfig: React.FC = () => {
   const [recordingProps, setRecordingProps] = useRecordingProps();
   const [cameraList] = useCameraList();
-  const [viscaIP, setViscaIP] = useViscaIP();
+  const [, setViscaIP] = useViscaIP();
 
   const chooseDir = () => {
     openDirDialog('Choose Video Folder', recordingProps.recordingFolder)
@@ -103,7 +104,7 @@ const RecorderConfig: React.FC = () => {
     >
       <RecordingError />
       <Grid container spacing={2}>
-        <Grid item xs={10}>
+        <Grid item xs={8}>
           <TextField
             select
             margin="normal"
@@ -133,11 +134,10 @@ const RecorderConfig: React.FC = () => {
             )}
           </TextField>
         </Grid>
-        <Grid item xs={2} container justifyContent="center" alignItems="center">
-          {/* take up space if no start button */}
-          {/* <StartButton /> */}
+        <Grid item xs={4} container alignItems="center">
+          <ViscaPortSelector />
         </Grid>
-        <Grid item xs={10}>
+        <Grid item xs={8}>
           <TextField
             label="Recording Folder"
             variant="outlined"
@@ -173,6 +173,7 @@ const RecorderConfig: React.FC = () => {
             </IconButton>
           </Tooltip>
         </Grid>
+        <Grid item xs={2} />
         <Grid item xs={4}>
           <Tooltip title="A prefix added to each recording file.">
             <TextField
