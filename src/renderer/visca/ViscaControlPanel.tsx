@@ -16,13 +16,7 @@ import {
   updateCameraState,
 } from './ViscaAPI';
 import { setToast } from '../components/Toast';
-import {
-  ExposureMode,
-  getCameraPresets,
-  setCameraPresets,
-  useCameraState,
-  useViscaState,
-} from './ViscaState';
+import { ExposureMode, useCameraState, useViscaState } from './ViscaState';
 import ViscaValueButton from './ViscaValueButton';
 import RangeStepper from './RangeStepper';
 import ViscaPresets from './ViscaPresets';
@@ -66,13 +60,10 @@ const ViscaControlPanel = () => {
   const onExposureModeChange = async (
     event: SelectChangeEvent<ExposureMode>,
   ) => {
-    const presets = [...getCameraPresets()];
-    presets[5] = cameraState;
-    setCameraPresets(presets);
     const exposureMode = event.target.value as ExposureMode;
     setCameraState((prev) => ({ ...prev, exposureMode }));
     await sendViscaCommand({ type: 'EXPOSURE_MODE', value: exposureMode });
-    await updateCameraState({ ...cameraState, exposureMode }); // Apply memorized values after mode changes
+    await updateCameraState({ exposureMode });
   };
 
   return (
@@ -99,7 +90,6 @@ const ViscaControlPanel = () => {
             autoOnce={{ type: 'FOCUS_ONCE' }}
           />
         </Grid>
-
         <Grid
           item
           xs={12}
@@ -116,7 +106,6 @@ const ViscaControlPanel = () => {
             reset={{ type: 'ZOOM_RESET' }}
           />
         </Grid>
-
         {/* Exposure Controls */}
         <Grid item xs={12} md={2}>
           <FormControl
