@@ -3,19 +3,21 @@ import * as React from 'react';
 import MenuIcon from '@mui/icons-material/Menu';
 import InfoIcon from '@mui/icons-material/Info';
 import HelpIcon from '@mui/icons-material/Help';
+import CameraIcon from '@mui/icons-material/Camera';
 import SecurityIcon from '@mui/icons-material/Security';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import { IconButton, ListItemIcon, ListItemText } from '@mui/material';
 import { useSelectedPage } from '../pages/MainPage';
 import { setToast } from './Toast';
-import { sendViscaCommandToDevice } from '../recorder/RecorderApi';
+import { useViscaIP } from '../visca/ViscaState';
 
 const AboutText = `CrewTimer Video Recorder ${window.platform.appVersion}`;
 
 const HamburgerMenu = () => {
   const [, setSelectedPage] = useSelectedPage();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [viscaIP] = useViscaIP();
   const open = Boolean(anchorEl);
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);
@@ -27,16 +29,6 @@ const HamburgerMenu = () => {
   const closeAndGo = (path: string) => () => {
     setAnchorEl(null);
     setSelectedPage(path);
-  };
-
-  const testVisca = () => {
-    sendViscaCommandToDevice({
-      ip: '10.0.1.188',
-      port: 52381,
-      data: Uint8Array.from([1, 2, 3, 255]),
-    })
-      .then((result) => console.log(`got ${JSON.stringify(result)}`))
-      .catch((reason) => console.log(`got err ${reason}`));
   };
 
   return (
@@ -66,17 +58,19 @@ const HamburgerMenu = () => {
           </ListItemIcon>
           <ListItemText>Help</ListItemText>
         </MenuItem>
+        {viscaIP && (
+          <MenuItem onClick={() => window.open(`http://${viscaIP}`, '_blank')}>
+            <ListItemIcon>
+              <CameraIcon />
+            </ListItemIcon>
+            <ListItemText>Camera web page</ListItemText>
+          </MenuItem>
+        )}
         <MenuItem onClick={closeAndGo('/privacy')}>
           <ListItemIcon>
             <SecurityIcon />
           </ListItemIcon>
           <ListItemText>Privacy Policy</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={testVisca}>
-          <ListItemIcon>
-            <SecurityIcon />
-          </ListItemIcon>
-          <ListItemText>Test Visca</ListItemText>
         </MenuItem>
         <MenuItem
           onClick={() => {

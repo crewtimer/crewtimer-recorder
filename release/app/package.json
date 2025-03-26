@@ -1,6 +1,6 @@
 {
   "name": "crewtimer-video-recorder",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "An NDI video recorder for use with CrewTimer Video Review",
   "license": "MIT",
   "author": {

@@ -134,9 +134,10 @@ const RecorderConfig: React.FC = () => {
             )}
           </TextField>
         </Grid>
-        <Grid item xs={4} container alignItems="center">
+        <Grid item xs={2} container alignItems="center">
           <ViscaPortSelector />
         </Grid>
+        <Grid item xs={2} container alignItems="center" />
         <Grid item xs={8}>
           <TextField
             label="Recording Folder"
