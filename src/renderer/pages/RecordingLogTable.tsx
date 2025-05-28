@@ -12,7 +12,7 @@ import {
   Typography,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/DeleteOutline';
-import { useSystemLog } from '../recorder/RecorderData';
+import { useLoggerAlert, useSystemLog } from '../recorder/RecorderData';
 
 const formatTime = (tsMilli: number): string => {
   const date = new Date(tsMilli);
@@ -26,10 +26,12 @@ const formatTime = (tsMilli: number): string => {
 
 const RecordingLogTable: React.FC = () => {
   const [entries, setLogEntries] = useSystemLog();
+  const [, setLoggerAlert] = useLoggerAlert();
   const itemsToShow = entries.filter((entry) => entry.subsystem !== 'Debug');
 
   const handleClearLogs = () => {
     setLogEntries([]); // Clear the table data
+    setLoggerAlert(0);
   };
 
   return (
@@ -50,12 +52,13 @@ const RecordingLogTable: React.FC = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {itemsToShow.reverse().map((entry) => {
+            {itemsToShow.reverse().map((entry, entryIndex) => {
+              const key = `${entryIndex}-${entry.tsMilli}-${entry.message}`;
               const styles = entry.message.startsWith('Error')
                 ? { color: 'white', background: 'red' }
                 : undefined;
               return (
-                <TableRow key={`${entry.tsMilli}-${entry.message}`}>
+                <TableRow key={key}>
                   <TableCell sx={styles}>{formatTime(entry.tsMilli)}</TableCell>
                   <TableCell sx={styles}>{entry.subsystem}</TableCell>
                   <TableCell sx={styles}>{entry.message}</TableCell>

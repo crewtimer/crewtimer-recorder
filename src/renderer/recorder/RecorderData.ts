@@ -11,6 +11,8 @@ import {
   RecordingStatus,
 } from './RecorderTypes';
 
+export const [useRecordingPropsPending, setRecordingPropsPending] =
+  UseDatum(false);
 export const [useRecordingProps, _setRecordingProps, getRecordingProps] =
   UseStoredDatum<RecordingProps>('record', DefaultRecordingProps);
 
