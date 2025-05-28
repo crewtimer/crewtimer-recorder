@@ -12,6 +12,7 @@ import {
   useGuide,
   useIsRecording,
   useRecordingProps,
+  useRecordingPropsPending,
 } from '../recorder/RecorderData';
 import {
   requestVideoFrame,
@@ -283,6 +284,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   const ignoreClick = useRef(false);
   const srcCenter = useRef<Point>({ x: divwidth / 2, y: divheight / 2 });
   const [cropImage, setEditImage] = useState<HTMLImageElement | null>(null);
+  const [recordingPropsPending] = useRecordingPropsPending();
   const [fullscreenImage, setFullscreenImage] =
     useState<HTMLImageElement | null>(null);
   const [snapToCenterImage, setSnapToCenterImage] =
@@ -856,9 +858,18 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     videoScaling,
   ]);
 
-  const alertMessage = isRecording
-    ? timeoutMessage
-    : 'Video stopped. Press Start to resume.';
+  let alertMessage = 'Video stopped. Press Start to resume.';
+  if (isRecording) {
+    if (timeoutMessage) {
+      alertMessage = timeoutMessage;
+    } else if (recordingPropsPending) {
+      alertMessage =
+        'Recording props have changes. Stop and Start recording to apply.';
+    } else {
+      alertMessage = '';
+    }
+  }
+
   return (
     <Box
       sx={{ width: divwidth, height: divheight, position: 'relative' }}

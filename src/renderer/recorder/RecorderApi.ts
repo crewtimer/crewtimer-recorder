@@ -16,6 +16,7 @@ import {
   setFrameGrab,
   setIsRecording,
   setLoggerAlert,
+  setRecordingPropsPending,
   setRecordingStartTime,
   setSystemLog,
 } from './RecorderData';
@@ -25,6 +26,7 @@ import { setViscaState } from '../visca/ViscaState';
 
 export const startRecording = () => {
   setRecordingStartTime(Date.now());
+  setRecordingPropsPending(false);
   setIsRecording(true);
   // console.log(`recording props: ${JSON.stringify(getRecordingProps())}`);
   const recordingProps = { ...DefaultRecordingProps, ...getRecordingProps() };
@@ -41,6 +43,7 @@ export const startRecording = () => {
 };
 export const stopRecording = () => {
   setIsRecording(false);
+  setRecordingPropsPending(false);
   return window.msgbus.sendMessage<RecorderMessage, HandlerResponse>(
     'recorder',
     {

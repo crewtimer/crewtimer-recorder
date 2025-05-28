@@ -11,7 +11,11 @@ import {
 } from '@mui/material';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import { useRecordingStatus, useRecordingProps } from './RecorderData';
+import {
+  useRecordingStatus,
+  useRecordingProps,
+  useRecordingPropsPending,
+} from './RecorderData';
 import { FullSizeWindow } from '../components/FullSizeWindow';
 import RGBAImageCanvas from '../components/RGBAImageCanvas';
 import { showErrorDialog } from '../components/ErrorDialog';
@@ -42,6 +46,7 @@ const RecordingError = () => {
 
 const RecorderConfig: React.FC = () => {
   const [recordingProps, setRecordingProps] = useRecordingProps();
+  const [, setRecordingPropsPending] = useRecordingPropsPending();
   const [cameraList] = useCameraList();
   const [, setViscaIP] = useViscaIP();
 
@@ -49,6 +54,7 @@ const RecorderConfig: React.FC = () => {
     openDirDialog('Choose Video Folder', recordingProps.recordingFolder)
       .then((result) => {
         if (!result.cancelled) {
+          setRecordingPropsPending(true);
           setRecordingProps({
             ...recordingProps,
             recordingFolder: result.path,
@@ -65,6 +71,9 @@ const RecorderConfig: React.FC = () => {
         ? event.target.checked
         : event.target.value;
 
+    if (['recordingDuration', 'recordingPrefix'].includes(event.target.name)) {
+      setRecordingPropsPending(true);
+    }
     setRecordingProps({
       ...recordingProps,
       [event.target.name]: value,
