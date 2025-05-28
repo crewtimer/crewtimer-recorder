@@ -88,10 +88,10 @@ export function TopBar() {
                     Version: {latestVersion}: {latestText}.
                   </Typography>
                   <Link
-                    href="https://crewtimer.com/help/downloads"
+                    href="https://github.com/crewtimer/crewtimer-recorder/releases/latest"
                     target="_blank"
                   >
-                    https://crewtimer.com/help/downloads
+                    Download from github
                   </Link>
                 </Stack>
               ),
