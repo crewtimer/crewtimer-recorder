@@ -49,3 +49,4 @@ typedef std::shared_ptr<Frame> FramePtr;
 FramePtr cropFrame(const FramePtr &frame, int cropX, int cropY, int cropWidth,
                    int cropHeight);
 void encodeTimestamp(uint8_t *screen, int stride, uint64_t ts100ns);
+void overlayTime(uint8_t *ptr, int stride, uint64_t ts100ns, const std::tm *local_time = nullptr);

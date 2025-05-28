@@ -1,6 +1,6 @@
 {
   "name": "crewtimer_video_recorder",
-  "version": "1.0.8-module",
+  "version": "1.0.9-module",
   "description": "A node electron utility to write mp4 files for CrewTimer Video Review",
   "main": "index.js",
   "types": "index.d.ts",

@@ -41,6 +41,10 @@ public:
        << "." << AV_VERSION_MINOR(version) << "." << AV_VERSION_MICRO(version);
     SystemEventQueue::push("ffmpeg", ss.str());
   }
+  int getKeyFrameInterval()
+  {
+    return 12;
+  }
   std::string openVideoStream(std::string directory, std::string filename,
                               int width, int height, float fps)
   {
@@ -136,13 +140,14 @@ public:
     pCodecCtx->time_base = av_make_q(1, int(fps));
     pCodecCtx->pix_fmt = AV_PIX_FMT_YUV420P;
     pCodecCtx->max_b_frames = 0;
-    pCodecCtx->thread_count = 2;
-    pCodecCtx->gop_size = 12;
+    pCodecCtx->thread_count = 0; // let codec decide
+    pCodecCtx->gop_size = getKeyFrameInterval();
     if (std::string("h264_videotoolbox") == codec->name)
     {
       pCodecCtx->qmin = -1;
       pCodecCtx->qmax = -1;
     }
+    video_st->time_base = pCodecCtx->time_base; // Use same timebase for both
 
     /* Some formats want stream headers to be separate. */
     // if (oc->oformat->flags & AVFMT_GLOBALHEADER)
@@ -258,15 +263,15 @@ public:
     sws_scale(sws_ctx, inData, inLinesize, 0, pCodecCtx->height, pFrame->data,
               pFrame->linesize);
 
-    pFrame->pts = frame_index++;
     pFrame->pts =
-        av_rescale_q(frame_index, pCodecCtx->time_base, video_st->time_base);
+        av_rescale_q(frame_index++, pCodecCtx->time_base, video_st->time_base);
 
+    std::string errorMsg = "";
     if (avcodec_send_frame(pCodecCtx, pFrame) < 0)
     {
-      auto msg = "Error: Cannot send a frame for encoding";
-      SystemEventQueue::push("ffmpeg", msg);
-      return msg;
+      errorMsg = "Error: Cannot send a frame for encoding";
+      SystemEventQueue::push("ffmpeg", errorMsg);
+      // Do not return yet; still drain packets below
     }
 
     while (1)
@@ -276,21 +281,30 @@ public:
         break;
       else if (ret < 0)
       {
-        auto msg = "Error: encoding error";
-        SystemEventQueue::push("ffmpeg", msg);
-        return msg;
+        if (errorMsg.empty())
+        {
+          errorMsg = "Error: encoding error";
+          SystemEventQueue::push("ffmpeg", errorMsg);
+        }
+        // Continue draining packets even on error
+        break;
       }
 
-      if (av_interleaved_write_frame(pFormatCtx, pkt) < 0)
+      if (av_write_frame(pFormatCtx, pkt) < 0)
       {
-        auto msg = "Error: Cannot write video frame";
-        SystemEventQueue::push("ffmpeg", msg);
-        return msg;
+        if (errorMsg.empty())
+        {
+          errorMsg = "Error: Cannot write video frame";
+          SystemEventQueue::push("ffmpeg", errorMsg);
+        }
+        // Continue draining packets even on error
+        av_packet_unref(pkt);
+        break;
       }
       av_packet_unref(pkt);
     }
 
-    return "";
+    return errorMsg;
   }
 
   std::string stop()
@@ -314,7 +328,9 @@ public:
       {
         int ret = avcodec_receive_packet(pCodecCtx, pkt);
         if (ret == AVERROR_EOF)
+        {
           break;
+        }
         else if (ret < 0)
         {
           auto msg = "Error: avcodec receive packet fail";
@@ -322,8 +338,9 @@ public:
           retval = msg;
           break;
         }
-        if (av_interleaved_write_frame(pFormatCtx, pkt) < 0)
+        if (av_write_frame(pFormatCtx, pkt) < 0)
         {
+          av_packet_unref(pkt);
           auto msg = "Error: Cannot write video frame";
           SystemEventQueue::push("ffmpeg", msg);
           retval = msg;

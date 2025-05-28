@@ -47,7 +47,7 @@
     "test": "jest",
     "winbuild": "npm run build && node_modules/.bin/electron-builder --win",
     "macbuild": "npm run build && APPLE_KEYCHAIN_PROFILE=crewtimer-app-signing node_modules/.bin/electron-builder --mac",
-    "macx64build": "npm run build && node_modules/.bin/electron-builder --mac --arch x64",
+    "macx64build": "npm run build && node_modules/.bin/electron-builder --mac --x64",
     "kill": "kill -9 `lsof -i:1213 -t`",
     "build:native": "cd release/app && yarn add ../../native/recorder",
     "cleanbasic": "ts-node ./.erb/scripts/clean.js && rm -rf release/build",

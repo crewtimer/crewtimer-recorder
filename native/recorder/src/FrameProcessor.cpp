@@ -152,6 +152,7 @@ void FrameProcessor::processFrames()
   lastYres = 0;
   lastFPS = 0;
   frameCount = 0;
+  int64_t keyFrameInterval = videoRecorder->getKeyFrameInterval();
 
   while (running)
   {
@@ -187,9 +188,11 @@ void FrameProcessor::processFrames()
 
       statusInfo.lastTsMilli = video_frame->timestamp / 10000;
 
+      // The video review app may have trouble reading the last video frame when there is not a multiple of gop_size frames
+      // Exact cause unknown.
       if (propChange || count == 0 ||
-          (useEmbeddedTimestamp && video_frame->timestamp >= nextStartTime) ||
-          (okToSplit && splitRequested))
+          (useEmbeddedTimestamp && video_frame->timestamp >= nextStartTime && frameCount % keyFrameInterval == 0) ||
+          (okToSplit && splitRequested && frameCount % keyFrameInterval == 0))
       {
         count++;
         if (frameCount > 0)
@@ -290,6 +293,8 @@ void FrameProcessor::processFrames()
       }
 
       encodeTimestamp(cropped->data, cropped->stride, video_frame->timestamp);
+      // overlayTime(cropped->data, cropped->stride, video_frame->timestamp);
+
       auto err = videoRecorder->writeVideoFrame(cropped);
       if (!err.empty())
       {
