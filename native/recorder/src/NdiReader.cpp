@@ -250,6 +250,12 @@ class NdiReader : public VideoReader
 
           auto msPerFrame =
               1000 * video_frame.frame_rate_D / video_frame.frame_rate_N;
+
+          if (frameCount < (2000 / msPerFrame))
+          {
+            // Ignore the first two seconds as there are often missing or badly timestamped frames
+            break;
+          }
           if (deltaMs == 0 || (lastTS != 0 && deltaMs >= 2 * msPerFrame))
           {
             std::stringstream timestring;
@@ -257,14 +263,14 @@ class NdiReader : public VideoReader
                        << std::setfill('0') << milli % 1000;
 
             // For diagnostic purposes
-            std::cerr << "Gap=" << deltaMs << "ms, msPerFrame=" << msPerFrame << " at " << timestring.str() << std::endl;
+            std::stringstream message;
+            message << "Gap=" << deltaMs << "ms (" << std::max(0.0, std::round(deltaMs / msPerFrame - 1)) << "frames missing) prior to " << timestring.str();
+            std::cerr << message.str() << std::endl;
 
-            if (lastTS != 0 && deltaMs >= 100)
+            if ((lastTS != 0 && deltaMs >= 110) || reportAllGaps)
             {
-              // Only designate an error if past the 2s frame mark as startup often misses some
-              std::stringstream ss;
-              ss << (frameCount > (2000 / msPerFrame) ? "Error: " : "") << "Gap of " << deltaMs << "ms at " << timestring.str();
-              SystemEventQueue::push("NDI", ss.str());
+              const auto errmsg = std::string("Error: ") + message.str();
+              SystemEventQueue::push("NDI", errmsg);
             }
           }
 

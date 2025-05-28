@@ -191,6 +191,16 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
           return ret;
         }
       }
+      bool reportAllGaps = false;
+      if (props.Has("reportAllGaps"))
+      {
+        reportAllGaps = props.Get("reportAllGaps").As<Napi::Boolean>();
+      }
+      bool addTimeOverlay = false;
+      if (props.Has("addTimeOverlay"))
+      {
+        addTimeOverlay = props.Get("addTimeOverlay").As<Napi::Boolean>();
+      }
       auto folder = props.Get("recordingFolder").As<Napi::String>().Utf8Value();
       auto prefix = props.Get("recordingPrefix").As<Napi::String>().Utf8Value();
       auto networkCamera =
@@ -215,7 +225,7 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
       guide.pt2 = guideObj.Get("pt2").As<Napi::Number>().FloatValue();
 
       auto result = recorder->start(networkCamera, "ffmpeg", folder, prefix,
-                                    interval, cropRect, guide);
+                                    interval, cropRect, guide, reportAllGaps, addTimeOverlay);
       if (!result.empty())
       {
         std::cerr << "Error: " << result << std::endl;
@@ -331,7 +341,7 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
       ret.Set("width", Napi::Number::New(env, uyvy422Frame->xres));
       ret.Set("height", Napi::Number::New(env, uyvy422Frame->yres));
       ret.Set("totalBytes", Napi::Number::New(env, totalBytes));
-      ret.Set("tsMilli", Napi::Number::New(env, uyvy422Frame->timestamp/10000));
+      ret.Set("tsMilli", Napi::Number::New(env, uyvy422Frame->timestamp / 10000));
       return ret;
     }
     else if (op == "send-visca-cmd")

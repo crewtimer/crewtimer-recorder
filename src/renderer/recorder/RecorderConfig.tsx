@@ -85,6 +85,7 @@ const RecorderConfig: React.FC = () => {
       cameraList
         .find((c) => c.name === event.target.value)
         ?.address.replace(/:.*/, '') || '';
+    setRecordingPropsPending(true);
     setRecordingProps({
       ...recordingProps,
       networkCamera: event.target.value,

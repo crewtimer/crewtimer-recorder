@@ -9,9 +9,11 @@ import {
   DefaultRecordingProps,
 } from './RecorderTypes';
 import {
+  getAddTimeOverlay,
   getGuide,
   getLoggerAlert,
   getRecordingProps,
+  getReportAllGaps,
   getSystemLog,
   setFrameGrab,
   setIsRecording,
@@ -37,7 +39,13 @@ export const startRecording = () => {
     'recorder',
     {
       op: 'start-recording',
-      props: { ...recordingProps, cropArea, guide },
+      props: {
+        ...recordingProps,
+        cropArea,
+        guide,
+        reportAllGaps: getReportAllGaps(),
+        addTimeOverlay: getAddTimeOverlay(),
+      },
     },
   );
 };

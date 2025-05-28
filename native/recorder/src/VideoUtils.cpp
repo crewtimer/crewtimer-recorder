@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <chrono>
 #include <iostream>
+#include <vector>
 #include <stdint.h>
 #include "VideoUtils.hpp"
 
@@ -220,7 +221,7 @@ void overlayTime(uint8_t *ptr, int stride, uint64_t ts100ns, const std::tm *loca
   int local_minutes = local_time->tm_min;
   int local_secs = local_time->tm_sec;
 
-  Point point = Point(stride / 8, 40);
+  Point point = Point(40, 40); // Point(stride / 8, 40);
 
   overlayDigits(screen, stride, point, local_hours, 2);
   setDigitPixels(screen, 10, point, stride, timeColor, black);

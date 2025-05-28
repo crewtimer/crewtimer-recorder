@@ -52,3 +52,11 @@ export const [useSystemLog, setSystemLog, getSystemLog] = UseDatum<
 >([]);
 
 export const [useLoggerAlert, setLoggerAlert, getLoggerAlert] = UseDatum(0);
+export const [useReportAllGaps, , getReportAllGaps] = UseStoredDatum(
+  'reportAllGaps',
+  false,
+);
+export const [useAddTimeOverlay, , getAddTimeOverlay] = UseStoredDatum(
+  'addTimeOverlay',
+  false,
+);

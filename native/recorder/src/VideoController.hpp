@@ -104,7 +104,8 @@ public:
                     const std::string dir, const std::string prefix,
                     const int interval,
                     const FrameProcessor::FRectangle cropArea,
-                    const FrameProcessor::Guide guide)
+                    const FrameProcessor::Guide guide,
+                    const bool reportAllGaps, const bool addTimeOverlay)
   {
     std::lock_guard<std::recursive_mutex> lock(controlMutex);
     this->srcName = srcName;
@@ -157,8 +158,9 @@ public:
     }
 
     frameProcessor = std::shared_ptr<FrameProcessor>(new FrameProcessor(
-        dir, prefix, videoRecorder, interval, cropArea, guide));
+        dir, prefix, videoRecorder, interval, cropArea, guide, addTimeOverlay));
 
+    videoReader->setProperties(reportAllGaps);
     retval = videoReader->start(srcName, [this](FramePtr frame)
                                 { this->frameProcessor->addFrame(frame); });
     if (!retval.empty())

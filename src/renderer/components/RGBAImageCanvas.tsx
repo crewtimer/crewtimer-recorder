@@ -353,7 +353,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     }
     const timeout = setTimeout(() => {
       setTimeoutMessage('No Data Received!!');
-    }, 1000);
+    }, 3000);
     return () => {
       setTimeoutMessage('');
       clearTimeout(timeout);
