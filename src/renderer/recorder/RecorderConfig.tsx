@@ -9,6 +9,7 @@ import {
   Tooltip,
   IconButton,
 } from '@mui/material';
+import CameraIcon from '@mui/icons-material/Camera';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import {
@@ -22,7 +23,7 @@ import RGBAImageCanvas from '../components/RGBAImageCanvas';
 import { showErrorDialog } from '../components/ErrorDialog';
 import InfoPopup from '../components/InfoPopup';
 import RecorderTips from './RecorderTips';
-import { useViscaIP } from '../visca/ViscaState';
+import { getViscaIP, useViscaIP } from '../visca/ViscaState';
 import { useCameraList } from './CameraMonitor';
 import { ViscaPortSelector } from '../visca/ViscaPortSelector';
 import { updateSettings } from './RecorderApi';
@@ -145,7 +146,7 @@ const RecorderConfig: React.FC = () => {
           >
             {cameraList.map((camera) => (
               <MenuItem key={camera.name} value={camera.name}>
-                {camera.name}
+                {`${camera.name} [${camera.address}]`}
               </MenuItem>
             ))}
             {/* If the current value is not in the valid list, show a red fallback option */}
@@ -156,10 +157,23 @@ const RecorderConfig: React.FC = () => {
             )}
           </TextField>
         </Grid>
-        <Grid item xs={2} container alignItems="center">
+        <Grid item xs={3} container alignItems="center">
           <ViscaPortSelector />
         </Grid>
-        <Grid item xs={2} container alignItems="center" />
+        <Grid item xs={1} container alignItems="center">
+          {camFound && (
+            <Tooltip title={`Open Camera Web Page at ${getViscaIP()}`}>
+              <IconButton
+                color="inherit"
+                aria-label="Open Camera"
+                onClick={() => window.open(`http://${getViscaIP()}`)}
+                size="medium"
+              >
+                <CameraIcon />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Grid>
         <Grid item xs={8}>
           <TextField
             label="Recording Folder"
@@ -261,7 +275,7 @@ const RecorderConfig: React.FC = () => {
             </TextField>
           </Tooltip>
         </Grid>
-        <Grid item xs={2}>
+        <Grid item xs={3}>
           <Tooltip title="If checked, finish line location will be shown on video preview.">
             <FormControlLabel
               control={
@@ -276,7 +290,7 @@ const RecorderConfig: React.FC = () => {
             />
           </Tooltip>
         </Grid>
-        <Grid item xs={2} container justifyContent="center" alignItems="center">
+        <Grid item xs={1} container justifyContent="center" alignItems="center">
           <InfoPopup body={<RecorderTips />} />
         </Grid>
       </Grid>

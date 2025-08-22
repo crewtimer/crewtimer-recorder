@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "SystemEventQueue.hpp"
+#include "mdns/ndi_mdns.hpp"
 
 #ifdef _WIN32
 #ifdef _WIN64
@@ -113,9 +114,9 @@ class NdiReader : public VideoReader
     return list;
   };
 
-  void scanLoop()
+  void ndiScanLoop()
   {
-    std::cout << "Scan loop started" << std::endl;
+    std::cout << "NDI Scan loop started" << std::endl;
     while (scanEnabled)
     {
       auto list = findCameras();
@@ -131,7 +132,53 @@ class NdiReader : public VideoReader
       NDIlib_find_destroy(pNDI_find);
       pNDI_find = nullptr;
     }
-    std::cout << "Scan loop stopped" << std::endl;
+    std::cout << "NDI Scan loop stopped" << std::endl;
+  }
+
+  void mdnsScanLoop()
+  {
+    std::cout << "mDns Scan loop started" << std::endl;
+    while (scanEnabled)
+    {
+      ndi_mdns::DiscoverOptions opt;
+      opt.timeout = std::chrono::seconds(2);
+      opt.debug = false; // set true for [DBG] lines
+      opt.debug_level = 2;
+      // opt.interface_ipv4 = "10.0.1.5";   // pick your NIC if needed
+
+      auto ndilist = ndi_mdns::discover(opt);
+      std::vector<CameraInfo> list;
+      for (auto &s : ndilist)
+      {
+        if (!s.ipv4.empty())
+        {
+          list.push_back(
+              CameraInfo(s.instance_label, s.ipv4[0]));
+        }
+        // std::cout << s.instance << " -> " << s.host << ":" << s.port << "\n";
+        // std::cout << s.instance_label << " [" << s.service << "." << s.domain << "] -> "
+        //           << s.host << ":" << s.port << std::endl;
+        // for (auto &ip : s.ipv4)
+        //   std::cout << "  A    " << ip << "\n";
+        // for (auto &ip : s.ipv6)
+        //   std::cout << "  AAAA " << ip << "\n";
+        // for (auto &kv : s.txt)
+        //   std::cout << "  TXT  " << kv << "\n";
+      }
+
+      {
+        std::unique_lock<std::mutex> lock(scanMutex);
+        camList = list;
+      }
+
+      std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+    }
+    if (pNDI_find != nullptr)
+    {
+      NDIlib_find_destroy(pNDI_find);
+      pNDI_find = nullptr;
+    }
+    std::cout << "mDns Scan loop stopped" << std::endl;
   }
 
   std::string connect()
@@ -318,7 +365,7 @@ public:
   NdiReader()
   {
     scanEnabled = true;
-    scanThread = std::thread(&NdiReader::scanLoop, this);
+    scanThread = std::thread(&NdiReader::mdnsScanLoop, this);
     auto *version = NDIlib_version();
     std::cout << "NDI SDK Version: " << version << std::endl;
   }

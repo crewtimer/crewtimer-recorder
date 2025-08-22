@@ -7,7 +7,7 @@ import { ViscaResponse } from '../recorder/ViscaTypes';
 import { snooze } from '../util/Util';
 import {
   ExposureMode,
-  getViscaIp,
+  getViscaIP,
   getViscaPort,
   CameraState,
 } from './ViscaState';
@@ -250,7 +250,7 @@ export const sendViscaCommand = async (
 ): Promise<ViscaResponse> => {
   // Normal single set command
   const packet = buildViscaPacket(cmd);
-  const ip = getViscaIp();
+  const ip = getViscaIP();
   const port = getViscaPort();
   if (ip) {
     return sendViscaCommandToDevice({ ip, port, data: packet });

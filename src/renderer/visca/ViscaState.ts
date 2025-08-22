@@ -21,7 +21,10 @@ export interface CameraState {
   zoom: number;
 }
 
-export const [useViscaIP, setViscaIP, getViscaIp] = UseDatum('192.168.1.188');
+export const [useViscaIP, setViscaIP, getViscaIP] = UseStoredDatum(
+  'viscaIP',
+  '192.168.1.188',
+);
 export const [useViscaPort, , getViscaPort] = UseStoredDatum(
   'viscaPort',
   52381,

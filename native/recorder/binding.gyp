@@ -11,7 +11,8 @@
                   "src/VideoUtils.cpp",
                   "src/util.cpp",
                   "src/event/NativeEvent.cpp",
-                  "src/visca/ViscaTcpClient.cpp"],
+                  "src/visca/ViscaTcpClient.cpp",
+                  "src/mdns/ndi_mdns.cpp"],
       "defines": [ "USE_FFMPEG" ],
       "include_dirs": [
         "<!@(node -p \"require('node-addon-api').include\")",

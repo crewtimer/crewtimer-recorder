@@ -171,7 +171,6 @@ window.Util.onNativeMessage((nativeMessage: NativeMessage) => {
           setWaypointList(waypointList);
         }
       }
-      console.log(content);
       break;
     }
     case 'visca-status':
