@@ -1,6 +1,7 @@
 #include <napi.h>
 #include <node.h>
 #include <uv.h>
+#include <iostream>
 #include "NativeEvent.hpp"
 
 using json = nlohmann::json;
@@ -34,17 +35,63 @@ Napi::Object ConvertJsonToNapiObject(Napi::Env env, const json &j)
     }
     else if (it.value().is_array())
     {
-      // For now, assume uint8_t
-      std::vector<uint8_t> dataVec = it.value().get<std::vector<uint8_t>>();
-      // std::cerr << "Encoding Array of len " << dataVec.size() << std::endl;
-      Napi::Array arr = Napi::Array::New(env, dataVec.size());
-      size_t index = 0;
-      for (auto &el : dataVec)
+      const auto &arrJson = it.value();
+      if (arrJson.empty())
       {
-        arr.Set(index++, el);
+        obj.Set(it.key(), Napi::Array::New(env, 0));
       }
-      obj.Set(it.key(), arr);
-      // std::cerr << "Encoding array done" << std::endl;
+      else if (arrJson.at(0).is_string())
+      {
+        Napi::Array arr = Napi::Array::New(env, arrJson.size());
+        size_t index = 0;
+        for (const auto &el : arrJson)
+        {
+          arr.Set(index++, Napi::String::New(env, el.get<std::string>()));
+        }
+        obj.Set(it.key(), arr);
+      }
+      else if (arrJson.at(0).is_number_integer())
+      {
+        std::vector<uint8_t> dataVec = arrJson.get<std::vector<uint8_t>>();
+        Napi::Array arr = Napi::Array::New(env, dataVec.size());
+        size_t index = 0;
+        for (auto &el : dataVec)
+        {
+          arr.Set(index++, el);
+        }
+        obj.Set(it.key(), arr);
+      }
+      else
+      {
+        // General fallback: try to convert elements generically (e.g. recursive call)
+        Napi::Array arr = Napi::Array::New(env, arrJson.size());
+        size_t index = 0;
+        for (const auto &el : arrJson)
+        {
+          if (el.is_string())
+          {
+            arr.Set(index, Napi::String::New(env, el.get<std::string>()));
+          }
+          else if (el.is_number())
+          {
+            arr.Set(index, Napi::Number::New(env, el));
+          }
+          else if (el.is_boolean())
+          {
+            arr.Set(index, Napi::Boolean::New(env, el));
+          }
+          else if (el.is_object())
+          {
+            arr.Set(index, ConvertJsonToNapiObject(env, el));
+          }
+          else
+          {
+            arr.Set(index, env.Null());
+          }
+          ++index;
+        }
+        obj.Set(it.key(), arr);
+      }
     }
   }
   return obj;

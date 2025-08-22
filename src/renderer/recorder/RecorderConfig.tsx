@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   TextField,
   Typography,
@@ -15,6 +15,7 @@ import {
   useRecordingStatus,
   useRecordingProps,
   useRecordingPropsPending,
+  useWaypointList,
 } from './RecorderData';
 import { FullSizeWindow } from '../components/FullSizeWindow';
 import RGBAImageCanvas from '../components/RGBAImageCanvas';
@@ -24,6 +25,7 @@ import RecorderTips from './RecorderTips';
 import { useViscaIP } from '../visca/ViscaState';
 import { useCameraList } from './CameraMonitor';
 import { ViscaPortSelector } from '../visca/ViscaPortSelector';
+import { updateSettings } from './RecorderApi';
 
 const { openDirDialog, openFileExplorer } = window.Util;
 
@@ -49,6 +51,16 @@ const RecorderConfig: React.FC = () => {
   const [, setRecordingPropsPending] = useRecordingPropsPending();
   const [cameraList] = useCameraList();
   const [, setViscaIP] = useViscaIP();
+  const [wpList] = useWaypointList();
+  const { waypoint } = recordingProps;
+  const waypointList = [...wpList];
+  if (waypoint && !waypointList.includes(waypoint)) {
+    waypointList.push(waypoint);
+  }
+
+  useEffect(() => {
+    updateSettings({ waypoint });
+  }, [waypoint]);
 
   const chooseDir = () => {
     openDirDialog('Choose Video Folder', recordingProps.recordingFolder)
@@ -185,8 +197,11 @@ const RecorderConfig: React.FC = () => {
           </Tooltip>
         </Grid>
         <Grid item xs={2} />
-        <Grid item xs={4}>
-          <Tooltip title="A prefix added to each recording file.">
+        <Grid item xs={2}>
+          <Tooltip
+            placement="top"
+            title="A prefix added to each recording file."
+          >
             <TextField
               size="small"
               label="Filename Prefix"
@@ -199,8 +214,11 @@ const RecorderConfig: React.FC = () => {
             />
           </Tooltip>
         </Grid>
-        <Grid item xs={4}>
-          <Tooltip title="The default duration of each recording file.">
+        <Grid item xs={2}>
+          <Tooltip
+            placement="top"
+            title="The default duration of each recording file."
+          >
             <TextField
               size="small"
               label="Recording Slice(sec)"
@@ -212,6 +230,35 @@ const RecorderConfig: React.FC = () => {
               onChange={handleChange}
               type="number"
             />
+          </Tooltip>
+        </Grid>
+        <Grid item xs={4}>
+          <Tooltip
+            placement="top"
+            title="Bind this recorder instance to the selected Video Review waypoint"
+          >
+            <TextField
+              select
+              size="small"
+              label="Waypoint"
+              variant="outlined"
+              fullWidth
+              margin="normal"
+              value={waypoint || 'Any'}
+              onChange={(e) =>
+                setRecordingProps({
+                  ...recordingProps,
+                  waypoint: e.target.value === 'Any' ? '' : e.target.value,
+                })
+              }
+            >
+              <MenuItem value="Any">Any</MenuItem>
+              {waypointList.map((wp) => (
+                <MenuItem key={wp} value={wp}>
+                  {wp}
+                </MenuItem>
+              ))}
+            </TextField>
           </Tooltip>
         </Grid>
         <Grid item xs={2}>

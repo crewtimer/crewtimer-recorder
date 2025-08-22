@@ -16,6 +16,7 @@ export interface RecordingProps {
   networkIP: string;
   showFinishGuide: boolean;
   cropArea: Rect;
+  waypoint: string;
 }
 
 export interface RecorderMessage {
@@ -26,7 +27,13 @@ export interface RecorderMessage {
     | 'recording-log'
     | 'grab-frame'
     | 'get-camera-list'
-    | 'send-visca-cmd';
+    | 'send-visca-cmd'
+    | 'settings';
+}
+
+export interface SettingsMessage extends RecorderMessage {
+  op: 'settings';
+  props: { [key: string]: number | string };
 }
 
 export interface StartRecorderMessage extends RecorderMessage {
@@ -91,6 +98,7 @@ export const DefaultRecordingProps: RecordingProps = {
   networkIP: '',
   showFinishGuide: true,
   cropArea: { x: 0, y: 0, width: 1, height: 1 },
+  waypoint: '',
 };
 
 export interface RecordingLogEntry {
@@ -112,7 +120,8 @@ export interface CameraListResponse extends HandlerResponse {
 export type RecorderMessageTypes =
   | StartRecorderMessage
   | RecorderMessage
-  | ViscaMessage;
+  | ViscaMessage
+  | SettingsMessage;
 export type RecorderMessageResponseType =
   | HandlerResponse
   | RecorderResponse

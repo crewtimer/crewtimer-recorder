@@ -24,7 +24,7 @@ extern "C"
 #include "event/NativeEvent.hpp"
 
 using json = nlohmann::json;
-std::shared_ptr<VideoController> recorder;
+std::shared_ptr<VideoController> videoController;
 std::unique_ptr<IViscaTcpClient> viscaClient;
 
 // Utility function to clamp a value between 0 and 255
@@ -155,9 +155,9 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
   try
   {
     auto op = args.Get("op").As<Napi::String>().Utf8Value();
-    if (!recorder)
+    if (!videoController)
     {
-      recorder = std::shared_ptr<VideoController>(new VideoController("ndi"));
+      videoController = std::shared_ptr<VideoController>(new VideoController("ndi"));
     }
     if (!viscaClient)
     {
@@ -168,7 +168,23 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
           2  // send timeout
       );
     }
-    if (op == "start-recording")
+    if (op == "settings")
+    {
+      if (!args.Has("props"))
+      {
+        Napi::TypeError::New(env, "Missing props field")
+            .ThrowAsJavaScriptException();
+        return ret;
+      }
+      auto props = args.Get("props").As<Napi::Object>();
+      if (props.Has("waypoint"))
+      {
+        auto waypoint = props.Get("waypoint").As<Napi::String>().Utf8Value();
+        videoController->setWaypoint(waypoint);
+      }
+      return ret;
+    }
+    else if (op == "start-recording")
     {
       if (!args.Has("props"))
       {
@@ -224,8 +240,8 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
       guide.pt1 = guideObj.Get("pt1").As<Napi::Number>().FloatValue();
       guide.pt2 = guideObj.Get("pt2").As<Napi::Number>().FloatValue();
 
-      auto result = recorder->start(networkCamera, "ffmpeg", folder, prefix,
-                                    interval, cropRect, guide, reportAllGaps, addTimeOverlay);
+      auto result = videoController->start(networkCamera, "ffmpeg", folder, prefix,
+                                           interval, cropRect, guide, reportAllGaps, addTimeOverlay);
       if (!result.empty())
       {
         std::cerr << "Error: " << result << std::endl;
@@ -241,9 +257,9 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
     }
     else if (op == "stop-recording")
     {
-      if (recorder)
+      if (videoController)
       {
-        auto err = recorder->stop();
+        auto err = videoController->stop();
         std::cerr << "Recorder stopped with status: " << err << std::endl;
       }
       return ret;
@@ -251,9 +267,9 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
     else if (op == "get-camera-list")
     {
 
-      if (recorder)
+      if (videoController)
       {
-        auto cameras = recorder->getCameraList();
+        auto cameras = videoController->getCameraList();
 
         Napi::Array arr = Napi::Array::New(env, cameras.size());
         size_t index = 0;
@@ -277,9 +293,9 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
     }
     else if (op == "recording-status")
     {
-      if (recorder)
+      if (videoController)
       {
-        auto status = recorder->getStatus();
+        auto status = videoController->getStatus();
         ret.Set("status", Napi::String::New(env, "OK"));
         ret.Set("error", Napi::String::New(env, status.error));
         ret.Set("recording", Napi::Boolean::New(env, status.recording));
@@ -317,12 +333,12 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
     else if (op == "grab-frame")
     {
       // grab a rgba frame from the input stream
-      if (!recorder)
+      if (!videoController)
       {
         return ret;
       }
 
-      auto uyvy422Frame = recorder->getLastFrame();
+      auto uyvy422Frame = videoController->getLastFrame();
       if (!uyvy422Frame)
       {
         return ret;
@@ -447,7 +463,7 @@ Napi::Value shutdownRecorder(const Napi::CallbackInfo &info)
 {
   deInitThreadSafeFunction();
   Napi::Env env = info.Env();
-  recorder = nullptr;
+  videoController = nullptr;
   std::cerr << "Recorder shutdown" << std::endl;
   if (viscaClient)
   {

@@ -7,6 +7,7 @@ import {
   RecordingStatus,
   CameraListResponse,
   DefaultRecordingProps,
+  SettingsMessage,
 } from './RecorderTypes';
 import {
   getAddTimeOverlay,
@@ -15,12 +16,14 @@ import {
   getRecordingProps,
   getReportAllGaps,
   getSystemLog,
+  getWaypointList,
   setFrameGrab,
   setIsRecording,
   setLoggerAlert,
   setRecordingPropsPending,
   setRecordingStartTime,
   setSystemLog,
+  setWaypointList,
 } from './RecorderData';
 import { showErrorDialog } from '../components/ErrorDialog';
 import { ViscaMessage, ViscaMessageProps, ViscaResponse } from './ViscaTypes';
@@ -95,6 +98,16 @@ export const requestVideoFrame = async () => {
     .catch(showErrorDialog);
 };
 
+export const updateSettings = (props: { [key: string]: string | number }) => {
+  return window.msgbus.sendMessage<SettingsMessage, HandlerResponse>(
+    'recorder',
+    {
+      op: 'settings',
+      props,
+    },
+  );
+};
+
 const viscaHandlers: { [key: string]: (reult: ViscaResponse) => void } = {};
 export const sendViscaCommandToDevice = async ({
   ip,
@@ -144,6 +157,23 @@ window.Util.onNativeMessage((nativeMessage: NativeMessage) => {
 
   // Handle the message based on the sender and content
   switch (sender) {
+    case 'mcast': {
+      if (content.cmd === 'split-video' || content.cmd === 'info') {
+        const wp = content.wp;
+        let waypointList = getWaypointList();
+        if (!waypointList.includes(wp)) {
+          waypointList = [...waypointList, wp].sort((a, b) =>
+            a.localeCompare(b, undefined, {
+              numeric: true,
+              sensitivity: 'base',
+            }),
+          );
+          setWaypointList(waypointList);
+        }
+      }
+      console.log(content);
+      break;
+    }
     case 'visca-status':
       {
         const statusMessage = content.msg;
