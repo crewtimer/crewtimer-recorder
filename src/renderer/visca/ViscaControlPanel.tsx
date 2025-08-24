@@ -7,7 +7,12 @@ import {
   InputLabel,
   Select,
   SelectChangeEvent,
+  FormControlLabel,
+  Checkbox,
+  Tooltip,
+  IconButton,
 } from '@mui/material';
+import CameraIcon from '@mui/icons-material/Camera';
 import {
   sendViscaCommand,
   getCameraState,
@@ -16,14 +21,21 @@ import {
   updateCameraState,
 } from './ViscaAPI';
 import { setToast } from '../components/Toast';
-import { ExposureMode, useCameraState, useViscaState } from './ViscaState';
+import {
+  ExposureMode,
+  getViscaIP,
+  useCameraState,
+  useViscaState,
+} from './ViscaState';
 import ViscaValueButton from './ViscaValueButton';
 import RangeStepper from './RangeStepper';
 import ViscaPresets from './ViscaPresets';
+import { useFocusArea } from '../recorder/RecorderData';
 
 const ViscaControlPanel = () => {
   const [cameraState, setCameraState] = useCameraState();
   const [viscaState] = useViscaState();
+  const [focusAreaProps, setFocusAreaProps] = useFocusArea();
   useEffect(() => {
     const monitor = () => {
       sendViscaCommand({ type: 'AUTO_FOCUS_VALUE' })
@@ -73,7 +85,7 @@ const ViscaControlPanel = () => {
         <Grid
           item
           xs={12}
-          md={2}
+          md={3}
           container
           alignItems="flex-start"
           justifyContent="flex-start"
@@ -89,6 +101,31 @@ const ViscaControlPanel = () => {
             autoOff={{ type: 'AUTO_FOCUS', value: false }}
             autoOnce={{ type: 'FOCUS_ONCE' }}
           />
+          {/* Focus On/Off Checkbox */}
+          <Box ml={1} display="flex" alignItems="center">
+            <Tooltip title="Show Focus metric to assist with manual focus">
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={focusAreaProps.enabled}
+                    onChange={() =>
+                      setFocusAreaProps((prior) => ({
+                        ...prior,
+                        enabled: !prior.enabled,
+                      }))
+                    }
+                    color="primary"
+                    size="small"
+                  />
+                }
+                label="Focus Assist"
+                sx={{
+                  marginLeft: 1,
+                  '& .MuiFormControlLabel-label': { fontSize: '0.95rem' },
+                }}
+              />
+            </Tooltip>
+          </Box>
         </Grid>
         <Grid
           item
@@ -209,7 +246,25 @@ const ViscaControlPanel = () => {
           alignItems="flex-start"
           justifyContent="flex-start"
         >
-          <ViscaPresets />
+          <Box
+            display="flex"
+            flexDirection="column"
+            alignItems="flex-start"
+            gap={1}
+          >
+            <ViscaPresets />
+            <Tooltip title={`Open Camera Web Page at ${getViscaIP()}`}>
+              <IconButton
+                disabled={viscaState !== 'Connected'}
+                color="inherit"
+                aria-label="Open Camera"
+                onClick={() => window.open(`http://${getViscaIP()}`)}
+                size="medium"
+              >
+                <CameraIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
         </Grid>
       </Grid>
       {/* Conditionally render "Disconnected" overlay if not connected */}

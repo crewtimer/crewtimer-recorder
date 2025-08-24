@@ -33,7 +33,7 @@ export interface RecorderMessage {
 
 export interface SettingsMessage extends RecorderMessage {
   op: 'settings';
-  props: { [key: string]: number | string };
+  props: { [key: string]: number | string | object };
 }
 
 export interface StartRecorderMessage extends RecorderMessage {
@@ -56,6 +56,7 @@ export interface GrabFrameResponse extends HandlerResponse {
   height: number;
   totalBytes: number;
   tsMilli: number;
+  focus: number;
 }
 
 export interface RecordingStatus extends HandlerResponse {

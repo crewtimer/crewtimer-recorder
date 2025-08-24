@@ -98,7 +98,9 @@ export const requestVideoFrame = async () => {
     .catch(showErrorDialog);
 };
 
-export const updateSettings = (props: { [key: string]: string | number }) => {
+export const updateSettings = (props: {
+  [key: string]: string | number | object;
+}) => {
   return window.msgbus.sendMessage<SettingsMessage, HandlerResponse>(
     'recorder',
     {

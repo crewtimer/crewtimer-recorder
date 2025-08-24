@@ -65,6 +65,7 @@ class NdiReader : public VideoReader
   std::thread ndiThread;
   std::atomic<bool> keepRunning;
   std::atomic<bool> scanEnabled;
+  std::atomic<bool> scanPaused;
   AddFrameFunction addFrameFunction;
   NDIlib_find_instance_t pNDI_find = nullptr;
   std::string srcName;
@@ -119,12 +120,14 @@ class NdiReader : public VideoReader
     std::cout << "NDI Scan loop started" << std::endl;
     while (scanEnabled)
     {
-      auto list = findCameras();
+      if (!scanPaused)
       {
-        std::unique_lock<std::mutex> lock(scanMutex);
-        camList = list;
+        auto list = findCameras();
+        {
+          std::unique_lock<std::mutex> lock(scanMutex);
+          camList = list;
+        }
       }
-
       std::this_thread::sleep_for(std::chrono::milliseconds(3000));
     }
     if (pNDI_find != nullptr)
@@ -140,37 +143,39 @@ class NdiReader : public VideoReader
     std::cout << "mDns Scan loop started" << std::endl;
     while (scanEnabled)
     {
-      ndi_mdns::DiscoverOptions opt;
-      opt.timeout = std::chrono::seconds(2);
-      opt.debug = false; // set true for [DBG] lines
-      opt.debug_level = 2;
-      // opt.interface_ipv4 = "10.0.1.5";   // pick your NIC if needed
-
-      auto ndilist = ndi_mdns::discover(opt);
-      std::vector<CameraInfo> list;
-      for (auto &s : ndilist)
+      if (!scanPaused)
       {
-        if (!s.ipv4.empty())
+        ndi_mdns::DiscoverOptions opt;
+        opt.timeout = std::chrono::seconds(2);
+        opt.debug = false; // set true for [DBG] lines
+        opt.debug_level = 2;
+        // opt.interface_ipv4 = "10.0.1.5";   // pick your NIC if needed
+
+        auto ndilist = ndi_mdns::discover(opt);
+        std::vector<CameraInfo> list;
+        for (auto &s : ndilist)
         {
-          list.push_back(
-              CameraInfo(s.instance_label, s.ipv4[0]));
+          if (!s.ipv4.empty())
+          {
+            list.push_back(
+                CameraInfo(s.instance_label, s.ipv4[0]));
+          }
+          // std::cout << s.instance << " -> " << s.host << ":" << s.port << "\n";
+          // std::cout << "NDI Source: " << s.instance_label << " [" << s.service << "." << s.domain << "] -> "
+          //           << s.host << ":" << s.port << std::endl;
+          // for (auto &ip : s.ipv4)
+          //   std::cout << "  A    " << ip << "\n";
+          // for (auto &ip : s.ipv6)
+          //   std::cout << "  AAAA " << ip << "\n";
+          // for (auto &kv : s.txt)
+          //   std::cout << "  TXT  " << kv << "\n";
         }
-        // std::cout << s.instance << " -> " << s.host << ":" << s.port << "\n";
-        // std::cout << s.instance_label << " [" << s.service << "." << s.domain << "] -> "
-        //           << s.host << ":" << s.port << std::endl;
-        // for (auto &ip : s.ipv4)
-        //   std::cout << "  A    " << ip << "\n";
-        // for (auto &ip : s.ipv6)
-        //   std::cout << "  AAAA " << ip << "\n";
-        // for (auto &kv : s.txt)
-        //   std::cout << "  TXT  " << kv << "\n";
-      }
 
-      {
-        std::unique_lock<std::mutex> lock(scanMutex);
-        camList = list;
+        {
+          std::unique_lock<std::mutex> lock(scanMutex);
+          camList = list;
+        }
       }
-
       std::this_thread::sleep_for(std::chrono::milliseconds(3000));
     }
     if (pNDI_find != nullptr)
@@ -311,7 +316,15 @@ class NdiReader : public VideoReader
 
             // For diagnostic purposes
             std::stringstream message;
-            message << "Gap=" << deltaMs << "ms (" << std::max(0.0, std::round(deltaMs / msPerFrame - 1)) << "frames missing) prior to " << timestring.str();
+            if (deltaMs == 0)
+            {
+              message << "Duplicate frame timestamp at " << timestring.str();
+            }
+            else
+            {
+              int framesMissing = std::round(double(deltaMs) / msPerFrame - 1);
+              message << "Gap=" << deltaMs << "ms (" << framesMissing << "frames missing) prior to " << timestring.str();
+            }
             std::cerr << message.str() << std::endl;
 
             if ((lastTS != 0 && deltaMs >= 110) || reportAllGaps)
@@ -372,6 +385,7 @@ public:
   std::string start(const std::string srcName,
                     AddFrameFunction addFrameFunction) override
   {
+    scanPaused = true;
     if (ndiThread.joinable())
     {
       stop();
@@ -384,6 +398,7 @@ public:
   };
   std::string stop() override
   {
+    scanPaused = false;
     keepRunning = false;
     if (ndiThread.joinable())
     {
@@ -400,6 +415,7 @@ public:
   virtual ~NdiReader() override
   {
     stop();
+    scanPaused = true;
     scanEnabled = false;
     if (scanThread.joinable())
     {

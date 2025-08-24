@@ -8,6 +8,7 @@ import {
   getGuide,
   getIsRecording,
   getRecordingProps,
+  useFocusArea,
   useFrameGrab,
   useGuide,
   useIsRecording,
@@ -18,10 +19,12 @@ import {
   requestVideoFrame,
   startRecording,
   stopRecording,
+  updateSettings,
 } from '../recorder/RecorderApi';
 import generateTestPattern, {
   drawBox,
   drawSvgIcon,
+  drawText,
   translateDestCanvas2SrcCanvas,
   translateSrcCanvas2DestCanvas,
 } from '../util/ImageUtils';
@@ -35,6 +38,46 @@ import { GrabFrameResponse, Rect } from '../recorder/RecorderTypes';
 import { showErrorDialog } from './ErrorDialog';
 import CanvasIcon from './CanvasIcon';
 import retriggerableOneShot from './RetriggerableOneshot';
+
+type ExpAvgResult = {
+  expAvg: number;
+  maxValue: number;
+  ratio: number; // expAvg / maxValue
+};
+
+function createExpAvgTracker(alpha: number) {
+  if (alpha <= 0 || alpha > 1) {
+    throw new Error('Alpha must be between 0 (exclusive) and 1 (inclusive).');
+  }
+
+  let expAvg = 0;
+  let maxValue = Number.NEGATIVE_INFINITY;
+  let initialized = false;
+
+  return (newValue: number): ExpAvgResult => {
+    // Update exponential average
+    if (!initialized) {
+      expAvg = newValue; // initialize with first value
+      initialized = true;
+    } else {
+      expAvg = alpha * newValue + (1 - alpha) * expAvg;
+    }
+
+    // Track max
+    if (newValue > maxValue) {
+      maxValue = newValue;
+    }
+
+    return {
+      expAvg,
+      maxValue,
+      ratio: maxValue !== 0 ? expAvg / maxValue : 0,
+    };
+  };
+}
+
+// Example usage
+const focusTracker = createExpAvgTracker(0.2);
 
 const DefaultCrop: Rect = {
   x: 0,
@@ -277,6 +320,12 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   // State for the selection rectangle
   const [recordingProps, setRecordingProps] = useRecordingProps();
 
+  // Focus area vertical position normalized value
+  const [focusArea, setFocusArea] = useFocusArea();
+  const [draggingFocusArea, setDraggingFocusArea] = useState<
+    Point | undefined
+  >();
+
   const [clip, setClip] = useState<Rect>(recordingProps.cropArea);
   const draggingCornerRef = useRef<string | null>(null);
   const [draggingCorner, setDraggingCorner] = useState<string | null>(null);
@@ -310,6 +359,10 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       setTimeout(() => startRecording().catch(showErrorDialog), 100);
     }
   }, 2000);
+
+  useEffect(() => {
+    updateSettings({ focusArea });
+  }, [focusArea]);
 
   useEffect(() => {
     draggingCornerRef.current = draggingCorner;
@@ -426,14 +479,34 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!canvasRef.current) return;
     const { offsetX, offsetY } = e.nativeEvent;
-
     const iconSize = 24;
     const iconPadding = 10;
-
     // Icon positions relative to the canvas width
     const { drawableRect } = videoScaling;
     const maxSizeIconX =
       drawableRect.x + drawableRect.width - (iconSize + iconPadding);
+
+    if (focusArea.enabled && e.button !== 2) {
+      // Calculate focus area box rect (centered horizontally, vertical: by focusAreaPosition)
+      const center = translateSrcCanvas2DestCanvas({
+        x: videoScaling.srcWidth * focusArea.xPct,
+        y: videoScaling.srcHeight * focusArea.yPct,
+      });
+      const focusSize =
+        videoScaling.srcHeight * focusArea.sizePct * videoScaling.pixScale;
+      const offset: Point = { x: center.x - offsetX, y: center.y - offsetY };
+
+      // Is mouse down inside the focus area box?
+      if (
+        Math.abs(offset.x) < focusSize / 2 &&
+        Math.abs(offset.y) < focusSize / 2
+      ) {
+        setDraggingFocusArea({ x: center.x - offsetX, y: center.y - offsetY });
+        return;
+      }
+    }
+
+    // right click
     if (e.button === 2) {
       e.preventDefault();
       e.stopPropagation();
@@ -484,6 +557,27 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       }
     }
   };
+
+  // Handle mouse move event for dragging the focus area (center box)
+  const handleFocusAreaMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!draggingFocusArea || !canvasRef.current) return;
+      const { drawableRect } = videoScaling;
+      const rect = canvasRef.current.getBoundingClientRect();
+      const mouseY = e.clientY - rect.top;
+      const normY =
+        (mouseY - drawableRect.y + draggingFocusArea.y) / drawableRect.height;
+      const mouseX = e.clientX - rect.left;
+      const normX =
+        (mouseX - drawableRect.x + draggingFocusArea.x) / drawableRect.width;
+      setFocusArea((prior) => ({
+        ...prior,
+        xPct: Math.min(1, Math.max(0, normX)),
+        yPct: Math.min(1, Math.max(0, normY)),
+      }));
+    },
+    [draggingFocusArea, setFocusArea, videoScaling],
+  );
 
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
@@ -572,7 +666,10 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     [clip, setGuide, videoScaling, applyChanges],
   );
 
-  const handleMouseUp = () => setDraggingCorner(null);
+  const handleMouseUp = () => {
+    setDraggingCorner(null);
+    setDraggingFocusArea(undefined);
+  };
 
   useEffect(() => {
     if (draggingCorner) {
@@ -588,6 +685,18 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     }
     return () => {};
   }, [draggingCorner, handleMouseMove]);
+
+  useEffect(() => {
+    if (draggingFocusArea) {
+      window.addEventListener('mousemove', handleFocusAreaMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      return () => {
+        window.removeEventListener('mousemove', handleFocusAreaMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+    return () => {};
+  }, [draggingFocusArea, handleFocusAreaMouseMove]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -607,7 +716,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       return;
     }
 
-    const { data, width, height, tsMilli } = frame;
+    const { data, width, height, tsMilli, focus } = frame;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
 
@@ -671,57 +780,55 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       ctx.restore();
     }
 
+    const nativeGuide = getNativeGuideCoords();
     if (settings.showFinishGuide) {
-      const nativeGuide = getNativeGuideCoords();
       const from = nativeGuide.pt1;
       const to = nativeGuide.pt2;
       from.y = destClipRect.y;
       to.y = destClipRect.y + destClipRect.height;
+      ctx.save();
       ctx.beginPath();
       ctx.moveTo(from.x, from.y);
       ctx.lineTo(to.x, to.y);
       ctx.strokeStyle = 'red';
       ctx.lineWidth = 1;
       ctx.stroke();
+      ctx.restore();
       drawBox(ctx, from.x, from.y, 12, 't');
       drawBox(ctx, to.x, to.y, 12, 'b');
+      if (focusArea.enabled) {
+        // Draw focus area box
+        const center = translateSrcCanvas2DestCanvas({
+          x: videoScaling.srcWidth * focusArea.xPct,
+          y: videoScaling.srcHeight * focusArea.yPct,
+        });
+        const focusSize =
+          videoScaling.srcHeight * focusArea.sizePct * videoScaling.pixScale;
+
+        ctx.save();
+        ctx.strokeStyle = 'yellow';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(
+          center.x - focusSize / 2,
+          center.y - focusSize / 2,
+          focusSize,
+          focusSize,
+        );
+        ctx.restore();
+      }
     }
 
+    const x = Math.max(videoScaling.destX, 0) + 8;
+    const y = 36;
     if (tsMilli !== 0) {
-      const tsString = convertTimestampToString(tsMilli);
-      // Set the text properties
-      const textHeight = 16;
-      const padding = 4;
-      ctx.font = `${textHeight}px Arial`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      const x = Math.max(videoScaling.destX, 0) + 8;
-      const y = 36;
-      // Measure the text width and height
-      const textMetrics = ctx.measureText(tsString);
-      const textWidth = textMetrics.width;
-      const boxHeight = textHeight + padding * 2;
-      const boxWidth = textWidth + padding * 2;
+      const tsString = `${convertTimestampToString(tsMilli)}`;
 
-      // Draw a white rectangle behind the text
-      ctx.fillStyle = 'rgba(50, 50, 50, 0.7)'; // Gray background with some transparency
-
-      ctx.fillRect(x, y, boxWidth, boxHeight);
-
-      ctx.strokeStyle = '#888888';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x, y, boxWidth, boxHeight);
-
-      ctx.fillStyle = '#eeeeee';
-      ctx.fillText(
-        tsString,
-        x + padding + textWidth / 2,
-        y +
-          boxHeight / 2 +
-          (textMetrics.actualBoundingBoxAscent -
-            textMetrics.actualBoundingBoxDescent) /
-            2,
-      );
+      drawText(ctx, x, y, tsString);
+      if (focusArea.enabled) {
+        const avgFocus = focusTracker(focus);
+        const focusText = `focus=${Number((avgFocus.expAvg / 1000).toPrecision(2)).toFixed(1)}`;
+        drawText(ctx, x, videoScaling.destHeight / 2, focusText);
+      }
     }
 
     // Draw icons based on canvas width
@@ -747,47 +854,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
 
     // Draw the WxH text in the upper-left corner of the rectangle with a background
     const text = `${Math.round((clip.width * frame.width) / 4) * 4}x${Math.round((clip.height * frame.height) / 4) * 4}`;
-    const fontSize = 16;
-    ctx.font = `${fontSize}px Arial`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    const textMetrics = ctx.measureText(text);
-    const padding = 4;
-    const boxWidth = textMetrics.width + padding * 2;
-    const boxHeight = fontSize + padding * 2;
-    const edgeOffset = 8;
-
-    // Draw background rectangle for the text
-    ctx.fillStyle = 'rgba(50, 50, 50, 0.7)'; // Gray background with some transparency
-    ctx.fillRect(
-      edgeOffset + destClipRect.x,
-      edgeOffset + destClipRect.y,
-      boxWidth,
-      boxHeight,
-    );
-
-    ctx.strokeStyle = '#888888';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(
-      edgeOffset + destClipRect.x,
-      edgeOffset + destClipRect.y,
-      boxWidth,
-      boxHeight,
-    );
-
-    // Draw the text on top of the background
-    ctx.fillStyle = '#eeeeee';
-    ctx.fillText(
-      text,
-      edgeOffset + destClipRect.x + padding + textMetrics.width / 2,
-      edgeOffset +
-        destClipRect.y +
-        boxHeight / 2 +
-        (textMetrics.actualBoundingBoxAscent -
-          textMetrics.actualBoundingBoxDescent) /
-          2,
-    ); // Adjust for padding and text baseline
+    drawText(ctx, x, 8, text);
 
     if (isAdjustingCrop) {
       // Draw finish selection rectangle
@@ -856,6 +923,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     fullscreenImage,
     snapToCenterImage,
     videoScaling,
+    focusArea,
   ]);
 
   let alertMessage = 'Video stopped. Press Start to resume.';

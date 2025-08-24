@@ -70,8 +70,10 @@ public:
                                         // std::cerr << "Received JSON: " << j.dump() << std::endl;
                                         auto command = j.value<std::string>("cmd", "");
                                         auto waypoint = j.value<std::string>("wp","");
+                                        // std::cerr << "cmd=" << command << " wp=" << waypoint << " this->wp='" << this->waypoint << "'" << std::endl;
                                         if (command == "split-video" && this->frameProcessor && (this->waypoint.empty() || this->waypoint == waypoint))
                                         {
+                                          std::cerr << "Splitting Video" << std::endl;
                                           this->frameProcessor->splitFile();
                                         }
                                         // Allow renderer access to mcast messages

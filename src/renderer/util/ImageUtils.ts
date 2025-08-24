@@ -45,17 +45,55 @@ function generateTestPattern(): GrabFrameResponse {
     data: buffer,
     width,
     height,
+    focus: 1.0,
     totalBytes: totalPixels * 4,
     tsMilli: Date.now(),
   };
 }
 
+export const drawText = (
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  text: string,
+) => {
+  const textHeight = 16;
+  const padding = 4;
+  context.font = `${textHeight}px Arial`; // set before measureText
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  const textMetrics = context.measureText(text);
+  const textWidth = textMetrics.width;
+  const boxHeight = textHeight + padding * 2;
+  const boxWidth = textWidth + padding * 2;
+
+  // Draw a white rectangle behind the text
+  context.fillStyle = 'rgba(50, 50, 50, 0.7)'; // Gray background with some transparency
+
+  context.fillRect(x, y, boxWidth, boxHeight);
+
+  context.strokeStyle = '#888888';
+  context.lineWidth = 2;
+  context.strokeRect(x, y, boxWidth, boxHeight);
+
+  context.fillStyle = '#eeeeee';
+  context.fillText(
+    text,
+    x + padding + textWidth / 2,
+    y +
+      boxHeight / 2 +
+      (textMetrics.actualBoundingBoxAscent -
+        textMetrics.actualBoundingBoxDescent) /
+        2,
+  );
+};
 export const drawBox = (
   context: CanvasRenderingContext2D,
   xpos: number,
   ypos: number,
   size: number,
   location: 'c' | 't' | 'b' | 'l' | 'r' | 'tl' | 'tr' | 'bl' | 'br',
+  fill = true,
 ) => {
   let x = xpos;
   let y = ypos;
@@ -95,13 +133,20 @@ export const drawBox = (
       y -= size / 2;
       break;
   }
-  context.beginPath();
+  context.save();
   context.strokeStyle = 'black';
   context.lineWidth = 1;
   context.strokeRect(x, y, size, size);
-  context.fillStyle = 'white';
-  context.fillRect(x + 1, y + 1, size - 2, size - 2);
-  context.stroke();
+  if (fill) {
+    context.fillStyle = 'white';
+    context.fillRect(x + 1, y + 1, size - 2, size - 2);
+    context.stroke();
+  } else {
+    context.strokeStyle = 'white';
+    context.lineWidth = 1;
+    context.strokeRect(x + 1, y + 1, size - 2, size - 2);
+  }
+  context.restore();
 };
 
 export const drawSvgIcon = (

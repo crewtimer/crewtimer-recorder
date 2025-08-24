@@ -8,6 +8,7 @@
 #include <node.h>
 #include <sstream>
 #include <streambuf>
+
 extern "C"
 {
 #include <libavcodec/avcodec.h>
@@ -22,6 +23,7 @@ extern "C"
 #include "VideoController.hpp"
 #include "visca/IViscaTcpClient.hpp"
 #include "event/NativeEvent.hpp"
+#include "opencv/FocusScore.hpp"
 
 using json = nlohmann::json;
 std::shared_ptr<VideoController> videoController;
@@ -131,6 +133,39 @@ auto viscaStateLogger = [](const std::string &msg)
   sendMessageToRenderer("visca-state", std::make_shared<json>(config));
 };
 
+// global for focus processing
+static auto cropRect = FrameProcessor::FRectangle{0, 0, 0, 0};
+static FrameProcessor::Guide guide;
+
+// Struct for focus area configuration (replaces individual static variables)
+struct FocusAreaConfig
+{
+  double xPct = 0;
+  double yPct = 0.5;
+  double sizePct = 0.2;
+  bool enabled = true;
+  void setFromNapi(Napi::Object &focus)
+  {
+    if (focus.Has("enabled"))
+    {
+      enabled = focus.Get("enabled").As<Napi::Boolean>();
+    }
+    if (focus.Has("xPct"))
+    {
+      xPct = focus.Get("xPct").As<Napi::Number>();
+    }
+    if (focus.Has("yPct"))
+    {
+      yPct = focus.Get("yPct").As<Napi::Number>();
+    }
+    if (focus.Has("sizePct"))
+    {
+      sizePct = focus.Get("sizePct").As<Napi::Number>();
+    }
+  }
+};
+static FocusAreaConfig focusAreaConfig;
+
 Napi::Object
 nativeVideoRecorder(const Napi::CallbackInfo &info)
 {
@@ -182,6 +217,11 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
         auto waypoint = props.Get("waypoint").As<Napi::String>().Utf8Value();
         videoController->setWaypoint(waypoint);
       }
+      else if (props.Has("focusArea"))
+      {
+        auto focusArea = props.Get("focusArea").As<Napi::Object>();
+        focusAreaConfig.setFromNapi(focusArea);
+      }
       return ret;
     }
     else if (op == "start-recording")
@@ -225,7 +265,6 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
           props.Get("recordingDuration").As<Napi::Number>().Uint32Value();
       auto cropArea = props.Get("cropArea").As<Napi::Object>();
 
-      auto cropRect = FrameProcessor::FRectangle{0, 0, 0, 0};
       if (cropArea.Has("x") && cropArea.Has("y") && cropArea.Has("width") &&
           cropArea.Has("height"))
       {
@@ -236,7 +275,6 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
             cropArea.Get("height").As<Napi::Number>().FloatValue()};
       }
       auto guideObj = props.Get("guide").As<Napi::Object>();
-      FrameProcessor::Guide guide;
       guide.pt1 = guideObj.Get("pt1").As<Napi::Number>().FloatValue();
       guide.pt2 = guideObj.Get("pt2").As<Napi::Number>().FloatValue();
 
@@ -345,19 +383,58 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
       }
 
       size_t totalBytes = 4 * uyvy422Frame->xres * uyvy422Frame->yres;
+
       // uint8_t *bufferData = new uint8_t[totalBytes];
 
       auto bufferData = Napi::Buffer<uint8_t>::New(env, totalBytes);
       uyvyToRgba(uyvy422Frame->data, bufferData.Data(), uyvy422Frame->xres,
                  uyvy422Frame->yres, uyvy422Frame->stride);
-      // Napi::Buffer<uint8_t> napiBuffer = Napi::Buffer<uint8_t>::New(
-      //     env, bufferData, totalBytes, FinalizeBuffer);
-      // ret.Set("data", napiBuffer);
+
+      double focusScore = 0.0;
+      if (focusAreaConfig.enabled)
+      {
+        // auto focus_start = std::chrono::high_resolution_clock::now();
+        // Compute a focus score
+        auto x = static_cast<int>(focusAreaConfig.xPct * uyvy422Frame->xres) & ~1; // must be even due to UYVY structure
+        auto y = static_cast<int>(focusAreaConfig.yPct * uyvy422Frame->yres);
+        cv::Point center(x, y); // ROI center
+        focus::Options opt;     // defaults OK
+        opt.roiSize = static_cast<int>(uyvy422Frame->yres * focusAreaConfig.sizePct) & ~1;
+        if (opt.roiSize < 32)
+        {
+          opt.roiSize = std::max(64, uyvy422Frame->yres / 8);
+          std::cerr
+              << "pct: " << focusAreaConfig.sizePct << " roi=" << opt.roiSize << std::endl;
+        }
+
+        // UYVY is CV_8UC2
+        // UYVY stride means col indexing is in "pixels" (not bytes), so safe
+        cv::Mat fullUyvy(uyvy422Frame->yres, uyvy422Frame->xres, CV_8UC2, uyvy422Frame->data, uyvy422Frame->stride);
+
+        // Defensive: clamp ROI within frame bounds, ensure even x values due to UYVY structure
+        int roi_x = std::max(0, x - opt.roiSize / 2) & ~1; // must be even
+        int roi_y = std::max(0, y - opt.roiSize / 2);
+        int roi_w = std::min(opt.roiSize, uyvy422Frame->xres - roi_x) & ~1;
+        int roi_h = std::min(opt.roiSize, uyvy422Frame->yres - roi_y);
+
+        cv::Rect roiRect(roi_x, roi_y, roi_w, roi_h);
+        cv::Mat uyvy_roi = fullUyvy(roiRect);
+
+        // Convert ROI to Gray in one step:
+        cv::Mat gray;
+        cv::cvtColor(uyvy_roi, gray, cv::COLOR_YUV2GRAY_UYVY);
+
+        // Call focus score on  ROI
+        focusScore = focus::scoreAt(gray, center, opt); // center-point API
+        // std::cerr << x << "," << y << "," << roi_x << "," << roi_y << "," << roi_w << "," << roi_h << "," << focusScore << std::endl;
+      }
+
       ret.Set("data", bufferData);
       ret.Set("width", Napi::Number::New(env, uyvy422Frame->xres));
       ret.Set("height", Napi::Number::New(env, uyvy422Frame->yres));
       ret.Set("totalBytes", Napi::Number::New(env, totalBytes));
       ret.Set("tsMilli", Napi::Number::New(env, uyvy422Frame->timestamp / 10000));
+      ret.Set("focus", Napi::Number::New(env, focusScore));
       return ret;
     }
     else if (op == "send-visca-cmd")
@@ -415,16 +492,16 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
       viscaClient->start(ip, port);
       viscaClient->sendCommand(nativeVector, [id](const ViscaResult &focusResult)
                                {
-                                 if (focusResult.status == ViscaResult::Status::OK)
-                                 {
-                                   std::cout << "Camera Command SUCCESS. Received "
-                                             << focusResult.response.size() << " bytes.\n  Hex: ";
-                                   for (auto b : focusResult.response)
-                                   {
-                                     std::cout << "0x" << std::hex << (int)b << " ";
-                                   }
-                                   std::cout << std::dec << std::endl;
-                                 }
+                                //  if (focusResult.status == ViscaResult::Status::OK)
+                                //  {
+                                //    std::cout << "Camera Command SUCCESS. Received "
+                                //              << focusResult.response.size() << " bytes.\n  Hex: ";
+                                //    for (auto b : focusResult.response)
+                                //    {
+                                //      std::cout << "0x" << std::hex << (int)b << " ";
+                                //    }
+                                //    std::cout << std::dec << std::endl;
+                                //  }
                                  json result = {{"id", id}, {"status", focusResult.status}};
                                  if (focusResult.response.size() > 0)
                                  {

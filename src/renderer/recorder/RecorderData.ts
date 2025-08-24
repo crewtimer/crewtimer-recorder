@@ -65,3 +65,17 @@ export const [useWaypointList, setWaypointList, getWaypointList] = UseDatum<
   string[]
 >([]);
 export const [useWaypoint] = UseStoredDatum('waypoint', '');
+
+export interface FocusProps {
+  enabled: boolean;
+  xPct: number;
+  yPct: number;
+  sizePct: number;
+}
+
+export const [useFocusArea] = UseStoredDatum<FocusProps>('focusArea', {
+  enabled: true,
+  xPct: 0.5,
+  yPct: 0.5,
+  sizePct: 0.2,
+});

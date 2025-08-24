@@ -195,8 +195,15 @@ void FrameProcessor::processFrames()
           (okToSplit && splitRequested && frameCount % keyFrameInterval == 0))
       {
         count++;
+        if (splitRequested)
+        {
+          SystemEventQueue::instance().push(
+              "debug", "Split Requested");
+        }
         if (frameCount > 0)
         {
+          SystemEventQueue::instance().push(
+              "debug", "Stopping Recorder and writing json file");
           writeJsonSidecarFile();
           videoRecorder->stop();
         }
