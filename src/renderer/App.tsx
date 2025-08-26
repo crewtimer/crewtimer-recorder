@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import {
   ThemeProvider,
   useTheme,
@@ -19,7 +20,8 @@ import MainPage from './pages/MainPage';
 import { drawerWidth, TopBar, useDrawerOpen } from './components/TopBar';
 import { ConfirmDialog } from './components/ConfirmDialog';
 import Toast from './components/Toast';
-import CameraMonitor from './recorder/CameraMonitor';
+import { CameraMonitor } from './recorder/CameraMonitor';
+import { openNagScreen } from './components/NagScreen';
 
 createTheme();
 
@@ -104,6 +106,11 @@ function App() {
   const [open, setOpen] = useDrawerOpen();
   const theme = useTheme();
 
+  useEffect(() => {
+    setTimeout(() => {
+      openNagScreen();
+    }, 200);
+  }, []);
   return (
     <StyledEngineProvider injectFirst>
       <ThemeProvider theme={theme}>

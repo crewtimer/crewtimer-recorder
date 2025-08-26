@@ -39,6 +39,8 @@ import { showErrorDialog } from './ErrorDialog';
 import CanvasIcon from './CanvasIcon';
 import retriggerableOneShot from './RetriggerableOneshot';
 
+const VIDEO_STOPPED_MESSAGE = 'Video stopped. Press Start to resume.';
+
 type ExpAvgResult = {
   expAvg: number;
   maxValue: number;
@@ -700,7 +702,9 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
 
   useEffect(() => {
     const timer = setInterval(() => {
-      requestVideoFrame().catch(showErrorDialog);
+      if (getIsRecording()) {
+        requestVideoFrame().catch(showErrorDialog);
+      }
     }, 100);
     return () => clearInterval(timer);
   }, []);
@@ -926,7 +930,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     focusArea,
   ]);
 
-  let alertMessage = 'Video stopped. Press Start to resume.';
+  let alertMessage = VIDEO_STOPPED_MESSAGE;
   if (isRecording) {
     if (timeoutMessage) {
       alertMessage = timeoutMessage;

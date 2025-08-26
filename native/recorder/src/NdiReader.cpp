@@ -71,8 +71,10 @@ class NdiReader : public VideoReader
   std::string srcName;
 
   std::vector<CameraInfo> camList;
-  std::thread scanThread;
+  std::thread mdnsScanThread;
+  std::thread ndiScanThread;
   std::mutex scanMutex;
+  std::shared_ptr<ndi_mdns::NdiMdns> mdns;
 
   std::vector<CameraInfo> getCameraList() override
   {
@@ -145,13 +147,7 @@ class NdiReader : public VideoReader
     {
       if (!scanPaused)
       {
-        ndi_mdns::DiscoverOptions opt;
-        opt.timeout = std::chrono::seconds(2);
-        opt.debug = false; // set true for [DBG] lines
-        opt.debug_level = 2;
-        // opt.interface_ipv4 = "10.0.1.5";   // pick your NIC if needed
-
-        auto ndilist = ndi_mdns::discover(opt);
+        auto ndilist = mdns->discover();
         std::vector<CameraInfo> list;
         for (auto &s : ndilist)
         {
@@ -178,11 +174,7 @@ class NdiReader : public VideoReader
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(3000));
     }
-    if (pNDI_find != nullptr)
-    {
-      NDIlib_find_destroy(pNDI_find);
-      pNDI_find = nullptr;
-    }
+
     std::cout << "mDns Scan loop stopped" << std::endl;
   }
 
@@ -194,8 +186,10 @@ class NdiReader : public VideoReader
     std::vector<CameraInfo> cameras;
     while (foundCamera.name == "" && keepRunning)
     {
-      std::unique_lock<std::mutex> lock(scanMutex);
-      cameras = camList;
+      {
+        std::unique_lock<std::mutex> lock(scanMutex);
+        cameras = camList;
+      }
       for (auto camera : cameras)
       {
         std::cout << "Found camera: " << camera.name << " looking for " << srcName << std::endl;
@@ -290,11 +284,11 @@ class NdiReader : public VideoReader
           const auto milli = (5000 + ts100ns) / 10000;
 
           // Convert utc milliseconds to time_point of system clock
-          time_point<system_clock> tp =
-              time_point<system_clock>(milliseconds(milli));
+          auto tp =
+              std::chrono::time_point<std::chrono::system_clock>(std::chrono::milliseconds(milli));
 
           // Convert to system time_t for conversion to tm structure
-          std::time_t raw_time = system_clock::to_time_t(tp);
+          std::time_t raw_time = std::chrono::system_clock::to_time_t(tp);
 
           // Convert to local time
           std::tm *local_time = std::localtime(&raw_time);
@@ -378,7 +372,14 @@ public:
   NdiReader()
   {
     scanEnabled = true;
-    scanThread = std::thread(&NdiReader::mdnsScanLoop, this);
+    // Initialize mdns shared_ptr instance with default options
+    ndi_mdns::DiscoverOptions opt;
+    opt.timeout = std::chrono::seconds(2);
+    opt.debug = false;
+    opt.debug_level = 2;
+    mdns = std::make_shared<ndi_mdns::NdiMdns>(opt);
+    mdnsScanThread = std::thread(&NdiReader::mdnsScanLoop, this);
+    ndiScanThread = std::thread(&NdiReader::ndiScanLoop, this);
     auto *version = NDIlib_version();
     std::cout << "NDI SDK Version: " << version << std::endl;
   }
@@ -414,16 +415,24 @@ public:
   }
   virtual ~NdiReader() override
   {
+    std::cerr << "Destroy NdiReader Start" << std::endl;
     stop();
     scanPaused = true;
     scanEnabled = false;
-    if (scanThread.joinable())
+    if (mdnsScanThread.joinable())
     {
-      scanThread.join();
+      mdnsScanThread.join();
     }
+    if (ndiScanThread.joinable())
+    {
+      ndiScanThread.join();
+    }
+
+    mdns = nullptr;
 
     // Not required, but nice
     NDIlib_destroy();
+    std::cerr << "Destroy NdiReader Finish" << std::endl;
   };
 };
 

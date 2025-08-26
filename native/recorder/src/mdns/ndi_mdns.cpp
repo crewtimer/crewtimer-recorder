@@ -36,4 +36,5 @@ int mdns_main_test()
       // attempt fetch, break on success...
     }
   }
+  return 0;
 }

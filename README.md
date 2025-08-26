@@ -50,7 +50,7 @@ Once you are ready to commit the new C++ code, follow the instructions in the [n
 ## Releasing new versions
 
 1. Edit [release/app/package.json](release/app/package.json) and adjust version info
-2. Execute `yarn macbuild && yarn winbuild`
+2. Execute `yarn build:release`
 3. Look in release/ for the dmg and exe files
 4. Copy the dmg and exe to a Releases set on github
 
@@ -164,5 +164,5 @@ Note: As of 12/2024 the notarize.js script in .erb/scripts is not utilized.
 
 Debug Log: /Users/glenne/Library/Application Support/crewtimer-recorder/applog.txt
 Debug settings: /Users/glenne/Library/Application Support/crewtimer-recorder/ct-recorder.json
-Release Log:
-Release Settings: 
+Release Log: /Users/glenne/Library/Application Support/crewtimer-video-recorder/applog.txt
+Release Settings: /Users/glenne/Library/Application Support/crewtimer-video-recorder/ct-recorder.json

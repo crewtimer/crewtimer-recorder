@@ -45,13 +45,14 @@
     "start:preload": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack --config ./.erb/configs/webpack.config.preload.dev.ts",
     "start:renderer": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack serve --config ./.erb/configs/webpack.config.renderer.dev.ts",
     "test": "jest",
-    "winbuild": "npm run build && node_modules/.bin/electron-builder --win",
-    "macbuild": "npm run build && APPLE_KEYCHAIN_PROFILE=crewtimer-app-signing node_modules/.bin/electron-builder --mac",
+    "build:win": "npm run build && node_modules/.bin/electron-builder --win",
+    "build:mac": "npm run build && APPLE_KEYCHAIN_PROFILE=crewtimer-app-signing node_modules/.bin/electron-builder --mac",
     "macx64build": "npm run build && node_modules/.bin/electron-builder --mac --x64",
     "kill": "kill -9 `lsof -i:1213 -t`",
     "build:native": "cd release/app && yarn add ../../native/recorder",
     "cleanbasic": "ts-node ./.erb/scripts/clean.js && rm -rf release/build",
-    "clean": "rm -rf .erb/node_modules .erb/dll node_modules src/node_modules release/build release/app/node_modules && yarn install"
+    "clean": "rm -rf .erb/node_modules .erb/dll node_modules src/node_modules release/build release/app/node_modules && yarn install",
+    "build:release": "yarn clean && yarn build && yarn build:mac && yarn build:win && open release/build"
   },
   "browserslist": [
     "extends browserslist-config-erb"

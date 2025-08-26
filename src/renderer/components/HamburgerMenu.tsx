@@ -73,7 +73,12 @@ const HamburgerMenu = () => {
           <ListItemText>Help</ListItemText>
         </MenuItem>
         {viscaIP && (
-          <MenuItem onClick={() => window.open(`http://${viscaIP}`, '_blank')}>
+          <MenuItem
+            onClick={() => {
+              handleClose();
+              window.open(`http://${viscaIP}`, '_blank');
+            }}
+          >
             <ListItemIcon>
               <CameraIcon />
             </ListItemIcon>

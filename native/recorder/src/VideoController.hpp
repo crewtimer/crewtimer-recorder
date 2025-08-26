@@ -217,7 +217,7 @@ public:
     {
       return "";
     }
-    SystemEventQueue::push("VID", "Shutting down...");
+    SystemEventQueue::push("VID", "Shutting down video controller...");
 
     SystemEventQueue::push("VID", "Stopping video reader...");
     videoReader->stop();
