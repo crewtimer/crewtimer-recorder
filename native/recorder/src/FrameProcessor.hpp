@@ -21,14 +21,27 @@ class FrameProcessor
 public:
   struct StatusInfo
   {
-    bool recording;
+    bool recording = false;
     std::string error;
     std::string filename;
-    std::uint32_t width;
-    std::uint32_t height;
-    std::uint64_t lastTsMilli;
-    float fps;
-    std::uint32_t frameBacklog;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+    std::uint64_t lastTsMilli = 0;
+    float fps = 60;
+    std::uint32_t frameBacklog = 0;
+
+    friend std::ostream &operator<<(std::ostream &os, const StatusInfo &info)
+    {
+      os << "{recording=" << info.recording
+         << ", error='" << info.error
+         << "', filename='" << info.filename
+         << "', width=" << info.width
+         << ", height=" << info.height
+         << ", lastTsMilli=" << info.lastTsMilli
+         << ", fps=" << info.fps
+         << ", frameBacklog=" << info.frameBacklog << "}";
+      return os;
+    }
   };
 
   struct Rectangle

@@ -17,10 +17,19 @@ class VideoController
 public:
   struct StatusInfo
   {
-    bool recording;
+    bool recording = false;
     std::string error;
-    std::uint32_t recordingDuration;
+    std::uint32_t recordingDuration = 0;
     FrameProcessor::StatusInfo frameProcessor;
+
+    friend std::ostream &operator<<(std::ostream &os, const StatusInfo &info)
+    {
+      os << "{recording=" << info.recording
+         << ", error='" << info.error << "'"
+         << ", duration=" << info.recordingDuration
+         << ", frameProcessor=" << info.frameProcessor << "}";
+      return os;
+    }
   };
 
 private:
@@ -118,15 +127,17 @@ public:
   StatusInfo getStatus()
   {
     std::lock_guard<std::recursive_mutex> lock(controlMutex);
-    std::chrono::steady_clock::time_point endTime =
-        std::chrono::steady_clock::now();
 
-    // Calculate the elapsed time in seconds
-    std::chrono::duration<double> elapsed_seconds = endTime - startTime;
-    uint32_t elapsedSecondsUInt =
-        static_cast<uint32_t>(elapsed_seconds.count());
-
+    // compute recording and recordingDuration status fields
+    uint32_t elapsedSecondsUInt = 0;
     const auto recording = frameProcessor != nullptr && status == "";
+    if (recording)
+    {
+      std::chrono::steady_clock::time_point endTime =
+          std::chrono::steady_clock::now();
+      std::chrono::duration<double> elapsed_seconds = endTime - startTime;
+      elapsedSecondsUInt = static_cast<uint32_t>(elapsed_seconds.count());
+    }
     statusInfo.recording = recording;
     statusInfo.recordingDuration = recording ? elapsedSecondsUInt : 0;
     return statusInfo;
@@ -151,6 +162,8 @@ public:
     {
       return "Video Controller already running";
     }
+
+    startTime = std::chrono::steady_clock::now();
     status = "";
     std::string retval = "";
 #ifdef USE_APPLE
@@ -206,7 +219,6 @@ public:
       return fpStatus.error;
     }
 
-    startTime = std::chrono::steady_clock::now();
     return "";
   }
 

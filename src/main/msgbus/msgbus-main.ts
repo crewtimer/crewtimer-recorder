@@ -20,6 +20,8 @@ ipcMain.handle('msgbus:send', (_event, dest: string, msg: any) => {
     const ret = msgbus.sendMessage(dest, msg);
     return ret;
   } catch (err) {
-    return { status: `${err instanceof Error ? err.message : err}` };
+    return {
+      status: `${err instanceof Error ? err.message : err} sending to ${dest}: ${JSON.stringify(msg)}`,
+    };
   }
 });

@@ -8,6 +8,7 @@ import { setDialogConfig } from './ConfirmDialog';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const showErrorDialog = (error: any) => {
   const message = error instanceof Error ? error.message : String(error);
+  console.log(`Error: ${message}`);
   setDialogConfig({
     title: 'Error',
     message,

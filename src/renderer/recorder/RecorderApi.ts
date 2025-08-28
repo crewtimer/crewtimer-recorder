@@ -38,9 +38,8 @@ export const startRecording = () => {
   recordingProps.recordingDuration = Number(recordingProps.recordingDuration);
   const cropArea = { ...recordingProps.cropArea };
   const guide = getGuide();
-  return window.msgbus.sendMessage<StartRecorderMessage, HandlerResponse>(
-    'recorder',
-    {
+  return window.msgbus
+    .sendMessage<StartRecorderMessage, HandlerResponse>('recorder', {
       op: 'start-recording',
       props: {
         ...recordingProps,
@@ -49,36 +48,45 @@ export const startRecording = () => {
         reportAllGaps: getReportAllGaps(),
         addTimeOverlay: getAddTimeOverlay(),
       },
-    },
-  );
+    })
+    .catch((e) => {
+      console.log('Error requesting start recording');
+      throw e;
+    });
 };
 export const stopRecording = () => {
   setIsRecording(false);
   setRecordingPropsPending(false);
-  return window.msgbus.sendMessage<RecorderMessage, HandlerResponse>(
-    'recorder',
-    {
+  return window.msgbus
+    .sendMessage<RecorderMessage, HandlerResponse>('recorder', {
       op: 'stop-recording',
-    },
-  );
+    })
+    .catch((e) => {
+      console.log('Error stopping recording');
+      throw e;
+    });
 };
 
 export const queryRecordingStatus = () => {
-  return window.msgbus.sendMessage<RecorderMessage, RecordingStatus>(
-    'recorder',
-    {
+  return window.msgbus
+    .sendMessage<RecorderMessage, RecordingStatus>('recorder', {
       op: 'recording-status',
-    },
-  );
+    })
+    .catch((e) => {
+      console.log('Error requesting recorder-status1');
+      throw e;
+    });
 };
 
 export const queryCameraList = () => {
-  return window.msgbus.sendMessage<RecorderMessage, CameraListResponse>(
-    'recorder',
-    {
+  return window.msgbus
+    .sendMessage<RecorderMessage, CameraListResponse>('recorder', {
       op: 'get-camera-list',
-    },
-  );
+    })
+    .catch((e) => {
+      console.log('Error requesting camera list');
+      throw e;
+    });
 };
 
 export const requestVideoFrame = async () => {
@@ -95,7 +103,10 @@ export const requestVideoFrame = async () => {
       // }
       return frame;
     })
-    .catch(showErrorDialog);
+    .catch((e) => {
+      console.log('error requesting video frame');
+      showErrorDialog(e);
+    });
 };
 
 export const updateSettings = (props: {
@@ -120,20 +131,22 @@ export const sendViscaCommandToDevice = async ({
     // console.log(JSON.stringify({ ip, port, data }));
     const id = uuidgen.generate();
     viscaHandlers[id] = resolve;
+    const props = {
+      id,
+      ip,
+      port,
+      data,
+    };
     window.msgbus
       .sendMessage<ViscaMessage, ViscaResponse>('recorder', {
         op: 'send-visca-cmd',
-        props: {
-          id,
-          ip,
-          port,
-          data,
-        },
+        props,
       })
       .then((/* result */) => {
         return undefined; // the promise is completed with either resolve or reject so this is a no-op
       })
       .catch((reason) => {
+        console.log('Error sending visca command ', props);
         showErrorDialog(reason);
         reject(reason);
       });

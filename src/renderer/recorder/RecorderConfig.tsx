@@ -58,6 +58,7 @@ const RecorderConfig: React.FC = () => {
   if (waypoint && !waypointList.includes(waypoint)) {
     waypointList.push(waypoint);
   }
+  console.log(JSON.stringify(cameraList, null, 2));
 
   useEffect(() => {
     updateSettings({ waypoint });

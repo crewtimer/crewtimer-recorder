@@ -172,6 +172,8 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
 
   Napi::Env env = info.Env();
   Napi::Object ret = Napi::Object::New(env);
+  std::string op;
+  VideoController::StatusInfo lastStatusInfo;
   ret.Set("status", Napi::String::New(env, "OK"));
   if (info.Length() < 1)
   {
@@ -189,7 +191,7 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
 
   try
   {
-    auto op = args.Get("op").As<Napi::String>().Utf8Value();
+    op = args.Get("op").As<Napi::String>().Utf8Value();
     if (!videoController)
     {
       videoController = std::shared_ptr<VideoController>(new VideoController("ndi"));
@@ -334,6 +336,7 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
       if (videoController)
       {
         auto status = videoController->getStatus();
+        lastStatusInfo = status;
         ret.Set("status", Napi::String::New(env, "OK"));
         ret.Set("error", Napi::String::New(env, status.error));
         ret.Set("recording", Napi::Boolean::New(env, status.recording));
@@ -520,6 +523,8 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
   }
   catch (const std::exception &e)
   {
+    std::cerr << "Error while processing op=" << op << std::endl;
+    std::cerr << "Last statusInfo=" << lastStatusInfo << std::endl;
     // Catch standard C++ exceptions and convert them to JavaScript errors
     Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
   }
@@ -527,6 +532,8 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
   {
     // Catch all other types of exceptions and throw a generic JavaScript
     // error
+    std::cerr << "Error while processing op=" << op << std::endl;
+    std::cerr << "Last statusInfo=" << lastStatusInfo << std::endl;
     Napi::Error::New(env, "An unknown error occurred")
         .ThrowAsJavaScriptException();
   }

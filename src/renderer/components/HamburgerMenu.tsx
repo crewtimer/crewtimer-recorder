@@ -20,6 +20,7 @@ import {
   useRecordingPropsPending,
   useReportAllGaps,
 } from '../recorder/RecorderData';
+import { openNagScreen } from './NagScreen';
 
 const AboutText = `CrewTimer Video Recorder ${window.platform.appVersion}`;
 
@@ -85,6 +86,17 @@ const HamburgerMenu = () => {
             <ListItemText>Camera web page</ListItemText>
           </MenuItem>
         )}
+        <MenuItem
+          onClick={() => {
+            handleClose();
+            openNagScreen(true);
+          }}
+        >
+          <ListItemIcon>
+            <InfoIcon />
+          </ListItemIcon>
+          <ListItemText primary="What's New" />
+        </MenuItem>
         <MenuItem onClick={closeAndGo('/privacy')}>
           <ListItemIcon>
             <SecurityIcon />

@@ -16,9 +16,21 @@ public:
   {
     std::string name;
     std::string address;
+    uint16_t port;
+    std::string url;
     CameraInfo() {}
-    CameraInfo(std::string name, std::string address)
-        : name(name), address(address) {}
+    CameraInfo(std::string name, std::string address, uint16_t port)
+        : name(name), address(address), port(port)
+    {
+      if (port == 0)
+      {
+        url = address;
+      }
+      else
+      {
+        url = address + ":" + std::to_string(port);
+      }
+    }
   } CameraInfo;
 
   virtual std::string start(const std::string srcName,

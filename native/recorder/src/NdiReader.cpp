@@ -108,8 +108,31 @@ class NdiReader : public VideoReader
 
     for (uint32_t src = 0; src < no_sources; src++)
     {
+      std::string address_port = std::string(p_sources[src].p_url_address);
+      std::string ip_address;
+      uint16_t port = 0;
+      size_t colon_pos = address_port.find(':');
+      if (colon_pos != std::string::npos)
+      {
+        ip_address = address_port.substr(0, colon_pos);
+        std::string port_str = address_port.substr(colon_pos + 1);
+        try
+        {
+          port = static_cast<uint16_t>(std::stoi(port_str));
+        }
+        catch (const std::exception &)
+        {
+          port = 0; // fallback if conversion fails
+        }
+      }
+      else
+      {
+        ip_address = address_port;
+        port = 0;
+      }
+
       list.push_back(
-          CameraInfo(p_sources[src].p_ndi_name, p_sources[src].p_url_address));
+          CameraInfo(p_sources[src].p_ndi_name, ip_address, port));
       // SystemEventQueue::push("NDI", std::string("Source Found: ") +
       //                                   p_sources[src].p_ndi_name + " at " + p_sources[src].p_ip_address);
     }
@@ -154,7 +177,7 @@ class NdiReader : public VideoReader
           if (!s.ipv4.empty())
           {
             list.push_back(
-                CameraInfo(s.instance_label, s.ipv4[0]));
+                CameraInfo(s.instance_label, s.ipv4[0], s.port));
           }
           // std::cout << s.instance << " -> " << s.host << ":" << s.port << "\n";
           // std::cout << "NDI Source: " << s.instance_label << " [" << s.service << "." << s.domain << "] -> "
@@ -184,13 +207,9 @@ class NdiReader : public VideoReader
     NDIlib_source_t p_source;
     CameraInfo foundCamera;
     std::vector<CameraInfo> cameras;
-    while (foundCamera.name == "" && keepRunning)
     {
-      {
-        std::unique_lock<std::mutex> lock(scanMutex);
-        cameras = camList;
-      }
-      for (auto camera : cameras)
+      std::unique_lock<std::mutex> lock(scanMutex);
+      for (auto camera : camList)
       {
         std::cout << "Found camera: " << camera.name << " looking for " << srcName << std::endl;
         if (camera.name.find(srcName) == 0)
@@ -203,7 +222,8 @@ class NdiReader : public VideoReader
 
     if (foundCamera.name == "")
     {
-      return ""; // stop received before ndi source found
+      SystemEventQueue::push("Debug", "Error: Camera not found " + srcName);
+      return "";
     }
 
     std::cout << "Camera found" << std::endl;
@@ -223,10 +243,11 @@ class NdiReader : public VideoReader
     // Connect to the source
     SystemEventQueue::push("Debug", std::string("Connecting to ") +
                                         foundCamera.name + " at " +
-                                        foundCamera.address);
+                                        foundCamera.url);
     // Connect to our sources
     p_source.p_ndi_name = foundCamera.name.c_str();
-    p_source.p_url_address = foundCamera.address.c_str();
+    p_source.p_url_address = foundCamera.url.c_str();
+
     NDIlib_recv_connect(ndiRecv->pNDI_recv, &p_source);
 
     foundCamera.name = "";
@@ -379,7 +400,7 @@ public:
     opt.debug_level = 2;
     mdns = std::make_shared<ndi_mdns::NdiMdns>(opt);
     mdnsScanThread = std::thread(&NdiReader::mdnsScanLoop, this);
-    ndiScanThread = std::thread(&NdiReader::ndiScanLoop, this);
+    // ndiScanThread = std::thread(&NdiReader::ndiScanLoop, this);
     auto *version = NDIlib_version();
     std::cout << "NDI SDK Version: " << version << std::endl;
   }
