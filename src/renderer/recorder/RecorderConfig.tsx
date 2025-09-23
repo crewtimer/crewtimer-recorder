@@ -23,7 +23,7 @@ import RGBAImageCanvas from '../components/RGBAImageCanvas';
 import { showErrorDialog } from '../components/ErrorDialog';
 import InfoPopup from '../components/InfoPopup';
 import RecorderTips from './RecorderTips';
-import { getViscaIP, useViscaIP } from '../visca/ViscaState';
+import { useViscaIP } from '../visca/ViscaState';
 import { useCameraList } from './CameraMonitor';
 import { ViscaPortSelector } from '../visca/ViscaPortSelector';
 import { updateSettings } from './RecorderApi';
@@ -51,7 +51,7 @@ const RecorderConfig: React.FC = () => {
   const [recordingProps, setRecordingProps] = useRecordingProps();
   const [, setRecordingPropsPending] = useRecordingPropsPending();
   const [cameraList] = useCameraList();
-  const [, setViscaIP] = useViscaIP();
+  const [viscaIP] = useViscaIP();
   const [wpList] = useWaypointList();
   const { waypoint } = recordingProps;
   const waypointList = [...wpList];
@@ -95,19 +95,11 @@ const RecorderConfig: React.FC = () => {
   };
 
   const handleCameraChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const networkIP =
-      cameraList
-        .find((c) => c.name === event.target.value)
-        ?.address.replace(/:.*/, '') || '';
     setRecordingPropsPending(true);
     setRecordingProps({
       ...recordingProps,
       networkCamera: event.target.value,
-      networkIP,
     });
-    // update the Camera IP
-
-    setViscaIP(networkIP || '');
   };
 
   const selectedCamera = recordingProps.networkCamera;
@@ -163,11 +155,11 @@ const RecorderConfig: React.FC = () => {
         </Grid>
         <Grid item xs={1} container alignItems="center">
           {camFound && (
-            <Tooltip title={`Open Camera Web Page at ${getViscaIP()}`}>
+            <Tooltip title={`Open Camera Web Page at ${viscaIP}`}>
               <IconButton
                 color="inherit"
                 aria-label="Open Camera"
-                onClick={() => window.open(`http://${getViscaIP()}`)}
+                onClick={() => window.open(`http://${viscaIP}`)}
                 size="medium"
               >
                 <CameraIcon />

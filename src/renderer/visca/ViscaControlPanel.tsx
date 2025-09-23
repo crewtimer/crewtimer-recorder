@@ -23,8 +23,8 @@ import {
 import { setToast } from '../components/Toast';
 import {
   ExposureMode,
-  getViscaIP,
   useCameraState,
+  useViscaIP,
   useViscaState,
 } from './ViscaState';
 import ViscaValueButton from './ViscaValueButton';
@@ -36,6 +36,7 @@ const ViscaControlPanel = () => {
   const [cameraState, setCameraState] = useCameraState();
   const [viscaState] = useViscaState();
   const [focusAreaProps, setFocusAreaProps] = useFocusArea();
+  const [viscaIP] = useViscaIP();
   useEffect(() => {
     const monitor = () => {
       sendViscaCommand({ type: 'AUTO_FOCUS_VALUE' })
@@ -253,12 +254,12 @@ const ViscaControlPanel = () => {
             gap={1}
           >
             <ViscaPresets />
-            <Tooltip title={`Open Camera Web Page at ${getViscaIP()}`}>
+            <Tooltip title={`Open Camera Web Page at ${viscaIP}`}>
               <IconButton
                 disabled={viscaState !== 'Connected'}
                 color="inherit"
                 aria-label="Open Camera"
-                onClick={() => window.open(`http://${getViscaIP()}`)}
+                onClick={() => window.open(`http://${viscaIP}`)}
                 size="medium"
               >
                 <CameraIcon />

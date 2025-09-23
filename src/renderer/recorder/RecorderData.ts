@@ -74,7 +74,7 @@ export interface FocusProps {
 }
 
 export const [useFocusArea] = UseStoredDatum<FocusProps>('focusArea', {
-  enabled: true,
+  enabled: false,
   xPct: 0.5,
   yPct: 0.5,
   sizePct: 0.2,
