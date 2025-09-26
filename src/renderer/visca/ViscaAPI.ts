@@ -249,9 +249,12 @@ export const sendViscaCommand = async (
   cmd: ViscaCommand,
 ): Promise<ViscaResponse> => {
   // Normal single set command
+  const port = getViscaPort();
+  if (port === 0) {
+    return { status: 'OK' };
+  }
   const packet = buildViscaPacket(cmd);
   const ip = getViscaIP();
-  const port = getViscaPort();
   if (ip) {
     return sendViscaCommandToDevice({ ip, port, data: packet });
   }

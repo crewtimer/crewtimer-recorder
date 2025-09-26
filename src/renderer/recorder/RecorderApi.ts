@@ -27,7 +27,7 @@ import {
 } from './RecorderData';
 import { showErrorDialog } from '../components/ErrorDialog';
 import { ViscaMessage, ViscaMessageProps, ViscaResponse } from './ViscaTypes';
-import { setViscaState } from '../visca/ViscaState';
+import { getViscaPort, setViscaState } from '../visca/ViscaState';
 
 export const startRecording = () => {
   setRecordingStartTime(Date.now());
@@ -127,6 +127,9 @@ export const sendViscaCommandToDevice = async ({
   port,
   data,
 }: ViscaMessageProps) => {
+  if (port === 0) {
+    return { status: 'OK' } as ViscaResponse;
+  }
   return new Promise<ViscaResponse>((resolve, reject) => {
     // console.log(JSON.stringify({ ip, port, data }));
     const id = uuidgen.generate();

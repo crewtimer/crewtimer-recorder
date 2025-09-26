@@ -25,6 +25,7 @@ import {
   ExposureMode,
   useCameraState,
   useViscaIP,
+  useViscaPort,
   useViscaState,
 } from './ViscaState';
 import ViscaValueButton from './ViscaValueButton';
@@ -37,6 +38,7 @@ const ViscaControlPanel = () => {
   const [viscaState] = useViscaState();
   const [focusAreaProps, setFocusAreaProps] = useFocusArea();
   const [viscaIP] = useViscaIP();
+  const [viscaPort] = useViscaPort();
   useEffect(() => {
     const monitor = () => {
       sendViscaCommand({ type: 'AUTO_FOCUS_VALUE' })
@@ -78,6 +80,11 @@ const ViscaControlPanel = () => {
     await sendViscaCommand({ type: 'EXPOSURE_MODE', value: exposureMode });
     await updateCameraState({ exposureMode });
   };
+
+  // If the VISCA port is not set, do not render the control panel
+  if (viscaPort === 0) {
+    return null;
+  }
 
   return (
     <Box sx={{ paddingBottom: 1, position: 'relative' }}>

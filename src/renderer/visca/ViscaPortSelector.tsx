@@ -11,6 +11,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { useViscaPort } from './ViscaState';
 
 const knownPorts = [
+  { port: 0, vendor: 'Disabled' },
   { port: 52381, vendor: 'AIDA' },
   { port: 5678, vendor: 'SMTAV' },
   { port: 1259, vendor: 'PtzOptics' },
