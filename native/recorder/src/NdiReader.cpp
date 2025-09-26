@@ -398,6 +398,7 @@ public:
     opt.timeout = std::chrono::seconds(2);
     opt.debug = false;
     opt.debug_level = 2;
+    opt.reenumerate_interval_ms = 5000; // 0 = disabled; e.g. 2000 to re-enumerate every 2s
     mdns = std::make_shared<ndi_mdns::NdiMdns>(opt);
     mdnsScanThread = std::thread(&NdiReader::mdnsScanLoop, this);
     // ndiScanThread = std::thread(&NdiReader::ndiScanLoop, this);

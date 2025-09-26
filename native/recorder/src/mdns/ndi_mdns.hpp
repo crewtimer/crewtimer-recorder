@@ -10,8 +10,6 @@
  *            QU (unicast-response) fallback when UDP/5353 is busy, multi-NIC
  *            interface selection, and very verbose debug logging. Also provides
  *            collision-aware URL generation helpers for device web UIs.
- *
- * ... (See prior documentation for extended details.) ...
  */
 #pragma once
 
@@ -32,7 +30,9 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include <iphlpapi.h>
 #pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "iphlpapi.lib")
 #else
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -40,13 +40,147 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <ifaddrs.h>
+#include <net/if.h>
 #endif
+#include <cerrno>
 
 namespace ndi_mdns
 {
 
   static constexpr uint16_t DNS_PORT = 5353;
   static constexpr const char *MDNS_ADDR4 = "224.0.0.251";
+
+  // Join mDNS multicast (224.0.0.251) on one or more interfaces.
+  // If iface_opt is set, join only that interface. Otherwise, enumerate all IPv4
+  // UP, non-loopback, multicast-capable interfaces and join per-interface.
+  // Returns number of successful joins.
+  inline int join_mdns_memberships_ipv4(int s, const std::optional<std::string> &iface_opt, bool debug)
+  {
+    int joined = 0;
+    in_addr maddr{};
+    maddr.s_addr = inet_addr(MDNS_ADDR4);
+
+    auto join_one = [&](in_addr iface) -> bool
+    {
+      ip_mreq m{};
+      m.imr_multiaddr = maddr;
+      m.imr_interface = iface;
+      int res = setsockopt(s, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&m, sizeof(m));
+      if (res == 0)
+      {
+        joined++;
+        return true;
+      }
+      return false;
+    };
+
+    if (iface_opt && !iface_opt->empty())
+    {
+      in_addr ifa{};
+#ifdef _WIN32
+      InetPtonA(AF_INET, iface_opt->c_str(), &ifa);
+#else
+      inet_pton(AF_INET, iface_opt->c_str(), &ifa);
+#endif
+      if (debug)
+      {
+        char buf[INET_ADDRSTRLEN] = {0};
+        inet_ntop(AF_INET, &ifa, buf, sizeof(buf));
+        std::cerr << "[ndi-mdns] join request for specific iface " << buf << std::endl;
+      }
+      bool ok = join_one(ifa);
+      if (debug)
+        std::cerr << "[ndi-mdns] join " << (ok ? "succeeded" : "failed") << std::endl;
+      return joined;
+    }
+
+#ifdef _WIN32
+    // Enumerate IPv4 unicast addresses for all UP adapters
+    ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER;
+    ULONG size = 16 * 1024;
+    std::vector<unsigned char> buf(size);
+    IP_ADAPTER_ADDRESSES *addrs = reinterpret_cast<IP_ADAPTER_ADDRESSES *>(buf.data());
+    ULONG ret = GetAdaptersAddresses(AF_UNSPEC, flags, nullptr, addrs, &size);
+    if (ret == ERROR_BUFFER_OVERFLOW)
+    {
+      buf.resize(size);
+      addrs = reinterpret_cast<IP_ADAPTER_ADDRESSES *>(buf.data());
+      ret = GetAdaptersAddresses(AF_UNSPEC, flags, nullptr, addrs, &size);
+    }
+    if (ret == NO_ERROR)
+    {
+      for (auto *a = addrs; a; a = a->Next)
+      {
+        if (a->OperStatus != IfOperStatusUp)
+          continue;
+        for (auto *ua = a->FirstUnicastAddress; ua; ua = ua->Next)
+        {
+          if (!ua->Address.lpSockaddr)
+            continue;
+          if (ua->Address.lpSockaddr->sa_family != AF_INET)
+            continue;
+          auto *sin = reinterpret_cast<sockaddr_in *>(ua->Address.lpSockaddr);
+          in_addr ifa = sin->sin_addr;
+          // skip 127.0.0.0/8
+          if ((ntohl(ifa.s_addr) & 0xFF000000u) == 0x7F000000u)
+            continue;
+          if (debug)
+          {
+            char buf2[INET_ADDRSTRLEN] = {0};
+            inet_ntop(AF_INET, &ifa, buf2, sizeof(buf2));
+            std::cerr << "[ndi-mdns] candidate iface (win) addr=" << buf2 << std::endl;
+          }
+          bool ok = join_one(ifa);
+          if (debug)
+          {
+            char buf2[INET_ADDRSTRLEN] = {0};
+            inet_ntop(AF_INET, &ifa, buf2, sizeof(buf2));
+            std::cerr << "[ndi-mdns] IP_ADD_MEMBERSHIP " << (ok ? "OK" : "ERR") << " for " << buf2 << std::endl;
+          }
+        }
+      }
+    }
+#else
+    // POSIX enumeration via getifaddrs
+    struct ifaddrs *ifas = nullptr;
+    if (getifaddrs(&ifas) == 0)
+    {
+      for (auto *it = ifas; it; it = it->ifa_next)
+      {
+        if (!it->ifa_addr)
+          continue;
+        if (it->ifa_addr->sa_family != AF_INET)
+          continue;
+        unsigned int flags = it->ifa_flags;
+        if (!(flags & IFF_UP))
+          continue;
+        if (flags & IFF_LOOPBACK)
+          continue;
+#ifdef IFF_MULTICAST
+        if (!(flags & IFF_MULTICAST))
+          continue;
+#endif
+        in_addr ifa = reinterpret_cast<sockaddr_in *>(it->ifa_addr)->sin_addr;
+        if (debug)
+        {
+          char buf2[INET_ADDRSTRLEN] = {0};
+          inet_ntop(AF_INET, &ifa, buf2, sizeof(buf2));
+          std::cerr << "[ndi-mdns] candidate iface " << (it->ifa_name ? it->ifa_name : "?") << " addr=" << buf2 << std::endl;
+        }
+        bool ok = join_one(ifa);
+        if (debug)
+        {
+          char buf2[INET_ADDRSTRLEN] = {0};
+          inet_ntop(AF_INET, &ifa, buf2, sizeof(buf2));
+          std::cerr << "[ndi-mdns] IP_ADD_MEMBERSHIP " << (ok ? "OK" : "ERR") << " for " << buf2 << std::endl;
+        }
+      }
+      freeifaddrs(ifas);
+    }
+#endif
+    return joined;
+  }
 
   static inline const std::vector<std::string> &DEFAULT_SERVICES()
   {
@@ -99,6 +233,7 @@ namespace ndi_mdns
     bool debug = false;                        // print debug to std::cerr
     int debug_level = 1;                       // 1: packets & cache, 2: per-RR
     std::optional<std::string> interface_ipv4; // pick NIC for multicast
+    int reenumerate_interval_ms = 0;           // 0 = disabled; >0 to periodically re-enumerate interfaces (ms)
   };
 
   inline std::vector<uint8_t> encode_qname(const std::string &fqdn)
@@ -244,15 +379,117 @@ namespace ndi_mdns
     }
     else
     {
-      ip_mreq m{};
-      m.imr_multiaddr.s_addr = inet_addr(MDNS_ADDR4);
-      m.imr_interface.s_addr = htonl(INADDR_ANY);
-      setsockopt(s, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&m, sizeof(m));
+
+      // Join per-interface memberships to ensure delivery on all NICs (or a specific NIC if set).
+      (void)join_mdns_memberships_ipv4(s, opt.interface_ipv4, opt.debug);
       uint8_t ttl = 255;
       setsockopt(s, IPPROTO_IP, IP_MULTICAST_TTL, (char *)&ttl, sizeof(ttl));
     }
     set_nonblocking(s);
     return s;
+  }
+
+  // Build the list of IPv4 addresses to use for transmitting multicast.
+  // If interface_ipv4 is set, returns just that NIC. Otherwise enumerates all
+  // UP, non-loopback, multicast-capable IPv4 interfaces.
+  inline std::vector<in_addr>
+  get_send_ifaces_ipv4(const std::optional<std::string> &interface_ipv4)
+  {
+    std::vector<in_addr> out;
+
+    if (interface_ipv4 && !interface_ipv4->empty())
+    {
+      in_addr ifa{};
+#ifdef _WIN32
+      InetPtonA(AF_INET, interface_ipv4->c_str(), &ifa);
+#else
+      inet_pton(AF_INET, interface_ipv4->c_str(), &ifa);
+#endif
+      out.push_back(ifa);
+      return out;
+    }
+
+#ifdef _WIN32
+    ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER;
+    ULONG size = 16 * 1024;
+    std::vector<unsigned char> buf(size);
+    IP_ADAPTER_ADDRESSES *addrs = reinterpret_cast<IP_ADAPTER_ADDRESSES *>(buf.data());
+    ULONG ret = GetAdaptersAddresses(AF_UNSPEC, flags, nullptr, addrs, &size);
+    if (ret == ERROR_BUFFER_OVERFLOW)
+    {
+      buf.resize(size);
+      addrs = reinterpret_cast<IP_ADAPTER_ADDRESSES *>(buf.data());
+      ret = GetAdaptersAddresses(AF_UNSPEC, flags, nullptr, addrs, &size);
+    }
+    if (ret == NO_ERROR)
+    {
+      for (auto *a = addrs; a; a = a->Next)
+      {
+        if (a->OperStatus != IfOperStatusUp)
+          continue;
+        for (auto *ua = a->FirstUnicastAddress; ua; ua = ua->Next)
+        {
+          if (!ua->Address.lpSockaddr)
+            continue;
+          if (ua->Address.lpSockaddr->sa_family != AF_INET)
+            continue;
+          auto *sin = reinterpret_cast<sockaddr_in *>(ua->Address.lpSockaddr);
+          in_addr ifa = sin->sin_addr;
+          uint32_t v = ntohl(ifa.s_addr);
+          if ((v & 0xFF000000u) == 0x7F000000u)
+            continue; // skip 127/8
+          out.push_back(ifa);
+        }
+      }
+    }
+#else
+    struct ifaddrs *ifas = nullptr;
+    if (getifaddrs(&ifas) == 0)
+    {
+      for (auto *it = ifas; it; it = it->ifa_next)
+      {
+        if (!it->ifa_addr)
+          continue;
+        if (it->ifa_addr->sa_family != AF_INET)
+          continue;
+        unsigned int flags = it->ifa_flags;
+        if (!(flags & IFF_UP))
+          continue;
+        if (flags & IFF_LOOPBACK)
+          continue;
+#ifdef IFF_MULTICAST
+        if (!(flags & IFF_MULTICAST))
+          continue;
+#endif
+        in_addr ifa = reinterpret_cast<sockaddr_in *>(it->ifa_addr)->sin_addr;
+        out.push_back(ifa);
+      }
+      freeifaddrs(ifas);
+    }
+#endif
+    return out;
+  }
+
+  // Send the DNS query buffer once per interface, steering transmit with IP_MULTICAST_IF.
+  inline void mdns_send_all_ifaces_ipv4(int s, const void *buf, size_t len, const DiscoverOptions &opt)
+  {
+    sockaddr_in m{};
+    m.sin_family = AF_INET;
+    m.sin_port = htons(DNS_PORT);
+    m.sin_addr.s_addr = inet_addr(MDNS_ADDR4);
+
+    auto ifaces = get_send_ifaces_ipv4(opt.interface_ipv4);
+    if (ifaces.empty())
+    {
+      // fallback: let OS choose
+      sendto(s, (const char *)buf, (int)len, 0, (sockaddr *)&m, sizeof(m));
+      return;
+    }
+    for (const auto &ifa : ifaces)
+    {
+      setsockopt(s, IPPROTO_IP, IP_MULTICAST_IF, (const char *)&ifa, sizeof(ifa));
+      sendto(s, (const char *)buf, (int)len, 0, (sockaddr *)&m, sizeof(m));
+    }
   }
 
   inline void send_ptr_query_ipv4(int s, const std::string &fqdn, bool qu, const DiscoverOptions &opt)
@@ -279,7 +516,7 @@ namespace ndi_mdns
     m.sin_addr.s_addr = inet_addr(MDNS_ADDR4);
     if (opt.debug)
       std::cerr << "[ndi-mdns] Q PTR " << fqdn << (qu ? " (QU)" : "") << std::endl;
-    sendto(s, (const char *)buf, (int)off, 0, (sockaddr *)&m, sizeof(m));
+    mdns_send_all_ifaces_ipv4(s, buf, off, opt);
   }
 
   inline void send_host_query_ipv4(int s, const std::string &host_fqdn, uint16_t qtype, bool qu, const DiscoverOptions &opt)
@@ -306,7 +543,7 @@ namespace ndi_mdns
     m.sin_addr.s_addr = inet_addr(MDNS_ADDR4);
     if (opt.debug)
       std::cerr << "[ndi-mdns] Q " << (qtype == T_A ? "A" : "AAAA") << " " << host_fqdn << (qu ? " (QU)" : "") << std::endl;
-    sendto(s, (const char *)buf, (int)off, 0, (sockaddr *)&m, sizeof(m));
+    mdns_send_all_ifaces_ipv4(s, buf, off, opt);
   }
 
   inline void send_host_addr_queries(int s, const std::string &host_fqdn, bool qu, const DiscoverOptions &opt)
@@ -546,9 +783,24 @@ namespace ndi_mdns
     for (auto &svc_key : svc_keys)
     {
       auto it = c.ptr_map.find(svc_key);
-      if (it == c.ptr_map.end())
-        continue;
-      auto insts = it->second;
+      std::vector<std::string> insts;
+      if (it != c.ptr_map.end())
+        insts = it->second;
+      else
+      {
+        // No PTR entries for this service; conservatively include SRV-only instances
+        // whose parsed service matches this service key. This handles devices that
+        // advertise SRV without PTR (UHD-NDI3-X30 observed behavior).
+        for (const auto &kv : c.srv_map)
+        {
+          auto inst_name = kv.first; // instance key (canonicalized instance FQDN)
+          auto parts = split_instance_fqdn(inst_name);
+          if (!parts.service.empty() && canon(parts.service + ".") == svc_key)
+            insts.push_back(inst_name);
+        }
+        if (insts.empty())
+          continue;
+      }
       std::sort(insts.begin(), insts.end());
       insts.erase(std::unique(insts.begin(), insts.end()), insts.end());
       for (auto &inst_key : insts)
@@ -642,6 +894,79 @@ namespace ndi_mdns
     return std::nullopt;
   }
 
+  // Enumerate candidate IPv4 addresses for interfaces (string form). Reuses
+  // platform-specific logic similar to join_mdns_memberships_ipv4 but returns
+  // textual addresses for comparison/tracking.
+  inline std::vector<std::string> enumerate_ipv4_ifaces()
+  {
+    std::vector<std::string> out;
+#ifdef _WIN32
+    ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER;
+    ULONG size = 16 * 1024;
+    std::vector<unsigned char> buf(size);
+    IP_ADAPTER_ADDRESSES *addrs = reinterpret_cast<IP_ADAPTER_ADDRESSES *>(buf.data());
+    ULONG ret = GetAdaptersAddresses(AF_UNSPEC, flags, nullptr, addrs, &size);
+    if (ret == ERROR_BUFFER_OVERFLOW)
+    {
+      buf.resize(size);
+      addrs = reinterpret_cast<IP_ADAPTER_ADDRESSES *>(buf.data());
+      ret = GetAdaptersAddresses(AF_UNSPEC, flags, nullptr, addrs, &size);
+    }
+    if (ret == NO_ERROR)
+    {
+      for (auto *a = addrs; a; a = a->Next)
+      {
+        if (a->OperStatus != IfOperStatusUp)
+          continue;
+        for (auto *ua = a->FirstUnicastAddress; ua; ua = ua->Next)
+        {
+          if (!ua->Address.lpSockaddr)
+            continue;
+          if (ua->Address.lpSockaddr->sa_family != AF_INET)
+            continue;
+          auto *sin = reinterpret_cast<sockaddr_in *>(ua->Address.lpSockaddr);
+          char buf2[INET_ADDRSTRLEN] = {0};
+          inet_ntop(AF_INET, &sin->sin_addr, buf2, sizeof(buf2));
+          std::string s(buf2);
+          // skip loopback
+          if (s.rfind("127.", 0) == 0)
+            continue;
+          out.push_back(s);
+        }
+      }
+    }
+#else
+    struct ifaddrs *ifas = nullptr;
+    if (getifaddrs(&ifas) == 0)
+    {
+      for (auto *it = ifas; it; it = it->ifa_next)
+      {
+        if (!it->ifa_addr)
+          continue;
+        if (it->ifa_addr->sa_family != AF_INET)
+          continue;
+        unsigned int flags = it->ifa_flags;
+        if (!(flags & IFF_UP))
+          continue;
+        if (flags & IFF_LOOPBACK)
+          continue;
+#ifdef IFF_MULTICAST
+        if (!(flags & IFF_MULTICAST))
+          continue;
+#endif
+        char buf2[INET_ADDRSTRLEN] = {0};
+        inet_ntop(AF_INET, &reinterpret_cast<sockaddr_in *>(it->ifa_addr)->sin_addr, buf2, sizeof(buf2));
+        out.emplace_back(buf2);
+      }
+      freeifaddrs(ifas);
+    }
+#endif
+    // unique
+    std::sort(out.begin(), out.end());
+    out.erase(std::unique(out.begin(), out.end()), out.end());
+    return out;
+  }
+
   inline void debug_dump_summary(const Cache &C)
   {
     size_t inst_total = 0;
@@ -731,6 +1056,32 @@ namespace ndi_mdns
       auto end = std::chrono::steady_clock::now() + opt.timeout;
       auto next_requery = std::chrono::steady_clock::now();
       auto next_status = std::chrono::steady_clock::now();
+      auto next_reenum = std::chrono::steady_clock::now() + std::chrono::milliseconds(opt.reenumerate_interval_ms > 0 ? opt.reenumerate_interval_ms : INT_MAX);
+      // Initialize joined_ifaces by attempting to join candidate interfaces and
+      // only record those that actually succeeded.
+      if (opt.reenumerate_interval_ms > 0)
+      {
+        auto cand = enumerate_ipv4_ifaces();
+        for (auto &ip : cand)
+        {
+          in_addr ifa{};
+          inet_pton(AF_INET, ip.c_str(), &ifa);
+          ip_mreq m{};
+          m.imr_multiaddr.s_addr = inet_addr(MDNS_ADDR4);
+          m.imr_interface = ifa;
+          int res = setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&m, sizeof(m));
+          if (res == 0)
+          {
+            joined_ifaces.insert(ip);
+            if (opt.debug)
+              std::cerr << "[ndi-mdns] initial reenum: joined " << ip << std::endl;
+          }
+          else if (opt.debug)
+          {
+            std::cerr << "[ndi-mdns] initial reenum: failed to join " << ip << " err=" << errno << std::endl;
+          }
+        }
+      }
       while (std::chrono::steady_clock::now() < end)
       {
         if (std::chrono::steady_clock::now() >= next_requery)
@@ -759,6 +1110,53 @@ namespace ndi_mdns
 #else
         usleep(20 * 1000);
 #endif
+        // Periodic re-enumeration: add/drop multicast memberships for interfaces that changed
+        if (opt.reenumerate_interval_ms > 0 && std::chrono::steady_clock::now() >= next_reenum)
+        {
+          auto cand = enumerate_ipv4_ifaces();
+          std::unordered_set<std::string> nowset(cand.begin(), cand.end());
+          // Add new
+          for (auto &ip : cand)
+          {
+            if (joined_ifaces.find(ip) == joined_ifaces.end())
+            {
+              in_addr ifa{};
+              inet_pton(AF_INET, ip.c_str(), &ifa);
+              ip_mreq m{};
+              m.imr_multiaddr.s_addr = inet_addr(MDNS_ADDR4);
+              m.imr_interface = ifa;
+              int res = setsockopt(sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&m, sizeof(m));
+              if (res == 0)
+              {
+                joined_ifaces.insert(ip);
+                if (opt.debug)
+                  std::cerr << "[ndi-mdns] reenum: joined " << ip << std::endl;
+              }
+              else if (opt.debug)
+                std::cerr << "[ndi-mdns] reenum: failed to join " << ip << " err=" << errno << std::endl;
+            }
+          }
+          // Remove gone
+          std::vector<std::string> to_remove;
+          for (const auto &j : joined_ifaces)
+          {
+            if (nowset.find(j) == nowset.end())
+              to_remove.push_back(j);
+          }
+          for (auto &ip : to_remove)
+          {
+            in_addr ifa{};
+            inet_pton(AF_INET, ip.c_str(), &ifa);
+            ip_mreq m{};
+            m.imr_multiaddr.s_addr = inet_addr(MDNS_ADDR4);
+            m.imr_interface = ifa;
+            int res = setsockopt(sock, IPPROTO_IP, IP_DROP_MEMBERSHIP, (char *)&m, sizeof(m));
+            if (opt.debug)
+              std::cerr << "[ndi-mdns] reenum: drop " << ip << " -> " << (res == 0 ? "OK" : "ERR") << std::endl;
+            joined_ifaces.erase(ip);
+          }
+          next_reenum = std::chrono::steady_clock::now() + std::chrono::milliseconds(opt.reenumerate_interval_ms);
+        }
         if (opt.debug && opt.debug_level >= 1)
         {
           if (std::chrono::steady_clock::now() >= next_status)
@@ -788,6 +1186,7 @@ namespace ndi_mdns
     DiscoverOptions opt;
     int sock = -1;
     bool using_unicast_fallback = false;
+    std::unordered_set<std::string> joined_ifaces;
 
     static void flush_sock_recv_buffer(int s)
     {

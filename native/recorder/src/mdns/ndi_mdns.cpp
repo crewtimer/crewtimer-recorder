@@ -4,7 +4,7 @@ int mdns_main_test()
 {
   ndi_mdns::DiscoverOptions opt;
   opt.timeout = std::chrono::seconds(5);
-  opt.debug = false; // set true for [DBG] lines
+  opt.debug = true; // set true for [DBG] lines
   opt.debug_level = 2;
   // opt.interface_ipv4 = "10.0.1.5";   // pick your NIC if needed
 
