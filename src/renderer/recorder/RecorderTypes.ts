@@ -17,6 +17,7 @@ export interface RecordingProps {
   showFinishGuide: boolean;
   cropArea: Rect;
   waypoint: string;
+  protocol: string;
 }
 
 export interface RecorderMessage {
@@ -100,6 +101,7 @@ export const DefaultRecordingProps: RecordingProps = {
   showFinishGuide: true,
   cropArea: { x: 0, y: 0, width: 1, height: 1 },
   waypoint: '',
+  protocol: 'SRT',
 };
 
 export interface RecordingLogEntry {

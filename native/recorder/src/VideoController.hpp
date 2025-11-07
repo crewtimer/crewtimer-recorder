@@ -12,6 +12,8 @@
 #include "VideoReader.hpp"
 #include "VideoRecorder.hpp"
 
+#include "mdns/ndi_mdns.hpp"
+
 class VideoController
 {
 public:
@@ -33,6 +35,7 @@ public:
   };
 
 private:
+  std::string activeProtocol;
   std::string srcName;
   std::string encoder;
   std::string dir;
@@ -52,22 +55,56 @@ private:
   std::shared_ptr<MulticastReceiver> mcastListener;
   StatusInfo statusInfo;
 
-public:
-  VideoController(const std::string _camType)
-  {
+  // mdns
+  std::shared_ptr<ndi_mdns::NdiMdns> mdns;
+  std::thread mdnsScanThread;
+  std::vector<VideoReader::CameraInfo> camList;
+  std::mutex scanMutex;
+  std::atomic<bool> scanEnabled;
+  std::atomic<bool> scanPaused;
 
-#ifdef HAVE_BASLER
-    if (camType == "basler")
-    { // basler camera
-      videoReader = createBaslerReader();
-    }
-    else
+  void mdnsScanLoop()
+  {
+    std::cout << "mDns Scan loop started" << std::endl;
+    while (scanEnabled)
     {
-      videoReader = createNdiReader();
+      if (!scanPaused)
+      {
+        auto ndilist = mdns->discover();
+        std::vector<VideoReader::CameraInfo> list;
+        for (auto &s : ndilist)
+        {
+          if (!s.ipv4.empty())
+          {
+            list.push_back(
+                VideoReader::CameraInfo(s.instance_label, s.ipv4[0], s.port));
+          }
+          std::cout << s.instance << " -> " << s.host << ":" << s.port << "\n";
+          std::cout << "NDI Source: " << s.instance_label << " [" << s.service << "." << s.domain << "] -> "
+                    << s.host << ":" << s.port << std::endl;
+          for (auto &ip : s.ipv4)
+            std::cout << "  A    " << ip << "\n";
+          for (auto &ip : s.ipv6)
+            std::cout << "  AAAA " << ip << "\n";
+          for (auto &kv : s.txt)
+            std::cout << "  TXT  " << kv << "\n";
+        }
+
+        {
+          std::unique_lock<std::mutex> lock(scanMutex);
+          camList = list;
+        }
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(3000));
     }
-#else
-    videoReader = createNdiReader();
-#endif
+
+    std::cout << "mDns Scan loop stopped" << std::endl;
+  }
+
+public:
+  VideoController()
+  {
+    scanEnabled = true;
 
     monitorStopRequested = false;
     monitorThread = std::thread(&VideoController::monitorLoop, this);
@@ -93,6 +130,14 @@ public:
     {
       SystemEventQueue::push("VID", "Error: Unable to create mcast listener.");
     }
+
+    ndi_mdns::DiscoverOptions opt;
+    opt.timeout = std::chrono::seconds(2);
+    opt.debug = false;
+    opt.debug_level = 2;
+    opt.reenumerate_interval_ms = 5000; // 0 = disabled; e.g. 2000 to re-enumerate every 2s
+    mdns = std::make_shared<ndi_mdns::NdiMdns>(opt);
+    mdnsScanThread = std::thread(&VideoController::mdnsScanLoop, this);
   }
   ~VideoController()
   {
@@ -101,12 +146,23 @@ public:
     mcastListener = nullptr;
 
     monitorStopRequested = true;
+
     stop();
+    scanEnabled = false;
+    scanPaused = true;
+
     videoReader = nullptr;
     if (monitorThread.joinable())
     {
       monitorThread.join();
     }
+
+    if (mdnsScanThread.joinable())
+    {
+      mdnsScanThread.join();
+    }
+
+    mdns = nullptr;
   }
 
   void setWaypoint(std::string &waypoint)
@@ -116,12 +172,13 @@ public:
 
   std::vector<VideoReader::CameraInfo> getCameraList()
   {
-    std::lock_guard<std::recursive_mutex> lock(controlMutex);
-    if (videoReader)
-    {
-      return videoReader->getCameraList();
-    }
-    return std::vector<VideoReader::CameraInfo>();
+    // std::lock_guard<std::recursive_mutex> lock(controlMutex);
+    // if (videoReader)
+    // {
+    //   return videoReader->getCameraList();
+    // }
+    std::unique_lock<std::mutex> lock(scanMutex);
+    return camList;
   }
 
   StatusInfo getStatus()
@@ -143,7 +200,8 @@ public:
     return statusInfo;
   }
 
-  std::string start(const std::string srcName, const std::string encoder,
+  std::string start(const std::string srcName, const std::string protocol,
+                    const std::string encoder,
                     const std::string dir, const std::string prefix,
                     const int interval,
                     const FrameProcessor::FRectangle cropArea,
@@ -161,6 +219,62 @@ public:
     if (videoRecorder)
     {
       return "Video Controller already running";
+    }
+
+    // find camera in camList by name and save it for passing to start
+
+    VideoReader::CameraInfo camera;
+    {
+      std::unique_lock<std::mutex> lock(scanMutex);
+      bool found = false;
+      for (auto &cam : camList)
+      {
+        if (cam.name == srcName)
+        {
+          found = true;
+          camera = cam;
+          break;
+        }
+      }
+      if (!found)
+      {
+        return "Camera source not found: " + srcName;
+      }
+    }
+
+    if (activeProtocol == protocol && videoReader)
+    {
+      // reuse existing reader
+    }
+    else
+    {
+      activeProtocol = protocol;
+      if (videoReader)
+      {
+        videoReader = nullptr; // reset existing reader
+      }
+    }
+    if (!videoReader)
+    {
+      if (protocol == "BASLER")
+      { // basler camera
+#ifdef HAVE_BASLER
+        videoReader = createBaslerReader();
+#endif
+        return "Basler support not compiled in.";
+      }
+      else if (protocol == "SRT")
+      {
+        videoReader = createSrtReader();
+      }
+      else if (protocol == "NDI")
+      {
+        videoReader = createNdiReader();
+      }
+      else
+      {
+        videoReader = createSrtReader(); // default to SRT
+      }
     }
 
     startTime = std::chrono::steady_clock::now();
@@ -202,11 +316,12 @@ public:
       return msg;
     }
 
+    scanPaused = true;
     frameProcessor = std::shared_ptr<FrameProcessor>(new FrameProcessor(
         dir, prefix, videoRecorder, interval, cropArea, guide, addTimeOverlay));
 
     videoReader->setProperties(reportAllGaps);
-    retval = videoReader->start(srcName, [this](FramePtr frame)
+    retval = videoReader->start(camera, [this](FramePtr frame)
                                 { this->frameProcessor->addFrame(frame); });
     if (!retval.empty())
     {
@@ -229,6 +344,7 @@ public:
     {
       return "";
     }
+    scanPaused = false;
     SystemEventQueue::push("VID", "Shutting down video controller...");
 
     SystemEventQueue::push("VID", "Stopping video reader...");

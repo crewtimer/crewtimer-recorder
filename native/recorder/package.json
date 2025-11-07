@@ -1,6 +1,6 @@
 {
   "name": "crewtimer_video_recorder",
-  "version": "1.0.11-module",
+  "version": "1.0.12-module",
   "description": "A node electron utility to write mp4 files for CrewTimer Video Review",
   "main": "index.js",
   "types": "index.d.ts",
@@ -19,6 +19,7 @@
     "build:mac": "yarn build:mac-x64 && yarn build:mac-arm",
     "build:win": "prebuild --napi --napi-version 6 --runtime napi --arch=x64 --platform win32",
     "build:ffmpeg": "bash ./scripts/build-ffmpeg.sh",
+    "rebuild:ffmpeg": "find lib-build -name libswscale.a -exec rm {} \\; && yarn build:ffmpeg",
     "clean": "rm -rf node_modules yarn.lock prebuilds build",
     "cleanbuild": "yarn clean && yarn install && yarn prebuild"
   },

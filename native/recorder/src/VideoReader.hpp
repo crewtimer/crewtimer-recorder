@@ -33,7 +33,7 @@ public:
     }
   } CameraInfo;
 
-  virtual std::string start(const std::string srcName,
+  virtual std::string start(const CameraInfo &camera,
                             AddFrameFunction addFrameFunction) = 0;
   virtual std::string stop() = 0;
   virtual void setProperties(bool reportAllGaps)
@@ -49,3 +49,4 @@ public:
 
 std::shared_ptr<VideoReader> createBaslerReader();
 std::shared_ptr<VideoReader> createNdiReader();
+std::shared_ptr<VideoReader> createSrtReader();

@@ -125,6 +125,7 @@ private:
   std::mutex queueMutex;                  ///< Mutex for synchronizing access to the frame queue.
   std::condition_variable frameAvailable; ///< Condition variable to notify
                                           ///< when frames are available.
+  std::mutex statusMutex;                 ///< Mutex to protect statusInfo access.
   std::atomic<bool> running;              ///< Atomic flag to control the running state of threads.
   std::thread processThread;              ///< Threads for capturing and processing frames.
   FramePtr lastFrame;

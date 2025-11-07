@@ -11,7 +11,7 @@ class VideoRecorder
 public:
   virtual std::string openVideoStream(std::string directory,
                                       std::string filename, int width,
-                                      int height, float fps) = 0;
+                                      int height, float fps, uint64_t timestamp) = 0;
   virtual std::string writeVideoFrame(FramePtr frame) = 0;
   virtual std::string stop() = 0;
   virtual int getKeyFrameInterval()

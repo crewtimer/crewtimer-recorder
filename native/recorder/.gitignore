@@ -2,3 +2,4 @@ prebuilds/
 *node_modules/
 lib-build
 build/
+src/test

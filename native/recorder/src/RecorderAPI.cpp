@@ -133,6 +133,18 @@ auto viscaStateLogger = [](const std::string &msg)
   sendMessageToRenderer("visca-state", std::make_shared<json>(config));
 };
 
+static std::string getNapiStringField(
+    Napi::Object &obj,
+    const std::string &fieldName,
+    const std::string &defaultValue = "")
+{
+  if (obj.Has(fieldName.c_str()))
+  {
+    return obj.Get(fieldName.c_str()).As<Napi::String>().Utf8Value();
+  }
+  return defaultValue;
+}
+
 // global for focus processing
 static auto cropRect = FrameProcessor::FRectangle{0, 0, 0, 0};
 static FrameProcessor::Guide guide;
@@ -194,7 +206,7 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
     op = args.Get("op").As<Napi::String>().Utf8Value();
     if (!videoController)
     {
-      videoController = std::shared_ptr<VideoController>(new VideoController("ndi"));
+      videoController = std::shared_ptr<VideoController>(new VideoController());
     }
     if (!viscaClient)
     {
@@ -259,8 +271,9 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
       {
         addTimeOverlay = props.Get("addTimeOverlay").As<Napi::Boolean>();
       }
+      auto protocol = getNapiStringField(props, "protocol", "SRT");
       auto folder = props.Get("recordingFolder").As<Napi::String>().Utf8Value();
-      auto prefix = props.Get("recordingPrefix").As<Napi::String>().Utf8Value();
+      auto prefix = getNapiStringField(props, "recordingPrefix", "CT_");
       auto networkCamera =
           props.Get("networkCamera").As<Napi::String>().Utf8Value();
       auto interval =
@@ -280,7 +293,7 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
       guide.pt1 = guideObj.Get("pt1").As<Napi::Number>().FloatValue();
       guide.pt2 = guideObj.Get("pt2").As<Napi::Number>().FloatValue();
 
-      auto result = videoController->start(networkCamera, "ffmpeg", folder, prefix,
+      auto result = videoController->start(networkCamera, protocol, "ffmpeg", folder, prefix,
                                            interval, cropRect, guide, reportAllGaps, addTimeOverlay);
       if (!result.empty())
       {

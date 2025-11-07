@@ -47,6 +47,37 @@ const RecordingError = () => {
   ) : null;
 };
 
+const ProtocolSelector: React.FC = () => {
+  const [recordingProps, setRecordingProps] = useRecordingProps();
+  const [, setRecordingPropsPending] = useRecordingPropsPending();
+  const protocols = ['SRT', 'NDI'];
+  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRecordingPropsPending(true);
+    setRecordingProps({
+      ...recordingProps,
+      protocol: event.target.value,
+    });
+  };
+  return (
+    <TextField
+      select
+      margin="normal"
+      label="Protocol"
+      name="protocol"
+      size="small"
+      value={recordingProps.protocol}
+      onChange={handleChange}
+      fullWidth
+    >
+      {protocols.map((protocol) => (
+        <MenuItem key={protocol} value={protocol}>
+          {protocol}
+        </MenuItem>
+      ))}
+    </TextField>
+  );
+};
+
 const RecorderConfig: React.FC = () => {
   const [recordingProps, setRecordingProps] = useRecordingProps();
   const [, setRecordingPropsPending] = useRecordingPropsPending();
@@ -120,35 +151,40 @@ const RecorderConfig: React.FC = () => {
     >
       <RecordingError />
       <Grid container spacing={2}>
-        <Grid item xs={8}>
-          <TextField
-            select
-            margin="normal"
-            label="Camera"
-            name="networkCamera"
-            size="small"
-            value={selectedCamera}
-            onChange={handleCameraChange}
-            fullWidth
-            // Color the selected text red if invalid
-            sx={{
-              '& .MuiSelect-select': {
-                color: camFound ? 'inherit' : 'red',
-              },
-            }}
-          >
-            {cameraList.map((camera) => (
-              <MenuItem key={camera.name} value={camera.name}>
-                {`${camera.name} [${camera.address}]`}
-              </MenuItem>
-            ))}
-            {/* If the current value is not in the valid list, show a red fallback option */}
-            {!camFound && selectedCamera && (
-              <MenuItem value={selectedCamera} style={{ color: 'red' }}>
-                {selectedCamera}
-              </MenuItem>
-            )}
-          </TextField>
+        <Grid container item spacing={2} xs={8}>
+          <Grid item xs={9}>
+            <TextField
+              select
+              margin="normal"
+              label="Camera"
+              name="networkCamera"
+              size="small"
+              value={selectedCamera}
+              onChange={handleCameraChange}
+              fullWidth
+              // Color the selected text red if invalid
+              sx={{
+                '& .MuiSelect-select': {
+                  color: camFound ? 'inherit' : 'red',
+                },
+              }}
+            >
+              {cameraList.map((camera) => (
+                <MenuItem key={camera.name} value={camera.name}>
+                  {`${camera.name.replace(camera.address, '').replace('-)', ')')} [${camera.address}]`}
+                </MenuItem>
+              ))}
+              {/* If the current value is not in the valid list, show a red fallback option */}
+              {!camFound && selectedCamera && (
+                <MenuItem value={selectedCamera} style={{ color: 'red' }}>
+                  {selectedCamera}
+                </MenuItem>
+              )}
+            </TextField>
+          </Grid>
+          <Grid item xs={3}>
+            <ProtocolSelector />
+          </Grid>
         </Grid>
         <Grid item xs={3} container alignItems="center">
           <ViscaPortSelector />

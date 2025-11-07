@@ -33,6 +33,7 @@ set(SOURCE_FILES
     src/FrameProcessor.cpp
     src/util.cpp
     src/NdiReader.cpp
+    src/SrtReader.cpp
     src/NullRecorder.cpp
     src/MessageShim.cpp
     src/MulticastReceiver.cpp

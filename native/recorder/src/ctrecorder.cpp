@@ -91,7 +91,7 @@ void testopencv();
 void testrecorder(std::shared_ptr<VideoRecorder> recorder)
 {
   std::cout << "testrecorder start" << std::endl;
-  recorder->openVideoStream("./", "test", 640, 480, 30);
+  recorder->openVideoStream("./", "test", 640, 480, 30, 0);
   const auto image = new uint8_t[640 * 480 * 3];
   for (int pixel = 0; pixel < 640 * 480 * 3; pixel += 3)
   {

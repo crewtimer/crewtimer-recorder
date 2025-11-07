@@ -82,20 +82,26 @@ void FrameProcessor::splitFile() { splitRequested = true; }
 
 FrameProcessor::StatusInfo FrameProcessor::getStatus()
 {
-  statusInfo.recording = running;
-  statusInfo.error = errorMessage;
-  return statusInfo;
+  std::lock_guard<std::mutex> s(statusMutex);
+  // make a copy to avoid holding the mutex while the caller inspects the structure
+  StatusInfo copy = statusInfo;
+  copy.recording = running;
+  copy.error = errorMessage;
+  return copy;
 }
 
 void FrameProcessor::addFrame(FramePtr video_frame)
 {
-  std::unique_lock<std::mutex> lock(queueMutex);
-  if (!running)
   {
-    return;
+    std::unique_lock<std::mutex> lock(queueMutex);
+    if (!running)
+    {
+      return;
+    }
+    lastFrame = video_frame;
+    frameQueue.push(video_frame);
   }
-  lastFrame = video_frame;
-  frameQueue.push(video_frame);
+  // Notify after unlocking to avoid waking the worker only to contend on the lock.
   frameAvailable.notify_one();
 }
 
@@ -164,12 +170,40 @@ void FrameProcessor::processFrames()
     {
       auto video_frame = frameQueue.front();
       frameQueue.pop();
-
-      statusInfo.frameBacklog = frameQueue.size();
+      {
+        // update frame backlog under status mutex to avoid races on statusInfo
+        std::lock_guard<std::mutex> s(statusMutex);
+        statusInfo.frameBacklog = frameQueue.size();
+      }
       lock.unlock();
+      // If a source-disconnected frame is received, close the current file immediately.
+      if (video_frame->frameType == Frame::FrameType::SOURCE_DISCONNECTED)
+      {
+        SystemEventQueue::instance().push("fproc", "Source disconnected - splitting file immediately");
+        if (frameCount > 0)
+        {
+          writeJsonSidecarFile();
+          videoRecorder->stop();
+        }
+        frameCount = 0;
+        count = 0;
+        {
+          std::lock_guard<std::mutex> s(statusMutex);
+          statusInfo.filename.clear();
+        }
+        lock.lock();
+        continue;
+      }
+      if (video_frame->frameType != Frame::FrameType::VIDEO)
+      {
+        // Ignore non-video frames; relock before re-evaluating the queue predicate.
+        lock.lock();
+        continue;
+      }
       if (video_frame->xres == 0 || video_frame->yres == 0)
       {
         std::cerr << "Null frame received" << std::endl;
+        lock.lock();
         continue;
       }
       const auto fps =
@@ -186,7 +220,10 @@ void FrameProcessor::processFrames()
       lastYres = video_frame->yres;
       lastFPS = fps;
 
-      statusInfo.lastTsMilli = video_frame->timestamp / 10000;
+      {
+        std::lock_guard<std::mutex> s(statusMutex);
+        statusInfo.lastTsMilli = video_frame->timestamp / 10000;
+      }
 
       // The video review app may have trouble reading the last video frame when there is not a multiple of gop_size frames
       // Exact cause unknown.
@@ -198,12 +235,12 @@ void FrameProcessor::processFrames()
         if (splitRequested)
         {
           SystemEventQueue::instance().push(
-              "debug", "Split Requested");
+              "info", "Split Requested");
         }
         if (frameCount > 0)
         {
-          SystemEventQueue::instance().push(
-              "debug", "Stopping Recorder and writing json file");
+          // SystemEventQueue::instance().push(
+          //     "debug", "Stopping Recorder and writing json file");
           writeJsonSidecarFile();
           videoRecorder->stop();
         }
@@ -233,10 +270,13 @@ void FrameProcessor::processFrames()
 
         std::string filename = ss.str();
         jsonFilename = directory + "/" + filename + ".json";
-        statusInfo.filename = filename;
-        statusInfo.fps = fps;
-        statusInfo.width = video_frame->xres;
-        statusInfo.height = video_frame->yres;
+        {
+          std::lock_guard<std::mutex> s(statusMutex);
+          statusInfo.filename = filename;
+          statusInfo.fps = fps;
+          statusInfo.width = video_frame->xres;
+          statusInfo.height = video_frame->yres;
+        }
 
         pxCropArea.x = std::round((cropArea.x * (video_frame->xres) / 4)) * 4;
         int cropWidth = cropArea.width * video_frame->xres;
@@ -248,17 +288,22 @@ void FrameProcessor::processFrames()
         cropHeight = std::min(video_frame->yres - pxCropArea.y, cropHeight);
         pxCropArea.height = int(cropHeight / 4) * 4; // trunc to mult of 4
 
-        std::cout << "cropArea: " << cropArea.x << "," << cropArea.y << ","
-                  << cropArea.width << "," << cropArea.height << std::endl;
+        // std::cout << "cropArea: " << cropArea.x << "," << cropArea.y << ","
+        //           << cropArea.width << "," << cropArea.height << std::endl;
 
-        std::cout << "pxCropArea: " << pxCropArea.x << "," << pxCropArea.y
-                  << "," << pxCropArea.width << "," << pxCropArea.height
-                  << std::endl;
+        // std::cout << "pxCropArea: " << pxCropArea.x << "," << pxCropArea.y
+        //           << "," << pxCropArea.width << "," << pxCropArea.height
+        //           << std::endl;
+
+        {
+          SystemEventQueue::instance().push(
+              "info", "Opening file " + filename + " ");
+        }
 
         const auto err = videoRecorder->openVideoStream(
             directory, filename,
             pxCropArea.width ? pxCropArea.width : video_frame->xres,
-            pxCropArea.height ? pxCropArea.height : video_frame->yres, fps);
+            pxCropArea.height ? pxCropArea.height : video_frame->yres, fps, video_frame->timestamp);
         if (!err.empty())
         {
           errorMessage = err;

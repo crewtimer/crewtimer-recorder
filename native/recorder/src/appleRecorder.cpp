@@ -13,12 +13,14 @@
 //
 
 #define NAL true
-CVPixelBufferRef createRedPixelBuffer(int width, int height) {
+CVPixelBufferRef createRedPixelBuffer(int width, int height)
+{
   CVPixelBufferRef pixelBuffer;
   CVReturn result = CVPixelBufferCreate(
       NULL, width, height, kCVPixelFormatType_32BGRA, NULL, &pixelBuffer);
 
-  if (result != kCVReturnSuccess) {
+  if (result != kCVReturnSuccess)
+  {
     printf("Failed to create pixel buffer.\n");
     return NULL;
   }
@@ -27,8 +29,10 @@ CVPixelBufferRef createRedPixelBuffer(int width, int height) {
   uint8_t *baseAddress = (uint8_t *)CVPixelBufferGetBaseAddress(pixelBuffer);
   size_t bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer);
 
-  for (int y = 0; y < height; y++) {
-    for (int x = 0; x < width; x++) {
+  for (int y = 0; y < height; y++)
+  {
+    for (int x = 0; x < width; x++)
+    {
       uint8_t *pixel = baseAddress + y * bytesPerRow + x * 4;
       pixel[0] = 0;   // Blue
       pixel[1] = 0;   // Green
@@ -41,7 +45,8 @@ CVPixelBufferRef createRedPixelBuffer(int width, int height) {
   return pixelBuffer;
 }
 
-class AppleRecorder : public VideoRecorder {
+class AppleRecorder : public VideoRecorder
+{
   bool active = false;
   int width;
   int height;
@@ -55,14 +60,16 @@ class AppleRecorder : public VideoRecorder {
   void videoCompressionOutputCallback(void *outputCallbackRefCon,
                                       void *sourceFrameRefCon, OSStatus status,
                                       VTEncodeInfoFlags infoFlags,
-                                      CMSampleBufferRef sampleBuffer) {
+                                      CMSampleBufferRef sampleBuffer)
+  {
 
     // Find out if the sample buffer contains an I-Frame.
     // If so we will write the SPS and PPS NAL units to the elementary stream.
     bool isIFrame = false;
     CFArrayRef attachmentsArray =
         CMSampleBufferGetSampleAttachmentsArray(sampleBuffer, 0);
-    if (CFArrayGetCount(attachmentsArray)) {
+    if (CFArrayGetCount(attachmentsArray))
+    {
       CFBooleanRef notSync;
       CFDictionaryRef dict =
           (CFDictionaryRef)CFArrayGetValueAtIndex(attachmentsArray, 0);
@@ -76,7 +83,8 @@ class AppleRecorder : public VideoRecorder {
               << std::endl;
 
     static const uint8_t startCode[] = {0x00, 0x00, 0x00, 0x01};
-    if (isIFrame) {
+    if (isIFrame)
+    {
       CMFormatDescriptionRef description =
           CMSampleBufferGetFormatDescription(sampleBuffer);
 
@@ -86,7 +94,8 @@ class AppleRecorder : public VideoRecorder {
           description, 0, NULL, NULL, &numberOfParameterSets, NULL);
 
       // Write each parameter set to the elementary stream
-      for (int i = 0; i < numberOfParameterSets; i++) {
+      for (int i = 0; i < numberOfParameterSets; i++)
+      {
         const uint8_t *parameterSetPointer;
         size_t parameterSetLength;
         CMVideoFormatDescriptionGetH264ParameterSetAtIndex(
@@ -114,7 +123,8 @@ class AppleRecorder : public VideoRecorder {
     // start codes instead of AVCC length headers
     size_t bufferOffset = 0;
     static const int AVCCHeaderLength = 4;
-    while (bufferOffset < blockBufferLength - AVCCHeaderLength) {
+    while (bufferOffset < blockBufferLength - AVCCHeaderLength)
+    {
       // Read the NAL unit length
       uint32_t NALUnitLength = 0;
       memcpy(&NALUnitLength, bufferDataPointer + bufferOffset,
@@ -136,7 +146,8 @@ class AppleRecorder : public VideoRecorder {
     // directory you can get that file using iTunes => Apps = > FileSharing =>
     // AVEncoderDemo
 #else
-    if (status == noErr && sampleBuffer != NULL) {
+    if (status == noErr && sampleBuffer != NULL)
+    {
       fwrite(bufferDataPointer, 1, blockBufferLength, outputFile);
     }
 #endif
@@ -144,9 +155,11 @@ class AppleRecorder : public VideoRecorder {
 
   static void videoCompressionOutputCallbackWrapper(
       void *outputCallbackRefCon, void *sourceFrameRefCon, OSStatus status,
-      VTEncodeInfoFlags infoFlags, CMSampleBufferRef sampleBuffer) {
+      VTEncodeInfoFlags infoFlags, CMSampleBufferRef sampleBuffer)
+  {
     AppleRecorder *ptr = (AppleRecorder *)outputCallbackRefCon;
-    if (ptr) {
+    if (ptr)
+    {
       ptr->videoCompressionOutputCallback(outputCallbackRefCon,
                                           sourceFrameRefCon, status, infoFlags,
                                           sampleBuffer);
@@ -155,7 +168,8 @@ class AppleRecorder : public VideoRecorder {
 
 public:
   std::string openVideoStream(std::string directory, std::string filename,
-                              int width, int height, float fps) {
+                              int width, int height, float fps, uint64_t timestamp)
+  {
     this->width = width;
     this->height = height;
     this->frameIndex = 0;
@@ -169,9 +183,9 @@ public:
     VTCompressionSessionCreate(
         NULL, // use default allocator
         width, height, kCMVideoCodecType_H264,
-        NULL, // use default encoder
-        NULL, // no source attributes specified
-        NULL, // use default compressed data allocator
+        NULL,                                  // use default encoder
+        NULL,                                  // no source attributes specified
+        NULL,                                  // use default compressed data allocator
         videoCompressionOutputCallbackWrapper, // callback
         this,                                  // callback arg
         &compressionSession);
@@ -202,7 +216,8 @@ public:
     outputFile = directory + "/" + outputFile;
     // Open the output file
     this->outputFileHandle = fopen(tmpFile.c_str(), "wb");
-    if (this->outputFileHandle == NULL) {
+    if (this->outputFileHandle == NULL)
+    {
       auto msg = "Failed to open output file.";
       std::cerr << msg << std::endl;
       return msg;
@@ -225,7 +240,8 @@ public:
 
     return "";
   }
-  std::string writeVideoFrame(NDIlib_video_frame_v2_t &video_frame) {
+  std::string writeVideoFrame(NDIlib_video_frame_v2_t &video_frame)
+  {
     std::cout << "Write Frame #" << frameIndex
               << ", l=" << video_frame.line_stride_in_bytes * video_frame.yres
               << std::endl;
@@ -251,8 +267,10 @@ public:
     return "";
   }
 
-  std::string closeVideoStream() {
-    if (active) {
+  std::string closeVideoStream()
+  {
+    if (active)
+    {
 
       // Complete the compression session
       VTCompressionSessionCompleteFrames(compressionSession, kCMTimeInvalid);
@@ -267,10 +285,13 @@ public:
 
       active = false;
       // Attempt to rename the file
-      if (std::rename(tmpFile.c_str(), outputFile.c_str()) == 0) {
+      if (std::rename(tmpFile.c_str(), outputFile.c_str()) == 0)
+      {
         // std::cout << "File successfully renamed from " << tmpFile << " to "
         //           << outputFile << std::endl;
-      } else {
+      }
+      else
+      {
         // If renaming failed, print an error message
         auto msg = "Error renaming file";
         std::stderr << msg << std::endl;
@@ -282,6 +303,7 @@ public:
   ~AppleRecorder() { closeVideoStream(); }
 };
 
-std::shared_ptr<VideoRecorder> createAppleRecorder() {
+std::shared_ptr<VideoRecorder> createAppleRecorder()
+{
   return std::shared_ptr<AppleRecorder>(new AppleRecorder());
 }

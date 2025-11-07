@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "SystemEventQueue.hpp"
-#include "mdns/ndi_mdns.hpp"
 
 #ifdef _WIN32
 #ifdef _WIN64
@@ -71,10 +70,8 @@ class NdiReader : public VideoReader
   std::string srcName;
 
   std::vector<CameraInfo> camList;
-  std::thread mdnsScanThread;
   std::thread ndiScanThread;
   std::mutex scanMutex;
-  std::shared_ptr<ndi_mdns::NdiMdns> mdns;
 
   std::vector<CameraInfo> getCameraList() override
   {
@@ -163,44 +160,6 @@ class NdiReader : public VideoReader
     std::cout << "NDI Scan loop stopped" << std::endl;
   }
 
-  void mdnsScanLoop()
-  {
-    std::cout << "mDns Scan loop started" << std::endl;
-    while (scanEnabled)
-    {
-      if (!scanPaused)
-      {
-        auto ndilist = mdns->discover();
-        std::vector<CameraInfo> list;
-        for (auto &s : ndilist)
-        {
-          if (!s.ipv4.empty())
-          {
-            list.push_back(
-                CameraInfo(s.instance_label, s.ipv4[0], s.port));
-          }
-          // std::cout << s.instance << " -> " << s.host << ":" << s.port << "\n";
-          // std::cout << "NDI Source: " << s.instance_label << " [" << s.service << "." << s.domain << "] -> "
-          //           << s.host << ":" << s.port << std::endl;
-          // for (auto &ip : s.ipv4)
-          //   std::cout << "  A    " << ip << "\n";
-          // for (auto &ip : s.ipv6)
-          //   std::cout << "  AAAA " << ip << "\n";
-          // for (auto &kv : s.txt)
-          //   std::cout << "  TXT  " << kv << "\n";
-        }
-
-        {
-          std::unique_lock<std::mutex> lock(scanMutex);
-          camList = list;
-        }
-      }
-      std::this_thread::sleep_for(std::chrono::milliseconds(3000));
-    }
-
-    std::cout << "mDns Scan loop stopped" << std::endl;
-  }
-
   std::string connect()
   {
     SystemEventQueue::push("Debug", "Searching for NDI sources...");
@@ -268,6 +227,11 @@ class NdiReader : public VideoReader
       if (!ndiRecv)
       {
         connect();
+        if (!ndiRecv)
+        {
+          std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+          continue;
+        }
       }
 
       auto frameType = NDIlib_recv_capture_v3(ndiRecv->pNDI_recv, &video_frame, nullptr,
@@ -393,19 +357,12 @@ public:
   NdiReader()
   {
     scanEnabled = true;
-    // Initialize mdns shared_ptr instance with default options
-    ndi_mdns::DiscoverOptions opt;
-    opt.timeout = std::chrono::seconds(2);
-    opt.debug = false;
-    opt.debug_level = 2;
-    opt.reenumerate_interval_ms = 5000; // 0 = disabled; e.g. 2000 to re-enumerate every 2s
-    mdns = std::make_shared<ndi_mdns::NdiMdns>(opt);
-    mdnsScanThread = std::thread(&NdiReader::mdnsScanLoop, this);
-    // ndiScanThread = std::thread(&NdiReader::ndiScanLoop, this);
+
+    ndiScanThread = std::thread(&NdiReader::ndiScanLoop, this);
     auto *version = NDIlib_version();
     std::cout << "NDI SDK Version: " << version << std::endl;
   }
-  std::string start(const std::string srcName,
+  std::string start(const CameraInfo &camera,
                     AddFrameFunction addFrameFunction) override
   {
     scanPaused = true;
@@ -413,7 +370,7 @@ public:
     {
       stop();
     }
-    this->srcName = srcName;
+    this->srcName = camera.name;
     this->addFrameFunction = addFrameFunction;
     keepRunning = true;
     ndiThread = std::thread(&NdiReader::run, this);
@@ -441,16 +398,11 @@ public:
     stop();
     scanPaused = true;
     scanEnabled = false;
-    if (mdnsScanThread.joinable())
-    {
-      mdnsScanThread.join();
-    }
+
     if (ndiScanThread.joinable())
     {
       ndiScanThread.join();
     }
-
-    mdns = nullptr;
 
     // Not required, but nice
     NDIlib_destroy();

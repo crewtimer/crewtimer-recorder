@@ -8,9 +8,12 @@
 extern "C"
 {
 #include <libavcodec/avcodec.h>
+#include <libavcodec/bsf.h>
 #include <libavformat/avformat.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/log.h>
+#include <libavutil/avutil.h>
+#include <libavutil/opt.h>
 #include <libswscale/swscale.h>
 }
 
@@ -41,12 +44,55 @@ public:
        << "." << AV_VERSION_MINOR(version) << "." << AV_VERSION_MICRO(version);
     SystemEventQueue::push("ffmpeg", ss.str());
   }
+
   int getKeyFrameInterval()
   {
     return 12;
   }
+
+  static std::string iso8601_utc_now_ms(uint64_t ms)
+  {
+    // using namespace std::chrono;
+    // auto now = time_point_cast<milliseconds>(system_clock::now());
+    // auto ms = now.time_since_epoch().count();
+    std::time_t secs = ms / 1000;
+    int msec = static_cast<int>(ms % 1000);
+    std::tm tm{};
+#if defined(_WIN32)
+    gmtime_s(&tm, &secs);
+#else
+    gmtime_r(&secs, &tm);
+#endif
+    char buf[64];
+    std::snprintf(buf, sizeof(buf),
+                  "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
+                  tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+                  tm.tm_hour, tm.tm_min, tm.tm_sec, msec);
+    return std::string(buf);
+  }
+
+  // Return Unix epoch microseconds (UTC) as int64
+  static long long unix_epoch_us_now()
+  {
+    using namespace std::chrono;
+    return duration_cast<microseconds>(system_clock::now().time_since_epoch()).count();
+  }
+  // Also make milliseconds for backward compatibility
+  static long long unix_epoch_ms_now()
+  {
+    using namespace std::chrono;
+    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+  }
+
+  static bool muxer_has_opt(AVFormatContext *oc, const char *opt_name)
+  {
+    if (!oc || !oc->priv_data)
+      return false;
+    const AVOption *o = av_opt_find(oc->priv_data, opt_name, nullptr, 0, 0);
+    return o != nullptr;
+  }
   std::string openVideoStream(std::string directory, std::string filename,
-                              int width, int height, float fps)
+                              int width, int height, float fps, uint64_t timestamp)
   {
     frame_index = 0;
     outputFile = filename + ".mp4";
@@ -54,8 +100,8 @@ public:
     outputFile = directory + "/" + outputFile;
     // std::cout << "Creating file '" << outputFile << "'" << std::endl;
 
-    // av_log_set_level(AV_LOG_DEBUG);
-    av_log_set_level(AV_LOG_INFO);
+    av_log_set_level(AV_LOG_ERROR);
+    // av_log_set_level(AV_LOG_INFO);
 
     /* allocate the output media context */
     avformat_alloc_output_context2(&pFormatCtx, NULL, NULL, tmpFile.c_str());
@@ -187,7 +233,34 @@ public:
       }
     }
 
-    if (avformat_write_header(pFormatCtx, NULL) < 0)
+    // Optional: PRFT if your build supports it
+    if (muxer_has_opt(pFormatCtx, "write_prft"))
+    {
+      av_opt_set_int(pFormatCtx->priv_data, "write_prft", 1, 0);
+      av_opt_set(pFormatCtx->priv_data, "prft", "wallclock", 0);
+    }
+    // Prepare values
+    long long utc_us = (timestamp + 5) / 10; // 100ns to microseconds
+    const std::string iso = iso8601_utc_now_ms((timestamp + 5000) / 10000);
+
+    char utc_us_buf[32];
+    std::snprintf(utc_us_buf, sizeof(utc_us_buf), "%lld", (long long)utc_us);
+
+    // Stamp container + streams with custom key
+    av_dict_set(&pFormatCtx->metadata, "creation_time", iso.c_str(), 0);
+    av_dict_set(&pFormatCtx->metadata, "com.crewtimer.first_utc_us", utc_us_buf, 0);
+
+    for (unsigned i = 0; i < pFormatCtx->nb_streams; ++i)
+    {
+      av_dict_set(&pFormatCtx->streams[i]->metadata, "creation_time", iso.c_str(), 0);
+      av_dict_set(&pFormatCtx->streams[i]->metadata, "com.crewtimer.first_utc_us", utc_us_buf, 0);
+    }
+
+    AVDictionary *opts = nullptr;
+    av_dict_set(&opts, "movflags", "use_metadata_tags", 0); // allow custom tags
+    int err = avformat_write_header(pFormatCtx, &opts);
+    av_dict_free(&opts);
+    if (err < 0)
     {
       auto msg = "Error: Cannot write mp4 header";
       SystemEventQueue::push("ffmpeg", msg);

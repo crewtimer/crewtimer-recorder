@@ -8,6 +8,11 @@
 class Frame
 {
 public:
+  enum FrameType
+  {
+    VIDEO = 0,
+    SOURCE_DISCONNECTED = 1
+  };
   enum PixelFormat
   {
     UYVY422 = 0,
@@ -23,6 +28,8 @@ public:
   int frame_rate_D;
   PixelFormat pixelFormat;
   bool ownData;
+  FrameType frameType = VIDEO;
+
   Frame() { ownData = false; }
   Frame(int width, int height, PixelFormat format)
       : xres(width), yres(height), pixelFormat(format)

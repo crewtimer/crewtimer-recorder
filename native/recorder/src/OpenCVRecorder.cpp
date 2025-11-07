@@ -1,7 +1,8 @@
 #include "VideoRecorder.hpp"
 #include <opencv2/opencv.hpp>
 
-class OpenCVRecorder : public VideoRecorder {
+class OpenCVRecorder : public VideoRecorder
+{
   bool active = false;
   cv::VideoWriter video_writer;
   cv::Mat frame;
@@ -10,7 +11,8 @@ class OpenCVRecorder : public VideoRecorder {
 
 public:
   std::string openVideoStream(std::string directory, std::string filename,
-                              int width, int height, float fps) {
+                              int width, int height, float fp, uint64_t timestamp)
+  {
     outputFile = filename + ".mp4";
     tmpFile = directory + "/" + "tmp-" + outputFile;
     outputFile = directory + "/" + outputFile;
@@ -31,18 +33,22 @@ public:
     active = true;
     return "";
   }
-  std::string writeVideoFrame(FramePtr video_frame) {
+  std::string writeVideoFrame(FramePtr video_frame)
+  {
 
-    switch (video_frame->pixelFormat) {
+    switch (video_frame->pixelFormat)
+    {
 
-    case Frame::PixelFormat::RGBX: {
+    case Frame::PixelFormat::RGBX:
+    {
       cv::Mat ndi_frame(cv::Size(video_frame->xres, video_frame->yres), CV_8UC4,
                         video_frame->data, cv::Mat::AUTO_STEP);
       cv::cvtColor(ndi_frame, this->frame, cv::COLOR_RGBA2BGR);
       this->video_writer.write(this->frame);
       break;
     }
-    case Frame::PixelFormat::BGR: {
+    case Frame::PixelFormat::BGR:
+    {
       cv::Mat ndi_frame(cv::Size(video_frame->xres, video_frame->yres), CV_8UC3,
                         video_frame->data, cv::Mat::AUTO_STEP);
       this->video_writer.write(ndi_frame);
@@ -50,7 +56,8 @@ public:
     }
 
     case Frame::PixelFormat::UYVY422:
-    default: {
+    default:
+    {
       // UYVY422 format, where each pixel consists
       // of two chrominance (U and V) values and two
       // luminance (Y) values.
@@ -65,17 +72,22 @@ public:
 
     return "";
   }
-  std::string stop() {
-    if (active) {
+  std::string stop()
+  {
+    if (active)
+    {
       this->video_writer.release();
       this->frame.release();
       active = false;
     }
     // Attempt to rename the file
-    if (std::rename(tmpFile.c_str(), outputFile.c_str()) == 0) {
+    if (std::rename(tmpFile.c_str(), outputFile.c_str()) == 0)
+    {
       // std::cout << "File successfully renamed from " << tmpFile << " to "
       //           << outputFile << std::endl;
-    } else {
+    }
+    else
+    {
       // If renaming failed, print an error message
       auto msg = "Error renaming file";
       std::cerr << msg << std::endl;
@@ -86,15 +98,18 @@ public:
   ~OpenCVRecorder() { stop(); }
 };
 
-std::shared_ptr<VideoRecorder> createOpenCVRecorder() {
+std::shared_ptr<VideoRecorder> createOpenCVRecorder()
+{
   return std::shared_ptr<OpenCVRecorder>(new OpenCVRecorder());
 }
 
-void testopencv() {
+void testopencv()
+{
   auto recorder = createOpenCVRecorder();
-  recorder->openVideoStream("/tmp", "test", 640, 480, 30);
+  recorder->openVideoStream("/tmp", "test", 640, 480, 30, 0);
   const auto image = new uint8_t[640 * 480 * 3];
-  for (int pixel = 0; pixel < 640 * 480 * 3; pixel += 3) {
+  for (int pixel = 0; pixel < 640 * 480 * 3; pixel += 3)
+  {
     image[pixel] = pixel > 640 * 480 && pixel < 640 * 480 * 2 ? 255 : 0;
     image[pixel + 1] = pixel > 640 * 480 * 2 ? 255 : 0;
     image[pixel + 2] = 255;
@@ -108,7 +123,8 @@ void testopencv() {
   frame->frame_rate_N = 30;
   frame->frame_rate_D = 1;
   frame->pixelFormat = Frame::PixelFormat::BGR;
-  for (int i = 0; i < 30; i++) {
+  for (int i = 0; i < 30; i++)
+  {
     recorder->writeVideoFrame(frame);
   }
   recorder->stop();

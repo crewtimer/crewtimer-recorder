@@ -29,7 +29,7 @@ A unix like environment is needed to build ffmpeg and opencv.  Cygwin is used to
 - [Visual Studio Community]() with C++ addon
 - [cmake](https://cmake.org/download/)
 - Python.  Just type `python` on windows to get prompted to install. It is installed already on macos.
-- [Cygwin 64 bit](https://www.cygwin.com/install.html).  Add 'yasm' and 'make' modules.
+- [Cygwin 64 bit](https://www.cygwin.com/install.html).  Add 'yasm', 'make', and 'pkg-config' modules.
 
 Either check out the git repo or if in a Macos Parallels Desktop, map a network drive to share the git repo.
 
