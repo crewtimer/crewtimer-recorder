@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <memory>
+#include <vector>
 
 /**
  * Class representing a single video frame.
@@ -11,7 +12,8 @@ public:
   enum FrameType
   {
     VIDEO = 0,
-    SOURCE_DISCONNECTED = 1
+    SOURCE_DISCONNECTED = 1,
+    ENCODED_VIDEO = 2
   };
   enum PixelFormat
   {
@@ -29,6 +31,31 @@ public:
   PixelFormat pixelFormat;
   bool ownData;
   FrameType frameType = VIDEO;
+
+  struct EncodedPacket
+  {
+    std::vector<uint8_t> data;
+    std::vector<uint8_t> extradata;
+    int width = 0;
+    int height = 0;
+    int codecId = 0;
+    int timeBaseNum = 0;
+    int timeBaseDen = 1;
+    int avgFrameRateNum = 0;
+    int avgFrameRateDen = 1;
+    int64_t pts = -1;
+    int64_t dts = -1;
+    int64_t duration = 0;
+    bool keyFrame = false;
+    bool annexb = true;
+  };
+
+  EncodedPacket encodedPacket;
+
+  bool hasEncodedData() const
+  {
+    return frameType == ENCODED_VIDEO && !encodedPacket.data.empty();
+  }
 
   Frame() { ownData = false; }
   Frame(int width, int height, PixelFormat format)
