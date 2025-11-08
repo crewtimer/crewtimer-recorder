@@ -50,13 +50,13 @@ public:
     return 12;
   }
 
-  static std::string iso8601_utc_now_ms(uint64_t ms)
+  static std::string iso8601_utc_now_us(uint64_t us)
   {
     // using namespace std::chrono;
     // auto now = time_point_cast<milliseconds>(system_clock::now());
     // auto ms = now.time_since_epoch().count();
-    std::time_t secs = ms / 1000;
-    int msec = static_cast<int>(ms % 1000);
+    std::time_t secs = us / 1000000;
+    int usec = static_cast<int>(us % 1000000);
     std::tm tm{};
 #if defined(_WIN32)
     gmtime_s(&tm, &secs);
@@ -65,9 +65,9 @@ public:
 #endif
     char buf[64];
     std::snprintf(buf, sizeof(buf),
-                  "%04d-%02d-%02dT%02d:%02d:%02d.%03dZ",
+                  "%04d-%02d-%02dT%02d:%02d:%02d.%06dZ",
                   tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
-                  tm.tm_hour, tm.tm_min, tm.tm_sec, msec);
+                  tm.tm_hour, tm.tm_min, tm.tm_sec, usec);
     return std::string(buf);
   }
 
@@ -241,7 +241,7 @@ public:
     }
     // Prepare values
     long long utc_us = (timestamp + 5) / 10; // 100ns to microseconds
-    const std::string iso = iso8601_utc_now_ms((timestamp + 5000) / 10000);
+    const std::string iso = iso8601_utc_now_us(static_cast<uint64_t>(utc_us));
 
     char utc_us_buf[32];
     std::snprintf(utc_us_buf, sizeof(utc_us_buf), "%lld", (long long)utc_us);

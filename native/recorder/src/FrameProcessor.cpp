@@ -344,7 +344,8 @@ void FrameProcessor::processFrames()
         //           << std::endl;
       }
 
-      encodeTimestamp(cropped->data, cropped->stride, video_frame->timestamp);
+      // We no longer encode the time as modified bits in the image but instead use meta data fields
+      // encodeTimestamp(cropped->data, cropped->stride, video_frame->timestamp);
       if (addTimeOverlay)
       {
         overlayTime(cropped->data, cropped->stride, video_frame->timestamp);

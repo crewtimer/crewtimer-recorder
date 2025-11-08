@@ -55,11 +55,13 @@ This yields the number of microseconds elapsed since **1970-01-01T00:00:00Z**.
 
 | Field | Type | Format | Scope | Example |
 |:------|:------|:------|:------|:--------|
-| `creation_time` | String | ISO-8601 UTC with milliseconds | Container & per-stream | `"2025-10-22T07:45:12.123Z"` |
+| `creation_time` | String | ISO-8601 UTC with microseconds | Container & per-stream | `"2025-10-22T07:45:12.123456Z"` |
 
 - Standard MP4/QuickTime field recognized by most players and editors.  
 - Provides a **human-readable** UTC timestamp corresponding to `com.crewtimer.first_utc_us`.  
 - This field is redundant but serves as a fallback when integer precision isn’t needed.
+
+**Why store both fields?** `creation_time` is convenient for humans, but many muxers and editing tools rewrite it (sometimes truncating to milliseconds or applying local time). The vendor tag `com.crewtimer.first_utc_us` remains untouched, preserves the full 64-bit epoch value, and is trivial for ingest pipelines to parse without timezone handling. Keeping both ensures we always retain an exact, machine-friendly capture start time even if the ISO string is later normalized.
 
 Generated as:
 
@@ -139,7 +141,7 @@ ffmpeg -i input.mp4 -metadata creation_time="2025-10-22T07:45:12.123Z" \
     av_opt_set(ofmt->priv_data, "prft", "wallclock", 0);
     
     // Prepare values
-    const std::string iso = iso8601_utc_now_ms((timestamp + 5000) / 10000);
+    const std::string iso = iso8601_utc_now_us(utc_us);
 
     char utc_us_buf[32];
     std::snprintf(utc_us_buf, sizeof(utc_us_buf), "%lld", (long long)utc_us);
