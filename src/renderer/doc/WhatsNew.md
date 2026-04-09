@@ -1,3 +1,6 @@
+#### Version 1.0.19
+- Better MacOS permission prompts
+
 #### Version 1.0.18
 - Support for SRT (Secure Reliable Transport) protocol
   

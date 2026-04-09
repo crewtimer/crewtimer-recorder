@@ -1,6 +1,8 @@
 #include "MulticastReceiver.hpp"
 #include "SystemEventQueue.hpp"
+#include <chrono>
 #include <cstring>
+#include <cerrno>
 #include <iostream>
 #include <sstream>
 #include <thread>
@@ -37,6 +39,12 @@ void cleanup_sockets() {}
 
 #endif
 
+namespace
+{
+constexpr auto kRetryDelay = std::chrono::seconds(2);
+constexpr auto kStopPollDelay = std::chrono::milliseconds(100);
+}
+
 MulticastReceiver::MulticastReceiver(const std::string &multicastIP,
                                      unsigned short port)
     : multicastIP(multicastIP), port(port), sockfd(-1), running(false)
@@ -70,99 +78,161 @@ void MulticastReceiver::stop()
     return;
   running = false;
 
-  if (sockfd != -1)
-  {
-#if defined(_WIN32) || defined(_WIN64)
-    shutdown(sockfd, SD_BOTH);
-#else
-    shutdown(sockfd, SHUT_RDWR);
-#endif
-    closesocket(sockfd);
-    sockfd = -1;
-  }
+  closeSocket();
   if (listenerThread.joinable())
   {
     listenerThread.join();
   }
 }
 
+void MulticastReceiver::closeSocket()
+{
+  std::lock_guard<std::mutex> lock(socketMutex);
+  if (sockfd == -1)
+  {
+    return;
+  }
+
+#if defined(_WIN32) || defined(_WIN64)
+  shutdown(sockfd, SD_BOTH);
+#else
+  shutdown(sockfd, SHUT_RDWR);
+#endif
+  closesocket(sockfd);
+  sockfd = -1;
+}
+
 void MulticastReceiver::listen()
 {
-  sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-  if (sockfd < 0)
+  std::string lastStatusMessage;
+
+  auto pushStatus = [&](const std::string &message)
   {
-    SystemEventQueue::push("mcast", std::string("Error: cannot open multicast socket: ") +
-                                        strerror(errno));
-    return;
-  }
+    if (message != lastStatusMessage)
+    {
+      SystemEventQueue::push("mcast", message);
+      lastStatusMessage = message;
+    }
+  };
 
-  int reuse = 1;
-  if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *)&reuse,
-                 sizeof(reuse)) < 0)
+  auto sleepBeforeRetry = [&]()
   {
-    SystemEventQueue::push(
-        "mcast", std::string("Error: Setting SO_REUSEADDR error: ") + strerror(errno));
-    closesocket(sockfd);
-    return;
-  }
+    auto waited = std::chrono::milliseconds(0);
+    while (running && waited < kRetryDelay)
+    {
+      std::this_thread::sleep_for(kStopPollDelay);
+      waited += kStopPollDelay;
+    }
+  };
 
-  struct sockaddr_in localSock;
-  memset(&localSock, 0, sizeof(localSock));
-  localSock.sin_family = AF_INET;
-  localSock.sin_port = htons(port);
-  localSock.sin_addr.s_addr = INADDR_ANY;
-
-  if (bind(sockfd, (struct sockaddr *)&localSock, sizeof(localSock)) < 0)
-  {
-    SystemEventQueue::push("mcast", std::string("Error: binding socket: ") +
-                                        strerror(errno));
-    closesocket(sockfd);
-    return;
-  }
-
-  struct ip_mreq group;
-  group.imr_multiaddr.s_addr = inet_addr(multicastIP.c_str());
-  group.imr_interface.s_addr = INADDR_ANY;
-  if (setsockopt(sockfd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&group,
-                 sizeof(group)) < 0)
-  {
-    SystemEventQueue::push("mcast",
-                           std::string("Error: Adding multicast group error: ") +
-                               strerror(errno));
-    closesocket(sockfd);
-    return;
-  }
-
-  std::stringstream ss;
-  ss << "Multicast listening on " << multicastIP << ":" << port;
-  SystemEventQueue::push("mcast", ss.str());
   while (running)
   {
-    char buffer[4096];
-    int nbytes = recv(sockfd, buffer, sizeof(buffer) - 1, 0);
-    if (nbytes <= 0)
+    int newSock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (newSock < 0)
     {
-      if (!running)
-      {
-        SystemEventQueue::push("mcast", "Listener stopping.");
-        break;
-      }
+      pushStatus(std::string("Error: cannot open multicast socket: ") +
+                 strerror(errno) + ". Retrying...");
+      sleepBeforeRetry();
       continue;
     }
 
-    buffer[nbytes] = '\0';
-
-    if (onMessageReceived)
+    int reuse = 1;
+    if (setsockopt(newSock, SOL_SOCKET, SO_REUSEADDR, (char *)&reuse,
+                   sizeof(reuse)) < 0)
     {
-      try
+      pushStatus(std::string("Error: Setting SO_REUSEADDR error: ") +
+                 strerror(errno) + ". Retrying...");
+      closesocket(newSock);
+      sleepBeforeRetry();
+      continue;
+    }
+
+    struct sockaddr_in localSock;
+    memset(&localSock, 0, sizeof(localSock));
+    localSock.sin_family = AF_INET;
+    localSock.sin_port = htons(port);
+    localSock.sin_addr.s_addr = INADDR_ANY;
+
+    if (bind(newSock, (struct sockaddr *)&localSock, sizeof(localSock)) < 0)
+    {
+      pushStatus(std::string("Error: binding socket: ") + strerror(errno) +
+                 ". Retrying...");
+      closesocket(newSock);
+      sleepBeforeRetry();
+      continue;
+    }
+
+    struct ip_mreq group;
+    group.imr_multiaddr.s_addr = inet_addr(multicastIP.c_str());
+    group.imr_interface.s_addr = INADDR_ANY;
+    if (setsockopt(newSock, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&group,
+                   sizeof(group)) < 0)
+    {
+      pushStatus(std::string("Error: Adding multicast group error: ") +
+                 strerror(errno) + ". Retrying...");
+      closesocket(newSock);
+      sleepBeforeRetry();
+      continue;
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(socketMutex);
+      sockfd = newSock;
+    }
+
+    std::stringstream ss;
+    ss << "Multicast listening on " << multicastIP << ":" << port;
+    pushStatus(ss.str());
+
+    while (running)
+    {
+      char buffer[4096];
+      int currentSock = -1;
       {
-        json j = json::parse(buffer);
-        onMessageReceived(j);
+        std::lock_guard<std::mutex> lock(socketMutex);
+        currentSock = sockfd;
       }
-      catch (json::parse_error &e)
+
+      if (currentSock == -1)
       {
-        std::cerr << "JSON parsing error: " << e.what() << std::endl;
+        break;
+      }
+
+      int nbytes = recv(currentSock, buffer, sizeof(buffer) - 1, 0);
+      if (nbytes <= 0)
+      {
+        if (!running)
+        {
+          break;
+        }
+
+        pushStatus(std::string("Error: multicast listener disconnected: ") +
+                   strerror(errno) + ". Retrying...");
+        break;
+      }
+
+      buffer[nbytes] = '\0';
+
+      if (onMessageReceived)
+      {
+        try
+        {
+          json j = json::parse(buffer);
+          onMessageReceived(j);
+        }
+        catch (json::parse_error &e)
+        {
+          std::cerr << "JSON parsing error: " << e.what() << std::endl;
+        }
       }
     }
+
+    closeSocket();
+    if (running)
+    {
+      sleepBeforeRetry();
+    }
   }
+
+  pushStatus("Listener stopping.");
 }

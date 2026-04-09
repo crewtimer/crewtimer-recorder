@@ -3,6 +3,8 @@
  * parsing them as JSON.
  */
 #include <functional>
+#include <atomic>
+#include <mutex>
 #include <string>
 #include <thread>
 
@@ -64,7 +66,8 @@ private:
   unsigned short port;        ///< Port number to listen on.
   int sockfd;                 ///< Socket file descriptor.
   std::thread listenerThread; ///< Thread for listening to multicast messages.
-  bool running;               ///< Flag to control the listener thread.
+  std::atomic<bool> running;  ///< Flag to control the listener thread.
+  std::mutex socketMutex;     ///< Guards access to sockfd across threads.
   MessageCallback onMessageReceived; ///< User-defined callback function.
 
   /**
@@ -74,4 +77,9 @@ private:
    * function.
    */
   void listen();
+
+  /**
+   * Closes the current socket if one is open.
+   */
+  void closeSocket();
 };

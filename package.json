@@ -227,6 +227,12 @@
       },
       "type": "distribution",
       "hardenedRuntime": true,
+      "extendInfo": {
+        "NSLocalNetworkUsageDescription": "CrewTimer Video Recorder discovers and connects to cameras and control devices on your local network.",
+        "NSBonjourServices": [
+          "_ndi._tcp"
+        ]
+      },
       "entitlements": "assets/entitlements.mac.plist",
       "entitlementsInherit": "assets/entitlements.mac.plist",
       "gatekeeperAssess": false,
