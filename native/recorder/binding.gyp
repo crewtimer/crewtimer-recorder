@@ -25,6 +25,7 @@
       ],
       "conditions": [
         ['OS=="mac"', {
+          "sources": ["src/macos/MacOSLocalNetworkPermission.mm"],
           "include_dirs": [
               "./lib-build/ffmpeg-static-mac/include",
               "/Library/NDI\ SDK\ for\ Apple/include/",
@@ -40,6 +41,8 @@
               "../lib-build/opencv-static-mac/lib/libopencv_core.a",
               "../lib-build/opencv-static-mac/lib/libopencv_imgproc.a",
               "../lib/libndi.dylib",
+              "-framework Foundation",
+              "-framework Network",
               "-framework VideoToolbox",
               "-framework AudioToolbox",
               "-framework CoreMedia",

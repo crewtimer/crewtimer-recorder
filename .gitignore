@@ -35,3 +35,4 @@ log.txt
 assets/Thumbs.db
 .env
 .qodo
+.claude/settings.local.json

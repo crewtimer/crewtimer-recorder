@@ -165,7 +165,6 @@ app
 
 app.on('ready', () => {
   setNativeMessageCallback((message) => {
-    // Forward the message to the renderer
     mainWindow?.webContents.send('native-message', message);
   });
 });

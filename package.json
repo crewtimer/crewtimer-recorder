@@ -1,5 +1,8 @@
 {
   "name": "crewtimer-recorder",
+  "resolutions": {
+    "@electron/node-gyp": "https://github.com/electron/node-gyp#0453f4fe4656c63277185b35feedec5716a27d90"
+  },
   "description": "A video recorder app for CrewTimer Video Review",
   "keywords": [
     "electron",

@@ -8,6 +8,9 @@
     "strict": true,
     "sourceMap": true,
     "moduleResolution": "node",
+    "paths": {
+      "crewtimer_video_recorder": ["./release/app/node_modules/crewtimer_video_recorder"]
+    },
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,

@@ -9,6 +9,10 @@
 #include <sstream>
 #include <streambuf>
 
+#ifdef __APPLE__
+extern "C" void triggerMacOSLocalNetworkPermission();
+#endif
+
 extern "C"
 {
 #include <libavcodec/avcodec.h>
@@ -587,14 +591,15 @@ Napi::Value setLogFile(const Napi::CallbackInfo &info)
 // Initialize the addon
 Napi::Object Init(Napi::Env env, Napi::Object exports)
 {
+#ifdef __APPLE__
+  triggerMacOSLocalNetworkPermission();
+#endif
   exports.Set(Napi::String::New(env, "nativeVideoRecorder"),
               Napi::Function::New(env, nativeVideoRecorder));
   exports.Set("setNativeMessageCallback",
               Napi::Function::New(env, initThreadSafeFunction));
-
   exports.Set("setLogFile", Napi::Function::New(env, setLogFile));
   exports.Set("shutdownRecorder", Napi::Function::New(env, shutdownRecorder));
-
   return exports;
 }
 

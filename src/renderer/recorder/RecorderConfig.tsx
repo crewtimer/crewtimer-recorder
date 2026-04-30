@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   TextField,
   Typography,
@@ -11,6 +11,7 @@ import {
 } from '@mui/material';
 import CameraIcon from '@mui/icons-material/Camera';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import {
   useRecordingStatus,
@@ -91,6 +92,13 @@ const RecorderConfig: React.FC = () => {
   }
   console.log(JSON.stringify(cameraList, null, 2));
 
+  const [hintReady, setHintReady] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setHintReady(true), 6000);
+    return () => clearTimeout(timer);
+  }, []);
+
   useEffect(() => {
     updateSettings({ waypoint });
   }, [waypoint]);
@@ -152,7 +160,7 @@ const RecorderConfig: React.FC = () => {
       <RecordingError />
       <Grid container spacing={2}>
         <Grid container item spacing={2} xs={8}>
-          <Grid item xs={9}>
+          <Grid item xs={8}>
             <TextField
               select
               margin="normal"
@@ -181,6 +189,25 @@ const RecorderConfig: React.FC = () => {
                 </MenuItem>
               )}
             </TextField>
+          </Grid>
+          <Grid item xs={1} container alignItems="center">
+            {window.platform.platform === 'darwin' &&
+              hintReady &&
+              cameraList.length === 0 && (
+                <Tooltip title="No cameras found. To allow camera discovery, enable Local Network access in System Settings → Privacy & Security → Local Network.">
+                  <IconButton
+                    size="small"
+                    onClick={() =>
+                      window.open(
+                        'x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork',
+                        '_blank',
+                      )
+                    }
+                  >
+                    <InfoOutlinedIcon fontSize="small" color="warning" />
+                  </IconButton>
+                </Tooltip>
+              )}
           </Grid>
           <Grid item xs={3}>
             <ProtocolSelector />
