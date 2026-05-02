@@ -122,14 +122,28 @@ public:
 
     const AVOutputFormat *oformat = pFormatCtx->oformat;
 
-    // Codec names in hardware accelerated preferred order
-    std::vector<std::string> codec_names = {"h264_v4l2m2m",      // Raspberry Pi 4
-                                            "h264_videotoolbox", // Apple
-                                            "h264_nvenc",        // NVIDIA
-                                            "h264_qsv",          // Intel
-                                            "h264_amf"           // AMD
-                                            "libx264",           // SOFTWARE
-                                            "libx264rgb"};
+    // Codec names in hardware accelerated preferred order, platform-specific
+#if defined(__APPLE__)
+    std::vector<std::string> codec_names = {
+        "h264_videotoolbox", // Apple Silicon / Intel Mac hardware
+        "libx264",
+        "libx264rgb"};
+#elif defined(_WIN32)
+    std::vector<std::string> codec_names = {
+        "h264_nvenc", // NVIDIA
+        "h264_qsv",   // Intel Quick Sync
+        "h264_amf",   // AMD
+        "h264_mf",    // Windows Media Foundation (HW on Win10+)
+        "libx264",
+        "libx264rgb"};
+#else
+    std::vector<std::string> codec_names = {
+        "h264_v4l2m2m", // Raspberry Pi / V4L2
+        "h264_nvenc",   // NVIDIA on Linux
+        "h264_qsv",     // Intel on Linux
+        "libx264",
+        "libx264rgb"};
+#endif
 
     const AVCodec *codec = nullptr;
     for (const auto &name : codec_names)
@@ -200,17 +214,25 @@ public:
     //   c->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
     AVDictionary *codec_options = NULL;
-    // 'profile' sets the feature set available to a decoder and thus limits
-    // encoding options.  'preset' controls conmpression speed.  Slower speed
-    // means more compression generally.
-    av_dict_set(&codec_options, "preset", "medium", 0);
-    // av_dict_set(&codec_options, "profile", "high", 0); // not found on
-    // windows av_dict_set(&codec_options, "preset", "slow", 0); // 80% cpu
-    // 90MB/min av_dict_set(&codec_options, "profile", "main", 0);
+    if (codecName == "libx264" || codecName == "libx264rgb")
+    {
+      // 'preset' controls compression speed; slower = more compression
+      av_dict_set(&codec_options, "preset", "medium", 0);
+    }
+    else if (codecName == "h264_nvenc")
+    {
+      av_dict_set(&codec_options, "preset", "p4", 0); // balanced quality/speed
+      av_dict_set(&codec_options, "tune", "hq", 0);
+    }
+    else if (codecName == "h264_qsv")
+    {
+      av_dict_set(&codec_options, "preset", "medium", 0);
+    }
+    // h264_videotoolbox, h264_amf, h264_mf: use encoder defaults
 
     if (avcodec_open2(pCodecCtx, codec, &codec_options) < 0)
     {
-      auto msg = "Error: Could not open codec using preset medium";
+      auto msg = "Error: Could not open codec " + codecName;
       SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
@@ -301,40 +323,52 @@ public:
 
   std::string writeVideoFrame(FramePtr video_frame)
   {
-    int inLinesize[1] = {video_frame->stride};
-    if (sws_ctx == nullptr)
+    if (video_frame->pixelFormat == Frame::PixelFormat::YUV420P)
     {
-      auto src_fmt = AV_PIX_FMT_UYVY422;
-      switch (video_frame->pixelFormat)
-      {
-      case Frame::PixelFormat::RGBX:
-        src_fmt = AV_PIX_FMT_RGBA;
-        inLinesize[0] = {4 * video_frame->xres};
-        break;
-      case Frame::PixelFormat::BGR:
-        src_fmt = AV_PIX_FMT_BGR24;
-        inLinesize[0] = {3 * video_frame->xres};
-        break;
-      case Frame::PixelFormat::UYVY422:
-      default:
-        // UYVY422 format, where each pixel consists
-        // of two chrominance (U and V) values and two
-        // luminance (Y) values.
-        src_fmt = AV_PIX_FMT_UYVY422;
-        break;
-      }
-      sws_ctx = sws_getContext(
-          pCodecCtx->width, pCodecCtx->height, src_fmt, pCodecCtx->width,
-          pCodecCtx->height,
-          pCodecCtx->pix_fmt, // AV_PIX_FMT_YUV420P, // YUV 4:2:0 for H.264
-          SWS_BICUBIC, NULL, NULL, NULL);
+      // I420 layout: Y plane at data, U at data+w*h, V at data+w*h*5/4
+      // Direct plane copy into the encoder AVFrame — no color space conversion needed
+      const int w = pCodecCtx->width;
+      const int h = pCodecCtx->height;
+      const uint8_t *srcY = video_frame->data;
+      const uint8_t *srcU = srcY + w * h;
+      const uint8_t *srcV = srcU + (w / 2) * (h / 2);
+      for (int y = 0; y < h; y++)
+        memcpy(pFrame->data[0] + y * pFrame->linesize[0], srcY + y * w, w);
+      for (int y = 0; y < h / 2; y++)
+        memcpy(pFrame->data[1] + y * pFrame->linesize[1], srcU + y * (w / 2), w / 2);
+      for (int y = 0; y < h / 2; y++)
+        memcpy(pFrame->data[2] + y * pFrame->linesize[2], srcV + y * (w / 2), w / 2);
     }
-
-    // Convert the image format from receiver format to the codec's format
-
-    uint8_t *inData[1] = {video_frame->data};
-    sws_scale(sws_ctx, inData, inLinesize, 0, pCodecCtx->height, pFrame->data,
-              pFrame->linesize);
+    else
+    {
+      int inLinesize[1] = {video_frame->stride};
+      if (sws_ctx == nullptr)
+      {
+        auto src_fmt = AV_PIX_FMT_UYVY422;
+        switch (video_frame->pixelFormat)
+        {
+        case Frame::PixelFormat::RGBX:
+          src_fmt = AV_PIX_FMT_RGBA;
+          inLinesize[0] = {4 * video_frame->xres};
+          break;
+        case Frame::PixelFormat::BGR:
+          src_fmt = AV_PIX_FMT_BGR24;
+          inLinesize[0] = {3 * video_frame->xres};
+          break;
+        case Frame::PixelFormat::UYVY422:
+        default:
+          src_fmt = AV_PIX_FMT_UYVY422;
+          break;
+        }
+        sws_ctx = sws_getContext(
+            pCodecCtx->width, pCodecCtx->height, src_fmt, pCodecCtx->width,
+            pCodecCtx->height, pCodecCtx->pix_fmt,
+            SWS_BICUBIC, NULL, NULL, NULL);
+      }
+      uint8_t *inData[1] = {video_frame->data};
+      sws_scale(sws_ctx, inData, inLinesize, 0, pCodecCtx->height, pFrame->data,
+                pFrame->linesize);
+    }
 
     pFrame->pts =
         av_rescale_q(frame_index++, pCodecCtx->time_base, video_st->time_base);

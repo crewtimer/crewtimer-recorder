@@ -17,7 +17,8 @@ public:
   {
     UYVY422 = 0,
     RGBX = 1,
-    BGR = 2
+    BGR = 2,
+    YUV420P = 3 // I420: planar YUV, stride = width (Y plane); U/V planes at stride/2
   };
   int xres;
   int yres;
@@ -34,10 +35,17 @@ public:
   Frame(int width, int height, PixelFormat format)
       : xres(width), yres(height), pixelFormat(format)
   {
-    // Calculate stride based on pixel format
-    int bytesPerPixel = (format == UYVY422) ? 2 : (format == RGBX ? 4 : 3);
-    stride = width * bytesPerPixel;
-    data = new uint8_t[stride * height];
+    if (format == YUV420P)
+    {
+      stride = width; // Y plane stride; U/V planes use stride/2
+      data = new uint8_t[width * height * 3 / 2]; // I420 size
+    }
+    else
+    {
+      int bytesPerPixel = (format == UYVY422) ? 2 : (format == RGBX ? 4 : 3);
+      stride = width * bytesPerPixel;
+      data = new uint8_t[stride * height];
+    }
     ownData = true;
   }
 

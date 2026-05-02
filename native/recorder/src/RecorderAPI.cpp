@@ -39,60 +39,69 @@ inline uint8_t clamp(int value)
   return static_cast<uint8_t>(std::max(0, std::min(255, value)));
 }
 
-// Function to convert a UYVY422 buffer to a preallocated RGBA buffer
+// BT.601 YUV → RGB (used by both converters below)
+static std::tuple<uint8_t, uint8_t, uint8_t> yuvToRgb(uint8_t y, uint8_t u, uint8_t v)
+{
+  int c = y - 16;
+  int d = u - 128;
+  int e = v - 128;
+  return {
+      static_cast<uint8_t>(clamp((298 * c + 409 * e + 128) >> 8)),
+      static_cast<uint8_t>(clamp((298 * c - 100 * d - 208 * e + 128) >> 8)),
+      static_cast<uint8_t>(clamp((298 * c + 516 * d + 128) >> 8))};
+}
+
+// Convert a UYVY422 buffer to a preallocated RGBA buffer
 void uyvyToRgba(const uint8_t *uyvyBuffer, uint8_t *rgbaBuffer, int width,
                 int height, int stride)
 {
-  // Initialize index for the RGBA buffer
   int rgbaIndex = 0;
   for (int y = 0; y < height; ++y)
   {
     for (int x = 0; x < width; x += 2)
     {
-      // Each UYVY pixel pair contains four bytes
       int uyvyIndex = y * stride + x * 2;
-      uint8_t u = uyvyBuffer[uyvyIndex];
+      uint8_t u  = uyvyBuffer[uyvyIndex];
       uint8_t y0 = uyvyBuffer[uyvyIndex + 1];
-      uint8_t v = uyvyBuffer[uyvyIndex + 2];
+      uint8_t v  = uyvyBuffer[uyvyIndex + 2];
       uint8_t y1 = uyvyBuffer[uyvyIndex + 3];
 
-      // Convert YUV to RGB for each pixel
-      auto convertYuvToRgb = [](uint8_t y, uint8_t u, uint8_t v)
-      {
-        int c = y - 16;
-        int d = u - 128;
-        int e = v - 128;
+      auto [r0, g0, b0] = yuvToRgb(y0, u, v);
+      rgbaBuffer[rgbaIndex++] = r0;
+      rgbaBuffer[rgbaIndex++] = g0;
+      rgbaBuffer[rgbaIndex++] = b0;
+      rgbaBuffer[rgbaIndex++] = 255;
 
-        int r = clamp((298 * c + 409 * e + 128) >> 8);
-        int g = clamp((298 * c - 100 * d - 208 * e + 128) >> 8);
-        int b = clamp((298 * c + 516 * d + 128) >> 8);
+      auto [r1, g1, b1] = yuvToRgb(y1, u, v);
+      rgbaBuffer[rgbaIndex++] = r1;
+      rgbaBuffer[rgbaIndex++] = g1;
+      rgbaBuffer[rgbaIndex++] = b1;
+      rgbaBuffer[rgbaIndex++] = 255;
+    }
+  }
+}
 
-        return std::tuple<uint8_t, uint8_t, uint8_t>(r, g, b);
-      };
+// Convert an I420 (YUV420P) buffer to a preallocated RGBA buffer
+// Layout: Y plane at data, U at data+w*h, V at data+w*h*5/4
+void yuv420pToRgba(const uint8_t *i420Buffer, uint8_t *rgbaBuffer, int width, int height)
+{
+  const uint8_t *yPlane = i420Buffer;
+  const uint8_t *uPlane = i420Buffer + width * height;
+  const uint8_t *vPlane = i420Buffer + width * height * 5 / 4;
 
-      // First pixel (y0)
-      auto pixels = convertYuvToRgb(y0, u, v);
-      auto r0 = std::get<0>(pixels);
-      auto g0 = std::get<1>(pixels);
-      auto b0 = std::get<2>(pixels);
-
-      rgbaBuffer[rgbaIndex] = r0;
-      rgbaBuffer[rgbaIndex + 1] = g0;
-      rgbaBuffer[rgbaIndex + 2] = b0;
-      rgbaBuffer[rgbaIndex + 3] = 255; // Alpha channel
-      rgbaIndex += 4;
-
-      // Second pixel (y1)
-      pixels = convertYuvToRgb(y1, u, v);
-      auto r1 = std::get<0>(pixels);
-      auto g1 = std::get<1>(pixels);
-      auto b1 = std::get<2>(pixels);
-
-      rgbaBuffer[rgbaIndex] = r1;
-      rgbaBuffer[rgbaIndex + 1] = g1;
-      rgbaBuffer[rgbaIndex + 2] = b1;
-      rgbaBuffer[rgbaIndex + 3] = 255; // Alpha channel
-      rgbaIndex += 4;
+  int rgbaIndex = 0;
+  for (int row = 0; row < height; ++row)
+  {
+    for (int col = 0; col < width; ++col)
+    {
+      uint8_t yVal = yPlane[row * width + col];
+      uint8_t uVal = uPlane[(row / 2) * (width / 2) + col / 2];
+      uint8_t vVal = vPlane[(row / 2) * (width / 2) + col / 2];
+      auto [r, g, b] = yuvToRgb(yVal, uVal, vVal);
+      rgbaBuffer[rgbaIndex++] = r;
+      rgbaBuffer[rgbaIndex++] = g;
+      rgbaBuffer[rgbaIndex++] = b;
+      rgbaBuffer[rgbaIndex++] = 255;
     }
   }
 }
@@ -396,64 +405,68 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
         return ret;
       }
 
-      auto uyvy422Frame = videoController->getLastFrame();
-      if (!uyvy422Frame)
+      auto videoFrame = videoController->getLastFrame();
+      if (!videoFrame)
       {
         return ret;
       }
 
-      size_t totalBytes = 4 * uyvy422Frame->xres * uyvy422Frame->yres;
-
-      // uint8_t *bufferData = new uint8_t[totalBytes];
-
+      size_t totalBytes = 4 * videoFrame->xres * videoFrame->yres;
       auto bufferData = Napi::Buffer<uint8_t>::New(env, totalBytes);
-      uyvyToRgba(uyvy422Frame->data, bufferData.Data(), uyvy422Frame->xres,
-                 uyvy422Frame->yres, uyvy422Frame->stride);
+
+      if (videoFrame->pixelFormat == Frame::PixelFormat::YUV420P)
+      {
+        yuv420pToRgba(videoFrame->data, bufferData.Data(), videoFrame->xres, videoFrame->yres);
+      }
+      else
+      {
+        uyvyToRgba(videoFrame->data, bufferData.Data(), videoFrame->xres,
+                   videoFrame->yres, videoFrame->stride);
+      }
 
       double focusScore = 0.0;
       if (focusAreaConfig.enabled)
       {
-        // auto focus_start = std::chrono::high_resolution_clock::now();
-        // Compute a focus score
-        auto x = static_cast<int>(focusAreaConfig.xPct * uyvy422Frame->xres) & ~1; // must be even due to UYVY structure
-        auto y = static_cast<int>(focusAreaConfig.yPct * uyvy422Frame->yres);
-        cv::Point center(x, y); // ROI center
-        focus::Options opt;     // defaults OK
-        opt.roiSize = static_cast<int>(uyvy422Frame->yres * focusAreaConfig.sizePct) & ~1;
+        auto x = static_cast<int>(focusAreaConfig.xPct * videoFrame->xres) & ~1;
+        auto y = static_cast<int>(focusAreaConfig.yPct * videoFrame->yres);
+        cv::Point center(x, y);
+        focus::Options opt;
+        opt.roiSize = static_cast<int>(videoFrame->yres * focusAreaConfig.sizePct) & ~1;
         if (opt.roiSize < 32)
         {
-          opt.roiSize = std::max(64, uyvy422Frame->yres / 8);
-          std::cerr
-              << "pct: " << focusAreaConfig.sizePct << " roi=" << opt.roiSize << std::endl;
+          opt.roiSize = std::max(64, videoFrame->yres / 8);
+          std::cerr << "pct: " << focusAreaConfig.sizePct << " roi=" << opt.roiSize << std::endl;
         }
 
-        // UYVY is CV_8UC2
-        // UYVY stride means col indexing is in "pixels" (not bytes), so safe
-        cv::Mat fullUyvy(uyvy422Frame->yres, uyvy422Frame->xres, CV_8UC2, uyvy422Frame->data, uyvy422Frame->stride);
-
-        // Defensive: clamp ROI within frame bounds, ensure even x values due to UYVY structure
-        int roi_x = std::max(0, x - opt.roiSize / 2) & ~1; // must be even
+        int roi_x = std::max(0, x - opt.roiSize / 2) & ~1;
         int roi_y = std::max(0, y - opt.roiSize / 2);
-        int roi_w = std::min(opt.roiSize, uyvy422Frame->xres - roi_x) & ~1;
-        int roi_h = std::min(opt.roiSize, uyvy422Frame->yres - roi_y);
-
+        int roi_w = std::min(opt.roiSize, videoFrame->xres - roi_x) & ~1;
+        int roi_h = std::min(opt.roiSize, videoFrame->yres - roi_y);
         cv::Rect roiRect(roi_x, roi_y, roi_w, roi_h);
-        cv::Mat uyvy_roi = fullUyvy(roiRect);
 
-        // Convert ROI to Gray in one step:
         cv::Mat gray;
-        cv::cvtColor(uyvy_roi, gray, cv::COLOR_YUV2GRAY_UYVY);
+        if (videoFrame->pixelFormat == Frame::PixelFormat::YUV420P)
+        {
+          // Y plane is already luma — extract ROI directly, no conversion needed
+          cv::Mat yPlane(videoFrame->yres, videoFrame->xres, CV_8UC1,
+                         videoFrame->data, videoFrame->xres);
+          gray = yPlane(roiRect).clone();
+        }
+        else
+        {
+          cv::Mat fullUyvy(videoFrame->yres, videoFrame->xres, CV_8UC2,
+                           videoFrame->data, videoFrame->stride);
+          cv::cvtColor(fullUyvy(roiRect), gray, cv::COLOR_YUV2GRAY_UYVY);
+        }
 
-        // Call focus score on  ROI
-        focusScore = focus::scoreAt(gray, center, opt); // center-point API
-        // std::cerr << x << "," << y << "," << roi_x << "," << roi_y << "," << roi_w << "," << roi_h << "," << focusScore << std::endl;
+        focusScore = focus::scoreAt(gray, center, opt);
       }
 
       ret.Set("data", bufferData);
-      ret.Set("width", Napi::Number::New(env, uyvy422Frame->xres));
-      ret.Set("height", Napi::Number::New(env, uyvy422Frame->yres));
+      ret.Set("width", Napi::Number::New(env, videoFrame->xres));
+      ret.Set("height", Napi::Number::New(env, videoFrame->yres));
       ret.Set("totalBytes", Napi::Number::New(env, totalBytes));
-      ret.Set("tsMilli", Napi::Number::New(env, uyvy422Frame->timestamp / 10000));
+      ret.Set("tsMilli", Napi::Number::New(env, videoFrame->timestamp / 10000));
       ret.Set("focus", Napi::Number::New(env, focusScore));
       return ret;
     }

@@ -24,6 +24,7 @@ extern "C"
 #include <libswscale/swscale.h>
 #include <libavutil/imgutils.h>
 #include <libavutil/opt.h>
+#include <libavutil/hwcontext.h>
 }
 
 using namespace std::chrono;
@@ -80,7 +81,7 @@ class SrtReader : public VideoReader
     int ownedBufSize = 0;
 
   public:
-    SrtFrame(uint8_t *data, int size, int strideBytes)
+    SrtFrame(uint8_t *data, int size, int strideBytes, Frame::PixelFormat fmt = Frame::PixelFormat::UYVY422)
     {
       ownedBuf = data;
       ownedBufSize = size;
@@ -88,7 +89,7 @@ class SrtReader : public VideoReader
       this->ownData = false;
       this->data = data;
       this->stride = strideBytes;
-      this->pixelFormat = Frame::PixelFormat::UYVY422;
+      this->pixelFormat = fmt;
     }
     ~SrtFrame() override
     {
@@ -117,6 +118,7 @@ class SrtReader : public VideoReader
   int videoStreamIndex = -1;
 
   SwsContext *sws = nullptr;
+  AVPixelFormat lastSwsSrcFmt = AV_PIX_FMT_NONE;
   AVRational timeBase{1, 1000}; // default fallback
   AVRational avgFrameRate{0, 1};
   int64_t startTimeMicroseconds = 0;
@@ -168,45 +170,104 @@ class SrtReader : public VideoReader
     }
     resetTimingCalibration();
 
-    // Find decoder (expecting H.264)
-    const AVCodec *vdec = avcodec_find_decoder(vStream->codecpar->codec_id);
-    if (!vdec)
+    // Try hardware decoders in platform-specific order, fall back to software.
+    // name=nullptr means "use the stream's own codec ID decoder with this HW device"
+    // (VideoToolbox and similar hwaccel-based decoders have no separate named decoder)
+    struct HwDecoderSpec { const char *name; AVHWDeviceType hwType; };
+#if defined(__APPLE__)
+    static const HwDecoderSpec hwSpecs[] = {
+        // VideoToolbox has no separate named decoder — attach device to std h264 decoder
+        {nullptr, AV_HWDEVICE_TYPE_VIDEOTOOLBOX},
+    };
+#elif defined(_WIN32)
+    static const HwDecoderSpec hwSpecs[] = {
+        {"h264_cuvid", AV_HWDEVICE_TYPE_CUDA},   // NVIDIA NVDEC (named decoder)
+        {"h264_qsv",   AV_HWDEVICE_TYPE_QSV},    // Intel Quick Sync (named decoder)
+        {nullptr,      AV_HWDEVICE_TYPE_D3D11VA}, // any D3D11 GPU via hwaccel (AMD, integrated, etc.)
+    };
+#else
+    static const HwDecoderSpec hwSpecs[] = {
+        {"h264_cuvid",   AV_HWDEVICE_TYPE_CUDA},
+        {"h264_vaapi",   AV_HWDEVICE_TYPE_VAAPI},
+        {"h264_v4l2m2m", AV_HWDEVICE_TYPE_NONE},
+    };
+#endif
+    static const int hwSpecCount = sizeof(hwSpecs) / sizeof(hwSpecs[0]);
+
+    for (int i = 0; i < hwSpecCount && !vdecCtx; ++i)
     {
-      SystemEventQueue::push("SRT", "Error: No decoder for video codec");
-      return false;
+      const AVCodec *candidate = hwSpecs[i].name
+          ? avcodec_find_decoder_by_name(hwSpecs[i].name)
+          : avcodec_find_decoder(vStream->codecpar->codec_id);
+      if (!candidate)
+        continue;
+      AVCodecContext *testCtx = avcodec_alloc_context3(candidate);
+      if (!testCtx)
+        continue;
+      if (avcodec_parameters_to_context(testCtx, vStream->codecpar) < 0)
+      {
+        avcodec_free_context(&testCtx);
+        continue;
+      }
+      testCtx->thread_count = 0;
+      if (hwSpecs[i].hwType != AV_HWDEVICE_TYPE_NONE)
+      {
+        AVBufferRef *dev = nullptr;
+        if (av_hwdevice_ctx_create(&dev, hwSpecs[i].hwType, nullptr, nullptr, 0) < 0)
+        {
+          avcodec_free_context(&testCtx);
+          continue;
+        }
+        testCtx->hw_device_ctx = av_buffer_ref(dev);
+        av_buffer_unref(&dev);
+      }
+      if (avcodec_open2(testCtx, candidate, nullptr) >= 0)
+      {
+        vdecCtx = testCtx;
+        std::string hwLabel = hwSpecs[i].name
+            ? hwSpecs[i].name
+            : (std::string(candidate->name) + "+" + av_hwdevice_get_type_name(hwSpecs[i].hwType));
+        SystemEventQueue::push("SRT", "Hardware decoder: " + hwLabel);
+      }
+      else
+      {
+        avcodec_free_context(&testCtx);
+      }
     }
 
-    vdecCtx = avcodec_alloc_context3(vdec);
     if (!vdecCtx)
     {
-      SystemEventQueue::push("SRT", "Error: avcodec_alloc_context3 failed");
-      return false;
-    }
-    if (avcodec_parameters_to_context(vdecCtx, vStream->codecpar) < 0)
-    {
-      SystemEventQueue::push("SRT", "Error: avcodec_parameters_to_context failed");
-      avcodec_free_context(&vdecCtx);
-      vdecCtx = nullptr;
-      if (reader)
+      // Software decoder fallback
+      const AVCodec *vdec = avcodec_find_decoder(vStream->codecpar->codec_id);
+      if (!vdec)
       {
-        reader->close();
-        reader = nullptr;
+        SystemEventQueue::push("SRT", "Error: No decoder for video codec");
+        return false;
       }
-      return false;
-    }
-
-    vdecCtx->thread_count = 0; // auto
-    if (avcodec_open2(vdecCtx, vdec, nullptr) < 0)
-    {
-      SystemEventQueue::push("SRT", "Error: avcodec_open2 failed");
-      avcodec_free_context(&vdecCtx);
-      vdecCtx = nullptr;
-      if (reader)
+      vdecCtx = avcodec_alloc_context3(vdec);
+      if (!vdecCtx)
       {
-        reader->close();
-        reader = nullptr;
+        SystemEventQueue::push("SRT", "Error: avcodec_alloc_context3 failed");
+        return false;
       }
-      return false;
+      if (avcodec_parameters_to_context(vdecCtx, vStream->codecpar) < 0)
+      {
+        SystemEventQueue::push("SRT", "Error: avcodec_parameters_to_context failed");
+        avcodec_free_context(&vdecCtx);
+        vdecCtx = nullptr;
+        if (reader) { reader->close(); reader = nullptr; }
+        return false;
+      }
+      vdecCtx->thread_count = 0;
+      if (avcodec_open2(vdecCtx, vdec, nullptr) < 0)
+      {
+        SystemEventQueue::push("SRT", "Error: avcodec_open2 failed");
+        avcodec_free_context(&vdecCtx);
+        vdecCtx = nullptr;
+        if (reader) { reader->close(); reader = nullptr; }
+        return false;
+      }
+      SystemEventQueue::push("SRT", "Software decoder: " + std::string(vdec->name));
     }
 
     timeBase = vStream->time_base.num && vStream->time_base.den ? vStream->time_base : AVRational{1, 1000};
@@ -417,22 +478,9 @@ class SrtReader : public VideoReader
       return;
     }
 
-    // Setup scaler to convert decoded frames to UYVY422
     int outW = vdecCtx->width & ~1;
     int outH = vdecCtx->height & ~1;
-    AVPixelFormat outPix = AV_PIX_FMT_UYVY422;
-
-    sws = sws_getContext(
-        vdecCtx->width, vdecCtx->height, vdecCtx->pix_fmt,
-        outW, outH, outPix,
-        SWS_BILINEAR, nullptr, nullptr, nullptr);
-
-    if (!sws)
-    {
-      SystemEventQueue::push("SRT", "Error: sws_getContext failed");
-      closeInput();
-      return;
-    }
+    lastSwsSrcFmt = AV_PIX_FMT_NONE;
 
     if (!refreshStreamInfo())
     {
@@ -452,6 +500,13 @@ class SrtReader : public VideoReader
     // Startup sampling state is kept in member fields (init_first_unwrapped, init_last_unwrapped, init_samples)
     AVPacket *pkt = av_packet_alloc();
     AVFrame *frm = av_frame_alloc();
+    AVFrame *sw_frm = av_frame_alloc(); // reusable staging frame for HW→CPU download
+
+    // Hardware decoders (especially VideoToolbox) require the first packet fed to
+    // them to be a keyframe (IDR).  Feeding P/B frames before the first IDR causes
+    // "hardware accelerator failed to decode picture" errors.  Gate delivery until
+    // we see a keyframe; re-arm after every decoder flush (reconnect).
+    bool waitingForKeyframe = true;
 
     while (keepRunning)
     {
@@ -470,6 +525,7 @@ class SrtReader : public VideoReader
         readerGeneration = currentGeneration;
         SystemEventQueue::push("SRT", "Info: SRT input reopened; resetting timing calibration");
         avcodec_flush_buffers(vdecCtx);
+        waitingForKeyframe = true;
         frameCount = 0;
         lastTS100ns = 0;
         resetTimingCalibration();
@@ -484,6 +540,16 @@ class SrtReader : public VideoReader
         continue;
       }
 
+      if (waitingForKeyframe)
+      {
+        if (!(pkt->flags & AV_PKT_FLAG_KEY))
+        {
+          av_packet_unref(pkt);
+          continue;
+        }
+        waitingForKeyframe = false;
+      }
+
       // Send / Receive
       if (avcodec_send_packet(vdecCtx, pkt) == 0)
       {
@@ -491,50 +557,93 @@ class SrtReader : public VideoReader
         {
           frameCount++;
 
-          // Timestamp handling
-          int64_t pts = (frm->best_effort_timestamp == AV_NOPTS_VALUE)
-                            ? frm->pts
-                            : frm->best_effort_timestamp;
-
-          if (startPts == AV_NOPTS_VALUE)
+          // Download HW frame to CPU memory if needed
+          AVFrame *srcFrm = frm;
+          if (frm->hw_frames_ctx != nullptr)
           {
-            bool started = startup_collect_and_maybe_finish(frm, pts, static_cast<int>(frameCount), msPerFrame, frameRate);
-            if (!started)
+            av_frame_unref(sw_frm);
+            if (av_hwframe_transfer_data(sw_frm, frm, 0) < 0)
             {
-              // still in startup; skip this frame
+              SystemEventQueue::push("SRT", "Warning: hw frame transfer failed, skipping");
               av_frame_unref(frm);
               continue;
             }
-            // else startup finished and processing should continue for this frame
+            sw_frm->pts = frm->pts;
+            sw_frm->best_effort_timestamp = frm->best_effort_timestamp;
+            sw_frm->flags = frm->flags;
+            srcFrm = sw_frm;
+          }
+
+          // Timestamp handling
+          int64_t pts = (srcFrm->best_effort_timestamp == AV_NOPTS_VALUE)
+                            ? srcFrm->pts
+                            : srcFrm->best_effort_timestamp;
+
+          if (startPts == AV_NOPTS_VALUE)
+          {
+            bool started = startup_collect_and_maybe_finish(srcFrm, pts, static_cast<int>(frameCount), msPerFrame, frameRate);
+            if (!started)
+            {
+              av_frame_unref(frm);
+              continue;
+            }
           }
 
           // Every 5 minutes, log drift info
           if (frameCount % (60 * 60 * 5) == 0)
           {
             int64_t utcMilli = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
-            auto approxUtc = approxUtcFromDts_lockedToRef(pts,
-                                                          utcMilli);
+            auto approxUtc = approxUtcFromDts_lockedToRef(pts, utcMilli);
             auto delay = (utcMilli - approxUtc.utcMs);
             SystemEventQueue::push("SRT", "pts=" + std::to_string(pts) + " Approx UTC: " + std::to_string(approxUtc.utcMs) + " ms delta=" + std::to_string(delay) + " drift=" + std::to_string(delay - encodingDelay / 10000));
           }
 
           int64_t ts100ns = (pts == AV_NOPTS_VALUE) ? 0 : pts_to_100ns(pts);
 
-          // Convert to UYVY422
-          uint8_t *dstData[4] = {nullptr};
-          int dstLinesize[4] = {0};
-          int bufSize = av_image_alloc(dstData, dstLinesize, outW, outH, outPix, 32);
-          if (bufSize < 0)
+          // Initialize sws lazily for non-YUV420P sources (e.g. NV12 from HW decoders)
+          auto srcFmt = static_cast<AVPixelFormat>(srcFrm->format);
+          if (srcFmt != AV_PIX_FMT_YUV420P && (sws == nullptr || lastSwsSrcFmt != srcFmt))
           {
-            SystemEventQueue::push("SRT", "Error: av_image_alloc failed");
-            break;
+            if (sws) sws_freeContext(sws);
+            sws = sws_getContext(srcFrm->width, srcFrm->height, srcFmt,
+                                 outW, outH, AV_PIX_FMT_YUV420P,
+                                 SWS_BILINEAR, nullptr, nullptr, nullptr);
+            lastSwsSrcFmt = srcFmt;
+            if (!sws)
+            {
+              SystemEventQueue::push("SRT", "Error: sws_getContext failed");
+              av_frame_unref(frm);
+              continue;
+            }
           }
 
-          sws_scale(
-              sws,
-              frm->data, frm->linesize,
-              0, vdecCtx->height,
-              dstData, dstLinesize);
+          // Allocate I420 output buffer
+          int i420Size = outW * outH * 3 / 2;
+          uint8_t *i420Buf = static_cast<uint8_t *>(av_malloc(i420Size));
+          if (!i420Buf)
+          {
+            SystemEventQueue::push("SRT", "Error: av_malloc failed for I420 buffer");
+            av_frame_unref(frm);
+            continue;
+          }
+
+          if (srcFmt == AV_PIX_FMT_YUV420P)
+          {
+            // Direct plane copy — no color space conversion needed
+            for (int y = 0; y < outH; y++)
+              memcpy(i420Buf + y * outW, srcFrm->data[0] + y * srcFrm->linesize[0], outW);
+            for (int y = 0; y < outH / 2; y++)
+              memcpy(i420Buf + outW * outH + y * (outW / 2), srcFrm->data[1] + y * srcFrm->linesize[1], outW / 2);
+            for (int y = 0; y < outH / 2; y++)
+              memcpy(i420Buf + outW * outH * 5 / 4 + y * (outW / 2), srcFrm->data[2] + y * srcFrm->linesize[2], outW / 2);
+          }
+          else
+          {
+            // Convert to YUV420P (handles NV12 from hardware decoders, etc.)
+            uint8_t *dstPlanes[4] = {i420Buf, i420Buf + outW * outH, i420Buf + outW * outH * 5 / 4, nullptr};
+            int dstStrides[4] = {outW, outW / 2, outW / 2, 0};
+            sws_scale(sws, srcFrm->data, srcFrm->linesize, 0, srcFrm->height, dstPlanes, dstStrides);
+          }
 
           // Gap/duplicate diagnostics
           if (lastTS100ns != 0)
@@ -544,9 +653,7 @@ class SrtReader : public VideoReader
             {
               std::stringstream msg;
               if (deltaMs == 0)
-              {
                 msg << "Duplicate frame timestamp";
-              }
               else
               {
                 int framesMissing = (int)std::round((double)deltaMs / msPerFrame - 1);
@@ -554,26 +661,20 @@ class SrtReader : public VideoReader
               }
               std::cerr << msg.str() << std::endl;
               if ((deltaMs >= 110) || reportAllGaps)
-              {
                 SystemEventQueue::push("SRT", std::string("Warning: ") + msg.str());
-              }
             }
           }
 
           lastTS100ns = ts100ns;
 
-          // Always wrap the allocated buffer in a shared_ptr so it will be freed
-          // even when there's no consumer.
-          auto out = std::make_shared<SrtFrame>(dstData[0], bufSize, dstLinesize[0]);
+          auto out = std::make_shared<SrtFrame>(i420Buf, i420Size, outW, Frame::PixelFormat::YUV420P);
           out->xres = outW;
           out->yres = outH;
           out->timestamp = ts100ns;
           out->frame_rate_N = frameRate.num ? frameRate.num : 60000;
           out->frame_rate_D = frameRate.den ? frameRate.den : 1001;
           if (addFrameFunction)
-          {
             addFrameFunction(out);
-          }
 
           av_frame_unref(frm);
         }
@@ -581,6 +682,7 @@ class SrtReader : public VideoReader
         av_packet_unref(pkt);
       }
     }
+    av_frame_free(&sw_frm);
     av_frame_free(&frm);
     av_packet_free(&pkt);
     closeInput();

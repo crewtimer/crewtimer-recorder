@@ -21,16 +21,35 @@ FramePtr cropFrame(const FramePtr &frame, int cropX, int cropY, int cropWidth,
   croppedFrame->frame_rate_N = frame->frame_rate_N;
   croppedFrame->frame_rate_D = frame->frame_rate_D;
 
-  int bytesPerPixel = (frame->pixelFormat == Frame::UYVY422)
-                          ? 2
-                          : (frame->pixelFormat == Frame::RGBX ? 4 : 3);
-
-  for (int y = 0; y < cropHeight; ++y)
+  if (frame->pixelFormat == Frame::YUV420P)
   {
-    uint8_t *srcPtr =
-        frame->data + ((cropY + y) * frame->stride) + (cropX * bytesPerPixel);
-    uint8_t *dstPtr = croppedFrame->data + (y * croppedFrame->stride);
-    std::memcpy(dstPtr, srcPtr, cropWidth * bytesPerPixel);
+    // Planar I420 crop: each plane cropped independently
+    const int srcW = frame->xres;
+    const int srcH = frame->yres;
+    const uint8_t *srcY = frame->data;
+    const uint8_t *srcU = srcY + srcW * srcH;
+    const uint8_t *srcV = srcU + (srcW / 2) * (srcH / 2);
+    uint8_t *dstY = croppedFrame->data;
+    uint8_t *dstU = dstY + cropWidth * cropHeight;
+    uint8_t *dstV = dstU + (cropWidth / 2) * (cropHeight / 2);
+    for (int y = 0; y < cropHeight; ++y)
+      std::memcpy(dstY + y * cropWidth, srcY + (cropY + y) * srcW + cropX, cropWidth);
+    for (int y = 0; y < cropHeight / 2; ++y)
+      std::memcpy(dstU + y * (cropWidth / 2), srcU + (cropY / 2 + y) * (srcW / 2) + cropX / 2, cropWidth / 2);
+    for (int y = 0; y < cropHeight / 2; ++y)
+      std::memcpy(dstV + y * (cropWidth / 2), srcV + (cropY / 2 + y) * (srcW / 2) + cropX / 2, cropWidth / 2);
+  }
+  else
+  {
+    int bytesPerPixel = (frame->pixelFormat == Frame::UYVY422)
+                            ? 2
+                            : (frame->pixelFormat == Frame::RGBX ? 4 : 3);
+    for (int y = 0; y < cropHeight; ++y)
+    {
+      uint8_t *srcPtr = frame->data + ((cropY + y) * frame->stride) + (cropX * bytesPerPixel);
+      uint8_t *dstPtr = croppedFrame->data + (y * croppedFrame->stride);
+      std::memcpy(dstPtr, srcPtr, cropWidth * bytesPerPixel);
+    }
   }
 
   return croppedFrame;
