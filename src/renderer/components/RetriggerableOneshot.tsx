@@ -12,7 +12,7 @@ import { useCallback, useEffect, useRef } from 'react';
  * @returns An object with `trigger` and `cancel` functions.
  *
  * @example
- * const [ trigger, cancel ] = retriggerableOneShot(
+ * const [ trigger, cancel ] = useRetriggerableOneShot(
  *   (message: string) => console.log(message),
  *   1000
  * );
@@ -20,7 +20,7 @@ import { useCallback, useEffect, useRef } from 'react';
  * trigger("Hello"); // Starts a 1-second timer
  * cancel(true); // Cancels the timer and executes immediately
  */
-function retriggerableOneShot<T>(
+function useRetriggerableOneShot<T>(
   fn: (...args: T[]) => void,
   delay: number,
 ): [(...args: T[]) => void, (executeIfPending: boolean) => void] {
@@ -72,11 +72,9 @@ function retriggerableOneShot<T>(
     [fn],
   );
 
-  useEffect(() => {
-    cancel(true);
-  }, []);
+  useEffect(() => () => cancel(true), [cancel]);
 
   return [trigger, cancel];
 }
 
-export default retriggerableOneShot;
+export default useRetriggerableOneShot;

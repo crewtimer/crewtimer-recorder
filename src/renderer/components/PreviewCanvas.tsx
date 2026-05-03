@@ -37,7 +37,7 @@ import {
 import { GrabFrameResponse, Rect } from '../recorder/RecorderTypes';
 import { showErrorDialog } from './ErrorDialog';
 import CanvasIcon from './CanvasIcon';
-import retriggerableOneShot from './RetriggerableOneshot';
+import useRetriggerableOneShot from './RetriggerableOneshot';
 
 const VIDEO_STOPPED_MESSAGE = 'Recording stopped. Press START to resume.';
 
@@ -343,7 +343,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
 
   const [timeoutMessage, setTimeoutMessage] = useState('');
 
-  const [applyChanges] = retriggerableOneShot((cropArea: Rect) => {
+  const [applyChanges] = useRetriggerableOneShot((cropArea: Rect) => {
     const oldGuide = getSrcGuideCoords();
     setRecordingProps((prior) => ({ ...prior, cropArea }));
     // Updte the guide position so it doesn't move when the crop changes

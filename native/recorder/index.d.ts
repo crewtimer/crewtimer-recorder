@@ -1,7 +1,9 @@
+/* eslint-disable import/no-relative-packages */
 import {
   RecorderMessageResponseType,
   RecorderMessageTypes,
 } from '../../src/renderer/recorder/RecorderTypes';
+/* eslint-enable import/no-relative-packages */
 
 /**
  * This module provides native C++ functionality as a Node.js addon,
