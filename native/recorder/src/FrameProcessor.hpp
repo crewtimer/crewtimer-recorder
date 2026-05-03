@@ -77,7 +77,7 @@ public:
    */
   FrameProcessor(const std::string directory, const std::string prefix,
                  std::shared_ptr<VideoRecorder> videoRecorder, int durationSecs,
-                 FRectangle cropArea, Guide guide, bool addTimeOverlay);
+                 FRectangle cropArea, Guide guide);
 
   void addFrame(FramePtr frame);
 
@@ -115,7 +115,6 @@ private:
   FRectangle cropArea;
   Rectangle pxCropArea;
   Guide guide;
-  bool addTimeOverlay;
 
   std::shared_ptr<VideoRecorder> videoRecorder;
   uint64_t durationSecs;

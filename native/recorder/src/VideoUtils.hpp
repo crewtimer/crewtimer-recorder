@@ -16,7 +16,6 @@ public:
   enum PixelFormat
   {
     UYVY422 = 0,
-    RGBX = 1,
     BGR = 2,
     YUV420P = 3 // I420: planar YUV, stride = width (Y plane); U/V planes at stride/2
   };
@@ -42,7 +41,7 @@ public:
     }
     else
     {
-      int bytesPerPixel = (format == UYVY422) ? 2 : (format == RGBX ? 4 : 3);
+      int bytesPerPixel = (format == UYVY422) ? 2 : 3;
       stride = width * bytesPerPixel;
       data = new uint8_t[stride * height];
     }
@@ -63,5 +62,3 @@ typedef std::shared_ptr<Frame> FramePtr;
 
 FramePtr cropFrame(const FramePtr &frame, int cropX, int cropY, int cropWidth,
                    int cropHeight);
-void encodeTimestamp(uint8_t *screen, int stride, uint64_t ts100ns);
-void overlayTime(uint8_t *ptr, int stride, uint64_t ts100ns, const std::tm *local_time = nullptr);

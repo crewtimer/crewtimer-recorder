@@ -47,7 +47,6 @@ export interface StartRecorderMessage extends RecorderMessage {
     cropArea: Rect;
     guide: { pt1: number; pt2: number };
     reportAllGaps?: boolean;
-    addTimeOverlay?: boolean;
   };
 }
 export interface RecorderResponse extends HandlerResponse {}

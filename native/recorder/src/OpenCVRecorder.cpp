@@ -39,14 +39,6 @@ public:
     switch (video_frame->pixelFormat)
     {
 
-    case Frame::PixelFormat::RGBX:
-    {
-      cv::Mat ndi_frame(cv::Size(video_frame->xres, video_frame->yres), CV_8UC4,
-                        video_frame->data, cv::Mat::AUTO_STEP);
-      cv::cvtColor(ndi_frame, this->frame, cv::COLOR_RGBA2BGR);
-      this->video_writer.write(this->frame);
-      break;
-    }
     case Frame::PixelFormat::BGR:
     {
       cv::Mat ndi_frame(cv::Size(video_frame->xres, video_frame->yres), CV_8UC3,

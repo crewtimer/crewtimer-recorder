@@ -56,10 +56,6 @@ export const [useReportAllGaps, , getReportAllGaps] = UseStoredDatum(
   'reportAllGaps',
   false,
 );
-export const [useAddTimeOverlay, , getAddTimeOverlay] = UseStoredDatum(
-  'addTimeOverlay',
-  false,
-);
 
 export const [useWaypointList, setWaypointList, getWaypointList] = UseDatum<
   string[]

@@ -33,79 +33,6 @@ using json = nlohmann::json;
 std::shared_ptr<VideoController> videoController;
 std::unique_ptr<IViscaTcpClient> viscaClient;
 
-// Utility function to clamp a value between 0 and 255
-inline uint8_t clamp(int value)
-{
-  return static_cast<uint8_t>(std::max(0, std::min(255, value)));
-}
-
-// BT.601 YUV → RGB (used by both converters below)
-static std::tuple<uint8_t, uint8_t, uint8_t> yuvToRgb(uint8_t y, uint8_t u, uint8_t v)
-{
-  int c = y - 16;
-  int d = u - 128;
-  int e = v - 128;
-  return {
-      static_cast<uint8_t>(clamp((298 * c + 409 * e + 128) >> 8)),
-      static_cast<uint8_t>(clamp((298 * c - 100 * d - 208 * e + 128) >> 8)),
-      static_cast<uint8_t>(clamp((298 * c + 516 * d + 128) >> 8))};
-}
-
-// Convert a UYVY422 buffer to a preallocated RGBA buffer
-void uyvyToRgba(const uint8_t *uyvyBuffer, uint8_t *rgbaBuffer, int width,
-                int height, int stride)
-{
-  int rgbaIndex = 0;
-  for (int y = 0; y < height; ++y)
-  {
-    for (int x = 0; x < width; x += 2)
-    {
-      int uyvyIndex = y * stride + x * 2;
-      uint8_t u  = uyvyBuffer[uyvyIndex];
-      uint8_t y0 = uyvyBuffer[uyvyIndex + 1];
-      uint8_t v  = uyvyBuffer[uyvyIndex + 2];
-      uint8_t y1 = uyvyBuffer[uyvyIndex + 3];
-
-      auto [r0, g0, b0] = yuvToRgb(y0, u, v);
-      rgbaBuffer[rgbaIndex++] = r0;
-      rgbaBuffer[rgbaIndex++] = g0;
-      rgbaBuffer[rgbaIndex++] = b0;
-      rgbaBuffer[rgbaIndex++] = 255;
-
-      auto [r1, g1, b1] = yuvToRgb(y1, u, v);
-      rgbaBuffer[rgbaIndex++] = r1;
-      rgbaBuffer[rgbaIndex++] = g1;
-      rgbaBuffer[rgbaIndex++] = b1;
-      rgbaBuffer[rgbaIndex++] = 255;
-    }
-  }
-}
-
-// Convert an I420 (YUV420P) buffer to a preallocated RGBA buffer
-// Layout: Y plane at data, U at data+w*h, V at data+w*h*5/4
-void yuv420pToRgba(const uint8_t *i420Buffer, uint8_t *rgbaBuffer, int width, int height)
-{
-  const uint8_t *yPlane = i420Buffer;
-  const uint8_t *uPlane = i420Buffer + width * height;
-  const uint8_t *vPlane = i420Buffer + width * height * 5 / 4;
-
-  int rgbaIndex = 0;
-  for (int row = 0; row < height; ++row)
-  {
-    for (int col = 0; col < width; ++col)
-    {
-      uint8_t yVal = yPlane[row * width + col];
-      uint8_t uVal = uPlane[(row / 2) * (width / 2) + col / 2];
-      uint8_t vVal = vPlane[(row / 2) * (width / 2) + col / 2];
-      auto [r, g, b] = yuvToRgb(yVal, uVal, vVal);
-      rgbaBuffer[rgbaIndex++] = r;
-      rgbaBuffer[rgbaIndex++] = g;
-      rgbaBuffer[rgbaIndex++] = b;
-      rgbaBuffer[rgbaIndex++] = 255;
-    }
-  }
-}
-
 // Encode a raw video frame as a JPEG using FFmpeg's MJPEG encoder.
 // Works directly on YUV420P or UYVY422 input — no intermediate BGR step.
 static std::vector<uint8_t> encodeFrameAsJpeg(const FramePtr &videoFrame, int quality)
@@ -357,11 +284,6 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
       {
         reportAllGaps = props.Get("reportAllGaps").As<Napi::Boolean>();
       }
-      bool addTimeOverlay = false;
-      if (props.Has("addTimeOverlay"))
-      {
-        addTimeOverlay = props.Get("addTimeOverlay").As<Napi::Boolean>();
-      }
       auto protocol = getNapiStringField(props, "protocol", "SRT");
       auto folder = props.Get("recordingFolder").As<Napi::String>().Utf8Value();
       auto prefix = getNapiStringField(props, "recordingPrefix", "CT_");
@@ -385,7 +307,7 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
       guide.pt2 = guideObj.Get("pt2").As<Napi::Number>().FloatValue();
 
       auto result = videoController->start(networkCamera, protocol, "ffmpeg", folder, prefix,
-                                           interval, cropRect, guide, reportAllGaps, addTimeOverlay);
+                                           interval, cropRect, guide, reportAllGaps);
       if (!result.empty())
       {
         std::cerr << "Error: " << result << std::endl;

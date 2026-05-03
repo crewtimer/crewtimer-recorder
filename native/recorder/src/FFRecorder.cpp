@@ -347,10 +347,6 @@ public:
         auto src_fmt = AV_PIX_FMT_UYVY422;
         switch (video_frame->pixelFormat)
         {
-        case Frame::PixelFormat::RGBX:
-          src_fmt = AV_PIX_FMT_RGBA;
-          inLinesize[0] = {4 * video_frame->xres};
-          break;
         case Frame::PixelFormat::BGR:
           src_fmt = AV_PIX_FMT_BGR24;
           inLinesize[0] = {3 * video_frame->xres};

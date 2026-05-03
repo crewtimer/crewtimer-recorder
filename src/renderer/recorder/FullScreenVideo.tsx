@@ -1,5 +1,5 @@
 import { FullSizeWindow } from '../components/FullSizeWindow';
-import RGBAImageCanvas from '../components/RGBAImageCanvas';
+import PreviewCanvas from '../components/PreviewCanvas';
 import ViscaControlPanel from '../visca/ViscaControlPanel';
 
 export const FullScreenVideo = () => {
@@ -14,7 +14,7 @@ export const FullScreenVideo = () => {
     >
       {/* <RecordingError /> */}
       <ViscaControlPanel />
-      <FullSizeWindow component={RGBAImageCanvas} />
+      <FullSizeWindow component={PreviewCanvas} />
     </div>
   );
 };

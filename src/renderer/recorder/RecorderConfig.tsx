@@ -20,7 +20,7 @@ import {
   useWaypointList,
 } from './RecorderData';
 import { FullSizeWindow } from '../components/FullSizeWindow';
-import RGBAImageCanvas from '../components/RGBAImageCanvas';
+import PreviewCanvas from '../components/PreviewCanvas';
 import { showErrorDialog } from '../components/ErrorDialog';
 import InfoPopup from '../components/InfoPopup';
 import RecorderTips from './RecorderTips';
@@ -356,7 +356,7 @@ const RecorderConfig: React.FC = () => {
           flexGrow: 1,
         }}
       >
-        <FullSizeWindow component={RGBAImageCanvas} />
+        <FullSizeWindow component={PreviewCanvas} />
       </div>
     </div>
   );

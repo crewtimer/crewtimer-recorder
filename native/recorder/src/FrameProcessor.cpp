@@ -37,9 +37,9 @@ FrameProcessor::FrameProcessor(const std::string directory,
                                const std::string prefix,
                                std::shared_ptr<VideoRecorder> videoRecorder,
                                int durationSecs, FRectangle cropArea,
-                               Guide guide, bool addTimeOverlay)
+                               Guide guide)
     : directory(directory), prefix(prefix), cropArea(cropArea),
-      pxCropArea(Rectangle(0, 0, 0, 0)), guide(guide), addTimeOverlay(addTimeOverlay),
+      pxCropArea(Rectangle(0, 0, 0, 0)), guide(guide),
       videoRecorder(videoRecorder), durationSecs(durationSecs), running(true),
       processThread(&FrameProcessor::processFrames, this)
 {
@@ -342,13 +342,6 @@ void FrameProcessor::processFrames()
         // std::cerr << " stride: " << std::dec << cropped->stride
         //           << "ptr: " << std::hex << (void *)(cropped->data) << std::dec
         //           << std::endl;
-      }
-
-      // We no longer encode the time as modified bits in the image but instead use meta data fields
-      // encodeTimestamp(cropped->data, cropped->stride, video_frame->timestamp);
-      if (addTimeOverlay)
-      {
-        overlayTime(cropped->data, cropped->stride, video_frame->timestamp);
       }
 
       auto err = videoRecorder->writeVideoFrame(cropped);

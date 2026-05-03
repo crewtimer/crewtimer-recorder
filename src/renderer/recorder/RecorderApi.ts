@@ -10,7 +10,6 @@ import {
   SettingsMessage,
 } from './RecorderTypes';
 import {
-  getAddTimeOverlay,
   getGuide,
   getLoggerAlert,
   getRecordingProps,
@@ -27,7 +26,7 @@ import {
 } from './RecorderData';
 import { showErrorDialog } from '../components/ErrorDialog';
 import { ViscaMessage, ViscaMessageProps, ViscaResponse } from './ViscaTypes';
-import { getViscaPort, setViscaState } from '../visca/ViscaState';
+import { setViscaState } from '../visca/ViscaState';
 
 export const startRecording = () => {
   setRecordingStartTime(Date.now());
@@ -46,7 +45,6 @@ export const startRecording = () => {
         cropArea,
         guide,
         reportAllGaps: getReportAllGaps(),
-        addTimeOverlay: getAddTimeOverlay(),
       },
     })
     .catch((e) => {
@@ -177,7 +175,7 @@ window.Util.onNativeMessage((nativeMessage: NativeMessage) => {
   switch (sender) {
     case 'mcast': {
       if (content.cmd === 'split-video' || content.cmd === 'info') {
-        const wp = content.wp;
+        const { wp } = content;
         let waypointList = getWaypointList();
         if (!waypointList.includes(wp)) {
           waypointList = [...waypointList, wp].sort((a, b) =>

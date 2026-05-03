@@ -312,7 +312,7 @@ const applyZoom = ({
 //   applyZoom({ zoomMode: ZoomMode.Fit });
 // };
 
-const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
+const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   let [frame] = useFrameGrab();
   const [guide, setGuide] = useGuide();
   const [isRecording] = useIsRecording();
@@ -717,7 +717,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       !frame.width ||
       !frame.height
     ) {
-      return;
+      return () => {};
     }
 
     const { data, width, height, tsMilli, focus } = frame;
@@ -725,7 +725,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     const ctx = canvas.getContext('2d');
 
     if (!ctx) {
-      return;
+      return () => {};
     }
 
     // Adjust the canvas size to fill its parent — only resize when changed to
@@ -744,7 +744,7 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       .then((bitmap) => {
         if (cancelled) {
           bitmap.close();
-          return;
+          return undefined;
         }
 
         // Clear the canvas and draw the JPEG bitmap with scaling
@@ -762,161 +762,164 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         );
         bitmap.close();
 
-    const destClipRect = getNativeClip(clip);
-    if (clip.width !== 1 || clip.height !== 1) {
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(
-        videoScaling.destX,
-        videoScaling.destY,
-        videoScaling.scaledWidth,
-        videoScaling.scaledHeight,
-      );
-      ctx.moveTo(destClipRect.x, destClipRect.y); // Move to top-left corner of the clear area
-      ctx.rect(
-        destClipRect.x,
-        destClipRect.y,
-        destClipRect.width,
-        destClipRect.height,
-      ); // Inner rectangle to exclude
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-      ctx.fill('evenodd'); // Fills everything except the inner rectangle
+        const destClipRect = getNativeClip(clip);
+        if (clip.width !== 1 || clip.height !== 1) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(
+            videoScaling.destX,
+            videoScaling.destY,
+            videoScaling.scaledWidth,
+            videoScaling.scaledHeight,
+          );
+          ctx.moveTo(destClipRect.x, destClipRect.y); // Move to top-left corner of the clear area
+          ctx.rect(
+            destClipRect.x,
+            destClipRect.y,
+            destClipRect.width,
+            destClipRect.height,
+          ); // Inner rectangle to exclude
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+          ctx.fill('evenodd'); // Fills everything except the inner rectangle
 
-      // Restore the canvas state
-      ctx.restore();
-    }
+          // Restore the canvas state
+          ctx.restore();
+        }
 
-    const nativeGuide = getNativeGuideCoords();
-    if (settings.showFinishGuide) {
-      const from = nativeGuide.pt1;
-      const to = nativeGuide.pt2;
-      from.y = destClipRect.y;
-      to.y = destClipRect.y + destClipRect.height;
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(from.x, from.y);
-      ctx.lineTo(to.x, to.y);
-      ctx.strokeStyle = 'red';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.restore();
-      drawBox(ctx, from.x, from.y, 12, 't');
-      drawBox(ctx, to.x, to.y, 12, 'b');
-      if (focusArea.enabled) {
-        // Draw focus area box
-        const center = translateSrcCanvas2DestCanvas({
-          x: videoScaling.srcWidth * focusArea.xPct,
-          y: videoScaling.srcHeight * focusArea.yPct,
-        });
-        const focusSize =
-          videoScaling.srcHeight * focusArea.sizePct * videoScaling.pixScale;
+        const nativeGuide = getNativeGuideCoords();
+        if (settings.showFinishGuide) {
+          const from = nativeGuide.pt1;
+          const to = nativeGuide.pt2;
+          from.y = destClipRect.y;
+          to.y = destClipRect.y + destClipRect.height;
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(from.x, from.y);
+          ctx.lineTo(to.x, to.y);
+          ctx.strokeStyle = 'red';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.restore();
+          drawBox(ctx, from.x, from.y, 12, 't');
+          drawBox(ctx, to.x, to.y, 12, 'b');
+          if (focusArea.enabled) {
+            // Draw focus area box
+            const center = translateSrcCanvas2DestCanvas({
+              x: videoScaling.srcWidth * focusArea.xPct,
+              y: videoScaling.srcHeight * focusArea.yPct,
+            });
+            const focusSize =
+              videoScaling.srcHeight *
+              focusArea.sizePct *
+              videoScaling.pixScale;
 
-        ctx.save();
-        ctx.strokeStyle = 'yellow';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(
-          center.x - focusSize / 2,
-          center.y - focusSize / 2,
-          focusSize,
-          focusSize,
+            ctx.save();
+            ctx.strokeStyle = 'yellow';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(
+              center.x - focusSize / 2,
+              center.y - focusSize / 2,
+              focusSize,
+              focusSize,
+            );
+            ctx.restore();
+          }
+        }
+
+        const x = Math.max(videoScaling.destX, 0) + 8;
+        const y = 36;
+        if (tsMilli !== 0) {
+          const tsString = `${convertTimestampToString(tsMilli)}`;
+
+          drawText(ctx, x, y, tsString);
+          if (focusArea.enabled) {
+            const avgFocus = focusTracker(focus);
+            const focusText = `focus=${Number((avgFocus.expAvg / 1000).toPrecision(2)).toFixed(1)}`;
+            drawText(ctx, x, videoScaling.destHeight / 2, focusText);
+          }
+        }
+
+        // Draw icons based on canvas width
+        const iconSize = 24;
+        const iconPadding = 10;
+        const { drawableRect } = videoScaling;
+        const maxSizeIconX =
+          drawableRect.x + drawableRect.width - (iconSize + iconPadding);
+
+        drawSvgIcon(
+          ctx,
+          isAdjustingCrop ? fullscreenImage : cropImage,
+          maxSizeIconX,
+          iconPadding,
         );
-        ctx.restore();
-      }
-    }
+        drawSvgIcon(
+          ctx,
+          snapToCenterImage,
+          maxSizeIconX,
+          iconPadding * 2 + 24,
+          true,
+        );
 
-    const x = Math.max(videoScaling.destX, 0) + 8;
-    const y = 36;
-    if (tsMilli !== 0) {
-      const tsString = `${convertTimestampToString(tsMilli)}`;
+        // Draw the WxH text in the upper-left corner of the rectangle with a background
+        const text = `${Math.round((clip.width * frame.width) / 4) * 4}x${Math.round((clip.height * frame.height) / 4) * 4}`;
+        drawText(ctx, x, 8, text);
 
-      drawText(ctx, x, y, tsString);
-      if (focusArea.enabled) {
-        const avgFocus = focusTracker(focus);
-        const focusText = `focus=${Number((avgFocus.expAvg / 1000).toPrecision(2)).toFixed(1)}`;
-        drawText(ctx, x, videoScaling.destHeight / 2, focusText);
-      }
-    }
+        if (isAdjustingCrop) {
+          // Draw finish selection rectangle
+          ctx.strokeStyle = '#ffffffb0';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(
+            destClipRect.x + 2,
+            destClipRect.y + 2,
+            destClipRect.width - 3,
+            destClipRect.height - 3,
+          );
+          ctx.strokeStyle = '#ff0000b0';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(
+            destClipRect.x + 2,
+            destClipRect.y + 2,
+            destClipRect.width - 3,
+            destClipRect.height - 3,
+          );
 
-    // Draw icons based on canvas width
-    const iconSize = 24;
-    const iconPadding = 10;
-    const { drawableRect } = videoScaling;
-    const maxSizeIconX =
-      drawableRect.x + drawableRect.width - (iconSize + iconPadding);
+          // Draw the corner handles
+          drawBox(ctx, destClipRect.x, destClipRect.y, 12, 'tl');
+          drawBox(
+            ctx,
+            destClipRect.x + destClipRect.width,
+            destClipRect.y,
+            12,
+            'tr',
+          );
 
-    drawSvgIcon(
-      ctx,
-      isAdjustingCrop ? fullscreenImage : cropImage,
-      maxSizeIconX,
-      iconPadding,
-    );
-    drawSvgIcon(
-      ctx,
-      snapToCenterImage,
-      maxSizeIconX,
-      iconPadding * 2 + 24,
-      true,
-    );
-
-    // Draw the WxH text in the upper-left corner of the rectangle with a background
-    const text = `${Math.round((clip.width * frame.width) / 4) * 4}x${Math.round((clip.height * frame.height) / 4) * 4}`;
-    drawText(ctx, x, 8, text);
-
-    if (isAdjustingCrop) {
-      // Draw finish selection rectangle
-      ctx.strokeStyle = '#ffffffb0';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(
-        destClipRect.x + 2,
-        destClipRect.y + 2,
-        destClipRect.width - 3,
-        destClipRect.height - 3,
-      );
-      ctx.strokeStyle = '#ff0000b0';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(
-        destClipRect.x + 2,
-        destClipRect.y + 2,
-        destClipRect.width - 3,
-        destClipRect.height - 3,
-      );
-
-      // Draw the corner handles
-      drawBox(ctx, destClipRect.x, destClipRect.y, 12, 'tl');
-      drawBox(
-        ctx,
-        destClipRect.x + destClipRect.width,
-        destClipRect.y,
-        12,
-        'tr',
-      );
-
-      drawBox(
-        ctx,
-        destClipRect.x,
-        destClipRect.y + destClipRect.height,
-        12,
-        'bl',
-      );
-      drawBox(
-        ctx,
-        destClipRect.x + destClipRect.width,
-        destClipRect.y + destClipRect.height,
-        12,
-        'br',
-      );
-    } else {
-      // Draw selection rectangle
-      ctx.strokeStyle = '#ffffffb0';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(
-        destClipRect.x,
-        destClipRect.y,
-        destClipRect.width,
-        destClipRect.height,
-      );
-    }
+          drawBox(
+            ctx,
+            destClipRect.x,
+            destClipRect.y + destClipRect.height,
+            12,
+            'bl',
+          );
+          drawBox(
+            ctx,
+            destClipRect.x + destClipRect.width,
+            destClipRect.y + destClipRect.height,
+            12,
+            'br',
+          );
+        } else {
+          // Draw selection rectangle
+          ctx.strokeStyle = '#ffffffb0';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(
+            destClipRect.x,
+            destClipRect.y,
+            destClipRect.width,
+            destClipRect.height,
+          );
+        }
+        return undefined;
       })
       .catch(() => {
         // Ignore frames that fail to decode (e.g. empty buffer on startup)
@@ -1005,4 +1008,4 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   );
 };
 
-export default RGBAImageCanvas;
+export default PreviewCanvas;

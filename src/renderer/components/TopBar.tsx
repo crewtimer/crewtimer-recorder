@@ -11,7 +11,6 @@ import {
 import { UseDatum } from 'react-usedatum';
 import MenuIcon from '@mui/icons-material/Menu';
 import Visibility from '@mui/icons-material/Visibility';
-import AccessTime from '@mui/icons-material/AccessTime';
 import logo from '../../../assets/icons/crewtimer.svg';
 import HamburgerMenu from './HamburgerMenu';
 import RecordingStatus from '../recorder/RecordingStatus';
@@ -19,7 +18,7 @@ import { useFirebaseDatum } from '../util/UseFirebase';
 import { setDialogConfig } from './ConfirmDialog';
 import { StartButton } from './StartButton';
 import LoggerAlert from './LoggerAlert';
-import { useAddTimeOverlay, useReportAllGaps } from '../recorder/RecorderData';
+import { useReportAllGaps } from '../recorder/RecorderData';
 
 export const drawerWidth = 240;
 export const [useDrawerOpen] = UseDatum(false);
@@ -32,7 +31,6 @@ const versionAsNumber = (version: string) => {
 export function TopBar() {
   const [open, setOpen] = useDrawerOpen();
   const [reportAllGaps] = useReportAllGaps();
-  const [addTimeOverlay] = useAddTimeOverlay();
   const latestVersion =
     useFirebaseDatum<string, string>(
       '/global/config/video-recorder/latestVersion',
@@ -111,11 +109,6 @@ export function TopBar() {
       {reportAllGaps && (
         <Tooltip title="All recording gaps reported as errors">
           <Visibility fontSize="small" sx={{ marginLeft: '1em' }} />
-        </Tooltip>
-      )}
-      {addTimeOverlay && (
-        <Tooltip title="Add time overlay to video stream">
-          <AccessTime fontSize="small" sx={{ marginLeft: '1em' }} />
         </Tooltip>
       )}
       <Box
