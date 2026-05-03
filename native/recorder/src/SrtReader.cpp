@@ -119,6 +119,10 @@ class SrtReader : public VideoReader
 
   SwsContext *sws = nullptr;
   AVPixelFormat lastSwsSrcFmt = AV_PIX_FMT_NONE;
+  int lastSwsSrcW = 0;
+  int lastSwsSrcH = 0;
+  int lastSwsDstW = 0;
+  int lastSwsDstH = 0;
   AVRational timeBase{1, 1000}; // default fallback
   AVRational avgFrameRate{0, 1};
   int64_t startTimeMicroseconds = 0;
@@ -284,6 +288,11 @@ class SrtReader : public VideoReader
       sws_freeContext(sws);
       sws = nullptr;
     }
+    lastSwsSrcFmt = AV_PIX_FMT_NONE;
+    lastSwsSrcW = 0;
+    lastSwsSrcH = 0;
+    lastSwsDstW = 0;
+    lastSwsDstH = 0;
     if (vdecCtx)
     {
       avcodec_free_context(&vdecCtx);
@@ -478,9 +487,11 @@ class SrtReader : public VideoReader
       return;
     }
 
-    int outW = vdecCtx->width & ~1;
-    int outH = vdecCtx->height & ~1;
     lastSwsSrcFmt = AV_PIX_FMT_NONE;
+    lastSwsSrcW = 0;
+    lastSwsSrcH = 0;
+    lastSwsDstW = 0;
+    lastSwsDstH = 0;
 
     if (!refreshStreamInfo())
     {
@@ -602,13 +613,32 @@ class SrtReader : public VideoReader
 
           // Initialize sws lazily for non-YUV420P sources (e.g. NV12 from HW decoders)
           auto srcFmt = static_cast<AVPixelFormat>(srcFrm->format);
-          if (srcFmt != AV_PIX_FMT_YUV420P && (sws == nullptr || lastSwsSrcFmt != srcFmt))
+          const int outW = srcFrm->width & ~1;
+          const int outH = srcFrm->height & ~1;
+          if (outW <= 0 || outH <= 0)
+          {
+            SystemEventQueue::push("SRT", "Warning: decoded frame has invalid dimensions, skipping");
+            av_frame_unref(frm);
+            continue;
+          }
+
+          if (srcFmt != AV_PIX_FMT_YUV420P &&
+              (sws == nullptr ||
+               lastSwsSrcFmt != srcFmt ||
+               lastSwsSrcW != srcFrm->width ||
+               lastSwsSrcH != srcFrm->height ||
+               lastSwsDstW != outW ||
+               lastSwsDstH != outH))
           {
             if (sws) sws_freeContext(sws);
             sws = sws_getContext(srcFrm->width, srcFrm->height, srcFmt,
                                  outW, outH, AV_PIX_FMT_YUV420P,
                                  SWS_BILINEAR, nullptr, nullptr, nullptr);
             lastSwsSrcFmt = srcFmt;
+            lastSwsSrcW = srcFrm->width;
+            lastSwsSrcH = srcFrm->height;
+            lastSwsDstW = outW;
+            lastSwsDstH = outH;
             if (!sws)
             {
               SystemEventQueue::push("SRT", "Error: sws_getContext failed");

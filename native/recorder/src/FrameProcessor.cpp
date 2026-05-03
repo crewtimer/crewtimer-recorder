@@ -269,6 +269,13 @@ void FrameProcessor::processFrames()
         ss << prefix << std::put_time(local_time, "%Y%m%d_%H%M%S");
 
         std::string filename = ss.str();
+        {
+          std::lock_guard<std::mutex> s(statusMutex);
+          if (filename == statusInfo.filename)
+          {
+            filename += "_" + std::to_string(count);
+          }
+        }
         jsonFilename = directory + "/" + filename + ".json";
         {
           std::lock_guard<std::mutex> s(statusMutex);
