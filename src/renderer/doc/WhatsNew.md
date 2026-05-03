@@ -1,3 +1,6 @@
+#### Version 1.0.20
+- Utilize hardware accelerated video encode/decode
+  
 #### Version 1.0.19
 - Better MacOS permission prompts
 
