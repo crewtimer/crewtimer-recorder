@@ -15,6 +15,7 @@ export interface RecordingProps {
   networkCamera: string;
   networkIP: string;
   showFinishGuide: boolean;
+  livePreview: boolean;
   cropArea: Rect;
   waypoint: string;
   protocol: string;
@@ -24,6 +25,8 @@ export interface RecorderMessage {
   op:
     | 'start-recording'
     | 'stop-recording'
+    | 'start-preview'
+    | 'stop-preview'
     | 'recording-status'
     | 'recording-log'
     | 'grab-frame'
@@ -47,6 +50,13 @@ export interface StartRecorderMessage extends RecorderMessage {
     cropArea: Rect;
     guide: { pt1: number; pt2: number };
     reportAllGaps?: boolean;
+  };
+}
+export interface PreviewRecorderMessage extends RecorderMessage {
+  op: 'start-preview' | 'stop-preview';
+  props?: {
+    networkCamera: string;
+    protocol: string;
   };
 }
 export interface RecorderResponse extends HandlerResponse {}
@@ -98,6 +108,7 @@ export const DefaultRecordingProps: RecordingProps = {
   networkCamera: '',
   networkIP: '',
   showFinishGuide: true,
+  livePreview: true,
   cropArea: { x: 0, y: 0, width: 1, height: 1 },
   waypoint: '',
   protocol: 'SRT',

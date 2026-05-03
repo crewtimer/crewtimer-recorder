@@ -39,7 +39,7 @@ import { showErrorDialog } from './ErrorDialog';
 import CanvasIcon from './CanvasIcon';
 import retriggerableOneShot from './RetriggerableOneshot';
 
-const VIDEO_STOPPED_MESSAGE = 'Video stopped. Press Start to resume.';
+const VIDEO_STOPPED_MESSAGE = 'Recording stopped. Press START to resume.';
 
 type ExpAvgResult = {
   expAvg: number;
@@ -702,7 +702,8 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
 
   useEffect(() => {
     const timer = setInterval(() => {
-      if (getIsRecording()) {
+      const currentRecordingProps = getRecordingProps();
+      if (getIsRecording() || currentRecordingProps.livePreview) {
         requestVideoFrame().catch(showErrorDialog);
       }
     }, 100);
@@ -993,7 +994,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
           display="flex"
           justifyContent="center"
           alignItems="center"
-          bgcolor="rgba(0, 0, 0, 0.4)"
+          // bgcolor="rgba(0, 0, 0, 0.4)"
           color="#fff"
           fontSize="1.5rem"
           zIndex={100}

@@ -2,6 +2,7 @@ import uuidgen from 'short-uuid';
 import { HandlerResponse } from '../msgbus/MsgbusTypes';
 import {
   StartRecorderMessage,
+  PreviewRecorderMessage,
   RecorderMessage,
   GrabFrameResponse,
   RecordingStatus,
@@ -61,6 +62,33 @@ export const stopRecording = () => {
     })
     .catch((e) => {
       console.log('Error stopping recording');
+      throw e;
+    });
+};
+
+export const startPreview = () => {
+  const recordingProps = { ...DefaultRecordingProps, ...getRecordingProps() };
+  return window.msgbus
+    .sendMessage<PreviewRecorderMessage, HandlerResponse>('recorder', {
+      op: 'start-preview',
+      props: {
+        networkCamera: recordingProps.networkCamera,
+        protocol: recordingProps.protocol,
+      },
+    })
+    .catch((e) => {
+      console.log('Error requesting start preview');
+      throw e;
+    });
+};
+
+export const stopPreview = () => {
+  return window.msgbus
+    .sendMessage<PreviewRecorderMessage, HandlerResponse>('recorder', {
+      op: 'stop-preview',
+    })
+    .catch((e) => {
+      console.log('Error requesting stop preview');
       throw e;
     });
 };

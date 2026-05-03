@@ -54,6 +54,11 @@ private:
   std::shared_ptr<VideoReader> videoReader;
   std::shared_ptr<MulticastReceiver> mcastListener;
   StatusInfo statusInfo;
+  bool previewRequested = false;
+  bool readerRunning = false;
+  std::string activeSourceName;
+  FramePtr lastPreviewFrame;
+  std::mutex frameSinkMutex;
 
   // mdns
   std::shared_ptr<ndi_mdns::NdiMdns> mdns;
@@ -62,6 +67,138 @@ private:
   std::mutex scanMutex;
   std::atomic<bool> scanEnabled;
   std::atomic<bool> scanPaused;
+
+  bool findCamera(const std::string &cameraName, VideoReader::CameraInfo &camera)
+  {
+    std::unique_lock<std::mutex> lock(scanMutex);
+    for (auto &cam : camList)
+    {
+      if (cam.name == cameraName)
+      {
+        camera = cam;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  std::string ensureVideoReader(const std::string &protocol)
+  {
+    if (activeProtocol == protocol && videoReader)
+    {
+      return "";
+    }
+
+    if (readerRunning && videoReader)
+    {
+      videoReader->stop();
+      readerRunning = false;
+    }
+
+    activeProtocol = protocol;
+    videoReader = nullptr;
+
+    if (protocol == "BASLER")
+    {
+#ifdef HAVE_BASLER
+      videoReader = createBaslerReader();
+#endif
+      if (!videoReader)
+      {
+        return "Basler support not compiled in.";
+      }
+    }
+    else if (protocol == "SRT")
+    {
+      videoReader = createSrtReader();
+    }
+    else if (protocol == "NDI")
+    {
+      videoReader = createNdiReader();
+    }
+    else
+    {
+      videoReader = createSrtReader();
+    }
+
+    return "";
+  }
+
+  std::string startReader(const VideoReader::CameraInfo &camera,
+                          const std::string &protocol,
+                          const bool reportAllGaps)
+  {
+    if (readerRunning && activeProtocol == protocol && activeSourceName == camera.name)
+    {
+      if (videoReader)
+      {
+        videoReader->setProperties(reportAllGaps);
+      }
+      return "";
+    }
+
+    if (readerRunning && videoReader)
+    {
+      videoReader->stop();
+      readerRunning = false;
+    }
+
+    auto err = ensureVideoReader(protocol);
+    if (!err.empty())
+    {
+      return err;
+    }
+    if (!videoReader)
+    {
+      return "Error: Unable to create video reader.";
+    }
+
+    {
+      std::lock_guard<std::mutex> lock(frameSinkMutex);
+      lastPreviewFrame = nullptr;
+    }
+
+    videoReader->setProperties(reportAllGaps);
+    err = videoReader->start(camera, [this](FramePtr frame)
+                             {
+                               std::shared_ptr<FrameProcessor> processor;
+                               {
+                                 std::lock_guard<std::mutex> lock(frameSinkMutex);
+                                 if (frame->frameType == Frame::FrameType::VIDEO)
+                                 {
+                                   lastPreviewFrame = frame;
+                                 }
+                                 processor = frameProcessor;
+                               }
+                               if (processor)
+                               {
+                                 processor->addFrame(frame);
+                               } });
+    if (!err.empty())
+    {
+      return err;
+    }
+
+    readerRunning = true;
+    activeSourceName = camera.name;
+    scanPaused = true;
+    return "";
+  }
+
+  void stopReader()
+  {
+    if (readerRunning && videoReader)
+    {
+      videoReader->stop();
+    }
+    readerRunning = false;
+    activeSourceName.clear();
+    scanPaused = false;
+    {
+      std::lock_guard<std::mutex> lock(frameSinkMutex);
+      lastPreviewFrame = nullptr;
+    }
+  }
 
   void mdnsScanLoop()
   {
@@ -148,6 +285,7 @@ public:
     monitorStopRequested = true;
 
     stop();
+    stopPreview();
     scanEnabled = false;
     scanPaused = true;
 
@@ -187,7 +325,12 @@ public:
 
     // compute recording and recordingDuration status fields
     uint32_t elapsedSecondsUInt = 0;
-    const auto recording = frameProcessor != nullptr && status == "";
+    std::shared_ptr<FrameProcessor> processor;
+    {
+      std::lock_guard<std::mutex> lock(frameSinkMutex);
+      processor = frameProcessor;
+    }
+    const auto recording = processor != nullptr && status == "";
     if (recording)
     {
       std::chrono::steady_clock::time_point endTime =
@@ -221,60 +364,10 @@ public:
       return "Video Controller already running";
     }
 
-    // find camera in camList by name and save it for passing to start
-
     VideoReader::CameraInfo camera;
+    if (!findCamera(srcName, camera))
     {
-      std::unique_lock<std::mutex> lock(scanMutex);
-      bool found = false;
-      for (auto &cam : camList)
-      {
-        if (cam.name == srcName)
-        {
-          found = true;
-          camera = cam;
-          break;
-        }
-      }
-      if (!found)
-      {
-        return "Camera source not found: " + srcName;
-      }
-    }
-
-    if (activeProtocol == protocol && videoReader)
-    {
-      // reuse existing reader
-    }
-    else
-    {
-      activeProtocol = protocol;
-      if (videoReader)
-      {
-        videoReader = nullptr; // reset existing reader
-      }
-    }
-    if (!videoReader)
-    {
-      if (protocol == "BASLER")
-      { // basler camera
-#ifdef HAVE_BASLER
-        videoReader = createBaslerReader();
-#endif
-        return "Basler support not compiled in.";
-      }
-      else if (protocol == "SRT")
-      {
-        videoReader = createSrtReader();
-      }
-      else if (protocol == "NDI")
-      {
-        videoReader = createNdiReader();
-      }
-      else
-      {
-        videoReader = createSrtReader(); // default to SRT
-      }
+      return "Camera source not found: " + srcName;
     }
 
     startTime = std::chrono::steady_clock::now();
@@ -316,21 +409,40 @@ public:
       return msg;
     }
 
-    scanPaused = true;
-    frameProcessor = std::shared_ptr<FrameProcessor>(new FrameProcessor(
+    auto processor = std::shared_ptr<FrameProcessor>(new FrameProcessor(
         dir, prefix, videoRecorder, interval, cropArea, guide));
+    {
+      std::lock_guard<std::mutex> lock(frameSinkMutex);
+      frameProcessor = processor;
+    }
 
-    videoReader->setProperties(reportAllGaps);
-    retval = videoReader->start(camera, [this](FramePtr frame)
-                                { this->frameProcessor->addFrame(frame); });
+    retval = startReader(camera, protocol, reportAllGaps);
     if (!retval.empty())
     {
+      {
+        std::lock_guard<std::mutex> lock(frameSinkMutex);
+        frameProcessor = nullptr;
+      }
+      processor->stop();
+      videoRecorder->stop();
+      videoRecorder = nullptr;
       return retval;
     }
 
-    auto fpStatus = frameProcessor->getStatus();
+    auto fpStatus = processor->getStatus();
     if (!fpStatus.recording)
     {
+      {
+        std::lock_guard<std::mutex> lock(frameSinkMutex);
+        frameProcessor = nullptr;
+      }
+      processor->stop();
+      videoRecorder->stop();
+      videoRecorder = nullptr;
+      if (!previewRequested)
+      {
+        stopReader();
+      }
       return fpStatus.error;
     }
 
@@ -340,39 +452,67 @@ public:
   std::string stop()
   {
     statusInfo.recording = false;
-    if (!frameProcessor)
+    std::shared_ptr<FrameProcessor> processor;
+    {
+      std::lock_guard<std::mutex> lock(frameSinkMutex);
+      processor = frameProcessor;
+      frameProcessor = nullptr;
+    }
+    if (!processor)
     {
       return "";
     }
-    scanPaused = false;
     SystemEventQueue::push("VID", "Shutting down video controller...");
 
-    SystemEventQueue::push("VID", "Stopping video reader...");
-    videoReader->stop();
-    // Do not null the reader since we rely on it to query  cameras
-
     SystemEventQueue::push("VID", "Stopping frame processor...");
-    frameProcessor->stop();
-    frameProcessor = nullptr;
+    processor->stop();
 
     SystemEventQueue::push("VID", "Stopping recorder...");
     videoRecorder->stop();
     videoRecorder = nullptr;
 
+    if (!previewRequested)
+    {
+      SystemEventQueue::push("VID", "Stopping video reader...");
+      stopReader();
+    }
+
     SystemEventQueue::push("VID", "VideoController stopped");
+    return "";
+  }
+
+  std::string startPreview(const std::string srcName, const std::string protocol)
+  {
+    std::lock_guard<std::recursive_mutex> lock(controlMutex);
+    VideoReader::CameraInfo camera;
+    if (!findCamera(srcName, camera))
+    {
+      return "Camera source not found: " + srcName;
+    }
+
+    previewRequested = true;
+    return startReader(camera, protocol, false);
+  }
+
+  std::string stopPreview()
+  {
+    std::lock_guard<std::recursive_mutex> lock(controlMutex);
+    previewRequested = false;
+    if (!videoRecorder)
+    {
+      stopReader();
+    }
     return "";
   }
 
   FramePtr getLastFrame()
   {
-    if (frameProcessor)
+    std::lock_guard<std::mutex> lock(frameSinkMutex);
+    if (lastPreviewFrame)
     {
-      return frameProcessor->getLastFrame();
+      return lastPreviewFrame;
     }
-    else
-    {
-      return nullptr;
-    }
+    return nullptr;
   }
   void monitorLoop()
   {
@@ -380,9 +520,14 @@ public:
     {
       std::this_thread::sleep_for(std::chrono::milliseconds(1000));
       std::lock_guard<std::recursive_mutex> lock(controlMutex);
-      if (videoRecorder && frameProcessor)
+      std::shared_ptr<FrameProcessor> processor;
       {
-        statusInfo.frameProcessor = frameProcessor->getStatus();
+        std::lock_guard<std::mutex> sinkLock(frameSinkMutex);
+        processor = frameProcessor;
+      }
+      if (videoRecorder && processor)
+      {
+        statusInfo.frameProcessor = processor->getStatus();
         if (!statusInfo.frameProcessor.error.empty())
         {
           statusInfo.error = statusInfo.frameProcessor.error;

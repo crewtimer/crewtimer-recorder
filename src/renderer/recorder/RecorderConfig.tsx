@@ -18,6 +18,8 @@ import {
   useRecordingProps,
   useRecordingPropsPending,
   useWaypointList,
+  useIsRecording,
+  getIsRecording,
 } from './RecorderData';
 import { FullSizeWindow } from '../components/FullSizeWindow';
 import PreviewCanvas from '../components/PreviewCanvas';
@@ -27,7 +29,7 @@ import RecorderTips from './RecorderTips';
 import { useViscaIP } from '../visca/ViscaState';
 import { useCameraList } from './CameraMonitor';
 import { ViscaPortSelector } from '../visca/ViscaPortSelector';
-import { updateSettings } from './RecorderApi';
+import { startPreview, stopPreview, updateSettings } from './RecorderApi';
 
 const { openDirDialog, openFileExplorer } = window.Util;
 
@@ -83,6 +85,7 @@ const RecorderConfig: React.FC = () => {
   const [recordingProps, setRecordingProps] = useRecordingProps();
   const [, setRecordingPropsPending] = useRecordingPropsPending();
   const [cameraList] = useCameraList();
+  const [isRecording] = useIsRecording();
   const [viscaIP] = useViscaIP();
   const [wpList] = useWaypointList();
   const { waypoint } = recordingProps;
@@ -143,6 +146,30 @@ const RecorderConfig: React.FC = () => {
 
   const selectedCamera = recordingProps.networkCamera;
   const camFound = cameraList.some((c) => c.name === selectedCamera);
+
+  useEffect(() => {
+    if (isRecording) {
+      return () => {};
+    }
+
+    if (recordingProps.livePreview && camFound && selectedCamera) {
+      startPreview().catch(showErrorDialog);
+    } else {
+      stopPreview().catch(showErrorDialog);
+    }
+
+    return () => {
+      if (!getIsRecording()) {
+        stopPreview().catch(showErrorDialog);
+      }
+    };
+  }, [
+    isRecording,
+    recordingProps.livePreview,
+    recordingProps.protocol,
+    selectedCamera,
+    camFound,
+  ]);
 
   // console.log(
   //   JSON.stringify({ cameraList, camFound, selectedCamera, viscaIP }, null, 2),
@@ -302,7 +329,7 @@ const RecorderConfig: React.FC = () => {
             />
           </Tooltip>
         </Grid>
-        <Grid item xs={4}>
+        <Grid item xs={3}>
           <Tooltip
             placement="top"
             title="Bind this recorder instance to the selected Video Review waypoint"
@@ -331,7 +358,7 @@ const RecorderConfig: React.FC = () => {
             </TextField>
           </Tooltip>
         </Grid>
-        <Grid item xs={3}>
+        <Grid item xs={2}>
           <Tooltip title="If checked, finish line location will be shown on video preview.">
             <FormControlLabel
               control={
@@ -342,6 +369,21 @@ const RecorderConfig: React.FC = () => {
                 />
               }
               label="Finish Line"
+              sx={{ paddingTop: '1em' }}
+            />
+          </Tooltip>
+        </Grid>
+        <Grid item xs={2}>
+          <Tooltip title="If checked, video preview stays live while a selected source is available.">
+            <FormControlLabel
+              control={
+                <Checkbox
+                  name="livePreview"
+                  checked={!!recordingProps.livePreview}
+                  onChange={handleChange}
+                />
+              }
+              label="Live Preview"
               sx={{ paddingTop: '1em' }}
             />
           </Tooltip>

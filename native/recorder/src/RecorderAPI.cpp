@@ -330,6 +330,39 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
       }
       return ret;
     }
+    else if (op == "start-preview")
+    {
+      if (!args.Has("props"))
+      {
+        Napi::TypeError::New(env, "Missing props field")
+            .ThrowAsJavaScriptException();
+        return ret;
+      }
+
+      auto props = args.Get("props").As<Napi::Object>();
+      auto protocol = getNapiStringField(props, "protocol", "SRT");
+      auto networkCamera = getNapiStringField(props, "networkCamera");
+      auto result = videoController->startPreview(networkCamera, protocol);
+      if (!result.empty())
+      {
+        ret.Set("status", Napi::String::New(env, "Fail"));
+        ret.Set("error", Napi::String::New(env, result));
+      }
+      return ret;
+    }
+    else if (op == "stop-preview")
+    {
+      if (videoController)
+      {
+        auto err = videoController->stopPreview();
+        if (!err.empty())
+        {
+          ret.Set("status", Napi::String::New(env, "Fail"));
+          ret.Set("error", Napi::String::New(env, err));
+        }
+      }
+      return ret;
+    }
     else if (op == "get-camera-list")
     {
 
