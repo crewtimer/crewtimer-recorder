@@ -27,17 +27,37 @@ export const StartButton: React.FC<StartButtonProps> = ({ hideStopButton }) => {
     }
   };
 
+  const canToggleRecording = camFound;
+
   return !isRecording || !hideStopButton ? (
     <Tooltip title={isRecording ? 'Stop Recording' : 'Start Recording'}>
       {/* span provides child when button disabled */}
-      <span>
+      <span
+        role="button"
+        tabIndex={canToggleRecording ? 0 : -1}
+        onClick={canToggleRecording ? handleToggleRecording : undefined}
+        onKeyDown={(event) => {
+          if (
+            canToggleRecording &&
+            (event.key === 'Enter' || event.key === ' ')
+          ) {
+            event.preventDefault();
+            handleToggleRecording();
+          }
+        }}
+        style={{
+          display: 'inline-flex',
+          cursor: canToggleRecording ? 'pointer' : 'default',
+        }}
+      >
         <Button
           variant="contained"
-          disabled={!camFound}
-          onClick={handleToggleRecording}
+          disabled={!canToggleRecording}
+          tabIndex={-1}
           startIcon={isRecording ? <StopIcon /> : <PlayArrowIcon />}
           sx={{
             backgroundColor: isRecording ? 'red' : 'green',
+            pointerEvents: 'none',
             '&:hover': {
               backgroundColor: isRecording ? 'darkred' : 'darkgreen',
             },
