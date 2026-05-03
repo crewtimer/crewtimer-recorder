@@ -74,10 +74,13 @@ cmake  \
       -DBUILD_DOCS=OFF -DBUILD_PERF_TESTS=OFF -DBUILD_TESTS=OFF -DBUILD_EXAMPLES=OFF \
       -DCMAKE_BUILD_TYPE=Release \
       -DBUILD_SHARED_LIBS=OFF \
-      -DBUILD_ZLIB=ON -DWITH_OPENEXR=ON \
-      -DWITH_IPP=OFF -DWITH_ITT=OFF \
-      -DWITH_JPEG=OFF -DBUILD_JPEG=OFF -DBUILD_opencv_imgcodecs=ON \
-      -DBUILD_LIST=core,imgproc,video \
+      -DBUILD_ZLIB=OFF -DWITH_OPENEXR=OFF \
+      -DWITH_IPP=OFF -DWITH_ITT=OFF -DWITH_VTK=OFF \
+      -DWITH_JPEG=ON -DBUILD_JPEG=ON \
+      -DWITH_PNG=OFF -DBUILD_PNG=OFF \
+      -DWITH_TIFF=OFF -DWITH_WEBP=OFF -DWITH_OPENJPEG=OFF \
+      -DBUILD_opencv_imgcodecs=ON \
+      -DBUILD_LIST=core,imgproc,video,imgcodecs \
       ..
 
 # Compile and install OpenCV

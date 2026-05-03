@@ -728,36 +728,39 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       return;
     }
 
-    // Adjust the canvas size to fill its parent
+    // Adjust the canvas size to fill its parent — only resize when changed to
+    // avoid the implicit canvas clear that would flash white between frames.
     const parentWidth = canvas.parentElement?.clientWidth || width;
     const parentHeight = canvas.parentElement?.clientHeight || height;
 
-    canvas.width = parentWidth;
-    canvas.height = parentHeight;
+    if (canvas.width !== parentWidth || canvas.height !== parentHeight) {
+      canvas.width = parentWidth;
+      canvas.height = parentHeight;
+    }
 
-    // Create an ImageData object
-    const imageData = new ImageData(new Uint8ClampedArray(data), width, height);
+    let cancelled = false;
+    const blob = new Blob([new Uint8Array(data)], { type: 'image/jpeg' });
+    createImageBitmap(blob)
+      .then((bitmap) => {
+        if (cancelled) {
+          bitmap.close();
+          return;
+        }
 
-    // Create an offscreen canvas to hold the image at its original size
-    const offscreenCanvas = document.createElement('canvas');
-    offscreenCanvas.width = width;
-    offscreenCanvas.height = height;
-    const offscreenCtx = offscreenCanvas.getContext('2d');
-    offscreenCtx?.putImageData(imageData, 0, 0);
-
-    // Clear the canvas and draw the offscreen canvas to the main canvas with scaling
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(
-      offscreenCanvas,
-      0,
-      0,
-      videoScaling.srcWidth,
-      videoScaling.srcHeight,
-      videoScaling.destX,
-      videoScaling.destY,
-      videoScaling.scaledWidth,
-      videoScaling.scaledHeight,
-    );
+        // Clear the canvas and draw the JPEG bitmap with scaling
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(
+          bitmap,
+          0,
+          0,
+          videoScaling.srcWidth,
+          videoScaling.srcHeight,
+          videoScaling.destX,
+          videoScaling.destY,
+          videoScaling.scaledWidth,
+          videoScaling.scaledHeight,
+        );
+        bitmap.close();
 
     const destClipRect = getNativeClip(clip);
     if (clip.width !== 1 || clip.height !== 1) {
@@ -914,6 +917,14 @@ const RGBAImageCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         destClipRect.height,
       );
     }
+      })
+      .catch(() => {
+        // Ignore frames that fail to decode (e.g. empty buffer on startup)
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     isAdjustingCrop,
     frame,

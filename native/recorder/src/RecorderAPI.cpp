@@ -106,6 +106,84 @@ void yuv420pToRgba(const uint8_t *i420Buffer, uint8_t *rgbaBuffer, int width, in
   }
 }
 
+// Encode a raw video frame as a JPEG using FFmpeg's MJPEG encoder.
+// Works directly on YUV420P or UYVY422 input — no intermediate BGR step.
+static std::vector<uint8_t> encodeFrameAsJpeg(const FramePtr &videoFrame, int quality)
+{
+  std::vector<uint8_t> result;
+
+  const AVCodec *codec = avcodec_find_encoder(AV_CODEC_ID_MJPEG);
+  if (!codec)
+    return result;
+
+  AVCodecContext *ctx = avcodec_alloc_context3(codec);
+  if (!ctx)
+    return result;
+
+  ctx->width = videoFrame->xres;
+  ctx->height = videoFrame->yres;
+  ctx->pix_fmt = AV_PIX_FMT_YUVJ420P;
+  ctx->time_base = AVRational{1, 25};
+  ctx->flags |= AV_CODEC_FLAG_QSCALE;
+  // Map quality 0-100 → QP 31-2 (lower QP = better)
+  ctx->global_quality = FF_QP2LAMBDA * std::max(2, (100 - quality) / 3);
+
+  if (avcodec_open2(ctx, codec, nullptr) < 0)
+  {
+    avcodec_free_context(&ctx);
+    return result;
+  }
+
+  AVFrame *frame = av_frame_alloc();
+  frame->format = AV_PIX_FMT_YUVJ420P;
+  frame->width = videoFrame->xres;
+  frame->height = videoFrame->yres;
+  frame->pts = 0;
+  av_frame_get_buffer(frame, 32);
+
+  // Build source plane/stride arrays for swscale
+  AVPixelFormat srcFmt;
+  const uint8_t *srcPlanes[4] = {};
+  int srcStrides[4] = {};
+
+  if (videoFrame->pixelFormat == Frame::PixelFormat::YUV420P)
+  {
+    srcFmt = AV_PIX_FMT_YUV420P;
+    srcPlanes[0] = videoFrame->data;
+    srcPlanes[1] = videoFrame->data + videoFrame->xres * videoFrame->yres;
+    srcPlanes[2] = videoFrame->data + videoFrame->xres * videoFrame->yres * 5 / 4;
+    srcStrides[0] = videoFrame->xres;
+    srcStrides[1] = videoFrame->xres / 2;
+    srcStrides[2] = videoFrame->xres / 2;
+  }
+  else // UYVY422
+  {
+    srcFmt = AV_PIX_FMT_UYVY422;
+    srcPlanes[0] = videoFrame->data;
+    srcStrides[0] = videoFrame->stride;
+  }
+
+  SwsContext *sws = sws_getContext(
+      videoFrame->xres, videoFrame->yres, srcFmt,
+      videoFrame->xres, videoFrame->yres, AV_PIX_FMT_YUVJ420P,
+      SWS_BILINEAR, nullptr, nullptr, nullptr);
+
+  if (sws)
+  {
+    sws_scale(sws, srcPlanes, srcStrides, 0, videoFrame->yres, frame->data, frame->linesize);
+    sws_freeContext(sws);
+  }
+
+  AVPacket *pkt = av_packet_alloc();
+  if (avcodec_send_frame(ctx, frame) == 0 && avcodec_receive_packet(ctx, pkt) == 0)
+    result.assign(pkt->data, pkt->data + pkt->size);
+
+  av_packet_free(&pkt);
+  av_frame_free(&frame);
+  avcodec_free_context(&ctx);
+  return result;
+}
+
 Napi::Value
 convertEventsToJS(const Napi::Env &env,
                   const std::vector<std::shared_ptr<SystemEvent>> &eventList)
@@ -399,7 +477,7 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
     }
     else if (op == "grab-frame")
     {
-      // grab a rgba frame from the input stream
+      // grab a JPEG-encoded frame from the input stream
       if (!videoController)
       {
         return ret;
@@ -411,18 +489,12 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
         return ret;
       }
 
-      size_t totalBytes = 4 * videoFrame->xres * videoFrame->yres;
-      auto bufferData = Napi::Buffer<uint8_t>::New(env, totalBytes);
+      auto jpegBuffer = encodeFrameAsJpeg(videoFrame, 75);
+      if (jpegBuffer.empty())
+        return ret;
 
-      if (videoFrame->pixelFormat == Frame::PixelFormat::YUV420P)
-      {
-        yuv420pToRgba(videoFrame->data, bufferData.Data(), videoFrame->xres, videoFrame->yres);
-      }
-      else
-      {
-        uyvyToRgba(videoFrame->data, bufferData.Data(), videoFrame->xres,
-                   videoFrame->yres, videoFrame->stride);
-      }
+      auto bufferData = Napi::Buffer<uint8_t>::New(env, jpegBuffer.size());
+      std::copy(jpegBuffer.begin(), jpegBuffer.end(), bufferData.Data());
 
       double focusScore = 0.0;
       if (focusAreaConfig.enabled)
@@ -465,7 +537,7 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
       ret.Set("data", bufferData);
       ret.Set("width", Napi::Number::New(env, videoFrame->xres));
       ret.Set("height", Napi::Number::New(env, videoFrame->yres));
-      ret.Set("totalBytes", Napi::Number::New(env, totalBytes));
+      ret.Set("totalBytes", Napi::Number::New(env, jpegBuffer.size()));
       ret.Set("tsMilli", Napi::Number::New(env, videoFrame->timestamp / 10000));
       ret.Set("focus", Napi::Number::New(env, focusScore));
       return ret;
