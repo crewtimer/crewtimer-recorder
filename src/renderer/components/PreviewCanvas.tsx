@@ -1,6 +1,6 @@
 /* eslint-disable no-bitwise */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box } from '@mui/material';
 import CropIcon from '@mui/icons-material/Crop';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter';
@@ -160,6 +160,32 @@ const getNativeClip = (imageClip: Rect): Rect => {
   return nativeClip;
 };
 
+const getCropCenterX = (cropArea: Rect) => {
+  const { srcWidth } = getVideoScaling();
+  return cropArea.x * srcWidth + (cropArea.width * srcWidth) / 2;
+};
+
+const getDrawableRect = ({
+  destX,
+  destY,
+  scaledHeight,
+  destWidth,
+  destHeight,
+}: {
+  destX: number;
+  destY: number;
+  scaledHeight: number;
+  destWidth: number;
+  destHeight: number;
+}): Rect => {
+  return {
+    x: Math.max(destX, 0),
+    y: 0,
+    width: destWidth - 2 * Math.max(destX, 0),
+    height: Math.min(destY + scaledHeight, destHeight),
+  };
+};
+
 /**
  * Get the coordinates of the guide in source image coordinates
  * @returns {pt1: Point, pt2: Point} in source image coordinates
@@ -254,11 +280,6 @@ const applyZoom = ({
         zoom = 6;
         pixScale = baseScale * zoom;
 
-        const guideSrcCoords = getSrcGuideCoords();
-        if (getRecordingProps().showFinishGuide) {
-          srcPoint.x = (guideSrcCoords.pt1.x + guideSrcCoords.pt2.x) / 2; // Center around Finish Guide
-        }
-
         // Normal centering around selected point
         destX = destWidth / 2 - pixScale * srcPoint.x;
         destY = destHeight / 2 - pixScale * srcPoint.y;
@@ -285,12 +306,13 @@ const applyZoom = ({
   destY = Math.min(0, destY);
 
   // Specify the actual area in the canvas that will show video data
-  const drawableRect: Rect = {
-    x: Math.max(destX, 0),
-    y: 0,
-    width: destWidth - 2 * Math.max(destX, 0),
-    height: Math.min(destY + scaledHeight, destHeight),
-  };
+  const drawableRect = getDrawableRect({
+    destX,
+    destY,
+    scaledHeight,
+    destWidth,
+    destHeight,
+  });
 
   setVideoScaling((prior) => ({
     ...prior,
@@ -327,6 +349,14 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   const [draggingFocusArea, setDraggingFocusArea] = useState<
     Point | undefined
   >();
+  const [draggingZoom, setDraggingZoom] = useState<
+    | {
+        mouse: Point;
+        destX: number;
+        destY: number;
+      }
+    | undefined
+  >();
 
   const [clip, setClip] = useState<Rect>(recordingProps.cropArea);
   const draggingCornerRef = useRef<string | null>(null);
@@ -344,16 +374,16 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   const [timeoutMessage, setTimeoutMessage] = useState('');
 
   const [applyChanges] = useRetriggerableOneShot((cropArea: Rect) => {
-    const oldGuide = getSrcGuideCoords();
+    const priorCropArea = getRecordingProps().cropArea;
+    const centerDelta =
+      getCropCenterX(priorCropArea) - getCropCenterX(cropArea);
+
     setRecordingProps((prior) => ({ ...prior, cropArea }));
-    // Updte the guide position so it doesn't move when the crop changes
-    const newGuide = getSrcGuideCoords();
-    const dx = Math.round(oldGuide.pt1.x - newGuide.pt1.x);
 
     setGuide((prevGuide) => {
       return {
-        pt1: prevGuide.pt1 + dx,
-        pt2: prevGuide.pt2 + dx,
+        pt1: prevGuide.pt1 + centerDelta,
+        pt2: prevGuide.pt2 + centerDelta,
       };
     });
     if (getIsRecording()) {
@@ -480,7 +510,9 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!canvasRef.current) return;
-    const { offsetX, offsetY } = e.nativeEvent;
+    const componentRect = canvasRef.current.getBoundingClientRect();
+    const offsetX = e.clientX - componentRect.left;
+    const offsetY = e.clientY - componentRect.top;
     const iconSize = 24;
     const iconPadding = 10;
     // Icon positions relative to the canvas width
@@ -488,7 +520,9 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     const maxSizeIconX =
       drawableRect.x + drawableRect.width - (iconSize + iconPadding);
 
-    if (focusArea.enabled && e.button !== 2) {
+    const isZoomClick = e.button === 2 || e.shiftKey;
+
+    if (focusArea.enabled && !isZoomClick) {
       // Calculate focus area box rect (centered horizontally, vertical: by focusAreaPosition)
       const center = translateSrcCanvas2DestCanvas({
         x: videoScaling.srcWidth * focusArea.xPct,
@@ -508,8 +542,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       }
     }
 
-    // right click
-    if (e.button === 2) {
+    if (isZoomClick) {
       e.preventDefault();
       e.stopPropagation();
       const center = translateDestCanvas2SrcCanvas({
@@ -556,6 +589,14 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         ignoreClick.current = true;
         e.stopPropagation();
         setDraggingCorner(corner.name);
+      } else if (e.button === 0 && videoScaling.zoomMode !== ZoomMode.Fit) {
+        e.preventDefault();
+        e.stopPropagation();
+        setDraggingZoom({
+          mouse: { x: offsetX, y: offsetY },
+          destX: videoScaling.destX,
+          destY: videoScaling.destY,
+        });
       }
     }
   };
@@ -579,6 +620,56 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       }));
     },
     [draggingFocusArea, setFocusArea, videoScaling],
+  );
+
+  const handleZoomMouseMove = useCallback(
+    (e: MouseEvent) => {
+      if (!draggingZoom || !canvasRef.current) return;
+
+      const componentRect = canvasRef.current.getBoundingClientRect();
+      const mouseX = e.clientX - componentRect.left;
+      const mouseY = e.clientY - componentRect.top;
+      const { destWidth, destHeight } = videoScaling;
+
+      let destX = draggingZoom.destX + mouseX - draggingZoom.mouse.x;
+      let destY = draggingZoom.destY + mouseY - draggingZoom.mouse.y;
+
+      if (videoScaling.scaledWidth > destWidth) {
+        destX = Math.min(
+          0,
+          Math.max(destWidth - videoScaling.scaledWidth, destX),
+        );
+      } else {
+        destX = destWidth / 2 - videoScaling.scaledWidth / 2;
+      }
+
+      if (videoScaling.scaledHeight > destHeight) {
+        destY = Math.min(
+          0,
+          Math.max(destHeight - videoScaling.scaledHeight, destY),
+        );
+      } else {
+        destY = destHeight / 2 - videoScaling.scaledHeight / 2;
+      }
+
+      setVideoScaling((prior) => ({
+        ...prior,
+        destX,
+        destY,
+        srcCenterPoint: {
+          x: (destWidth / 2 - destX) / prior.pixScale,
+          y: (destHeight / 2 - destY) / prior.pixScale,
+        },
+        drawableRect: getDrawableRect({
+          destX,
+          destY,
+          scaledHeight: prior.scaledHeight,
+          destWidth,
+          destHeight,
+        }),
+      }));
+    },
+    [draggingZoom, videoScaling],
   );
 
   const handleMouseMove = useCallback(
@@ -671,6 +762,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   const handleMouseUp = () => {
     setDraggingCorner(null);
     setDraggingFocusArea(undefined);
+    setDraggingZoom(undefined);
   };
 
   useEffect(() => {
@@ -701,6 +793,18 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   }, [draggingFocusArea, handleFocusAreaMouseMove]);
 
   useEffect(() => {
+    if (draggingZoom) {
+      window.addEventListener('mousemove', handleZoomMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      return () => {
+        window.removeEventListener('mousemove', handleZoomMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+    return () => {};
+  }, [draggingZoom, handleZoomMouseMove]);
+
+  useEffect(() => {
     const timer = setInterval(() => {
       const currentRecordingProps = getRecordingProps();
       if (getIsRecording() || currentRecordingProps.livePreview) {
@@ -709,6 +813,18 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     }, 100);
     return () => clearInterval(timer);
   }, []);
+
+  let alertMessage = VIDEO_STOPPED_MESSAGE;
+  if (isRecording) {
+    if (timeoutMessage) {
+      alertMessage = timeoutMessage;
+    } else if (recordingPropsPending) {
+      alertMessage =
+        'Recording props have changes. Stop and Start recording to apply.';
+    } else {
+      alertMessage = '';
+    }
+  }
 
   useEffect(() => {
     if (
@@ -920,6 +1036,24 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
             destClipRect.height,
           );
         }
+
+        if (alertMessage) {
+          ctx.save();
+          const textHeight = 16;
+          const padding = 4;
+          ctx.font = `${textHeight}px Arial`;
+          const textMetrics = ctx.measureText(alertMessage);
+          const boxWidth = textMetrics.width + padding * 2;
+          const boxHeight = textHeight + padding * 2;
+          const previewRect = videoScaling.drawableRect;
+          drawText(
+            ctx,
+            previewRect.x + (previewRect.width - boxWidth) / 2,
+            previewRect.y + (previewRect.height - boxHeight) / 2,
+            alertMessage,
+          );
+          ctx.restore();
+        }
         return undefined;
       })
       .catch(() => {
@@ -943,19 +1077,8 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     snapToCenterImage,
     videoScaling,
     focusArea,
+    alertMessage,
   ]);
-
-  let alertMessage = VIDEO_STOPPED_MESSAGE;
-  if (isRecording) {
-    if (timeoutMessage) {
-      alertMessage = timeoutMessage;
-    } else if (recordingPropsPending) {
-      alertMessage =
-        'Recording props have changes. Stop and Start recording to apply.';
-    } else {
-      alertMessage = '';
-    }
-  }
 
   return (
     <Box
@@ -984,26 +1107,6 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         color="white"
         setImage={setSnapToCenterImage}
       />
-      {alertMessage !== '' && (
-        <Box
-          position="absolute"
-          top={0}
-          left={(videoScaling.destWidth - videoScaling.scaledWidth) / 2}
-          width={videoScaling.scaledWidth}
-          height={videoScaling.scaledHeight}
-          display="flex"
-          justifyContent="center"
-          alignItems="center"
-          // bgcolor="rgba(0, 0, 0, 0.4)"
-          color="#fff"
-          fontSize="1.5rem"
-          zIndex={100}
-        >
-          <Typography sx={{ background: '#888a', padding: '0.5em' }}>
-            {alertMessage}
-          </Typography>
-        </Box>
-      )}
       <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }} />
     </Box>
   );

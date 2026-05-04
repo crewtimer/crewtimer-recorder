@@ -61,7 +61,11 @@ const RecordingLogTable: React.FC = () => {
                 <TableRow key={key}>
                   <TableCell sx={styles}>{formatTime(entry.tsMilli)}</TableCell>
                   <TableCell sx={styles}>{entry.subsystem}</TableCell>
-                  <TableCell sx={styles}>{entry.message}</TableCell>
+                  <TableCell sx={styles}>
+                    {entry.count && entry.count > 1
+                      ? `(x${entry.count}) ${entry.message}`
+                      : entry.message}
+                  </TableCell>
                 </TableRow>
               );
             })}

@@ -81,7 +81,9 @@ const ProtocolSelector: React.FC = () => {
   );
 };
 
-const RecorderConfig: React.FC = () => {
+const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
+  showPreview = true,
+}) => {
   const [recordingProps, setRecordingProps] = useRecordingProps();
   const [, setRecordingPropsPending] = useRecordingPropsPending();
   const [cameraList] = useCameraList();
@@ -392,14 +394,16 @@ const RecorderConfig: React.FC = () => {
           <InfoPopup body={<RecorderTips />} />
         </Grid>
       </Grid>
-      <div
-        style={{
-          marginTop: '10px',
-          flexGrow: 1,
-        }}
-      >
-        <FullSizeWindow component={PreviewCanvas} />
-      </div>
+      {showPreview && (
+        <div
+          style={{
+            marginTop: '10px',
+            flexGrow: 1,
+          }}
+        >
+          <FullSizeWindow component={PreviewCanvas} />
+        </div>
+      )}
     </div>
   );
 };

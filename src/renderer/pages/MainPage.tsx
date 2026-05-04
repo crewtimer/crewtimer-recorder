@@ -7,26 +7,33 @@ import RecordingLogTable from './RecordingLogTable';
 import { FullScreenVideo } from '../recorder/FullScreenVideo';
 
 export const [useSelectedPage] = UseDatum<string>('/');
+
+const SETTINGS_PAGES = ['/', '/home', '/index.html'];
+
 const MainPage = () => {
   const [page] = useSelectedPage();
-  switch (page) {
-    case '/':
-      return <RecorderConfig />;
-    case '/home':
-      return <RecorderConfig />;
-    case '/log':
-      return <RecordingLogTable />;
-    case '/video':
-      return <FullScreenVideo />;
-    case '/privacy':
-      return <Markdown md={PrivacyMarkdown} />;
-    case '/help':
-      return <Markdown md={CrewTimerVideoRecorder} />;
-    case '/index.html':
-      return <RecorderConfig />;
-    default:
-      return <RecorderConfig />;
-  }
+
+  if (page === '/privacy') return <Markdown md={PrivacyMarkdown} />;
+  if (page === '/help') return <Markdown md={CrewTimerVideoRecorder} />;
+
+  const isSettings = SETTINGS_PAGES.includes(page);
+
+  return (
+    <>
+      {/* Keep RecorderConfig always mounted so stream management effects are never torn down on tab switch */}
+      <div
+        style={{
+          display: isSettings ? 'flex' : 'none',
+          flexDirection: 'column',
+          height: '100%',
+        }}
+      >
+        <RecorderConfig showPreview={isSettings} />
+      </div>
+      {page === '/log' && <RecordingLogTable />}
+      {page === '/video' && <FullScreenVideo />}
+    </>
+  );
 };
 
 export default MainPage;

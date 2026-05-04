@@ -118,6 +118,7 @@ export interface RecordingLogEntry {
   tsMilli: number;
   subsystem: string;
   message: string;
+  count?: number;
 }
 export interface RecordingLog extends HandlerResponse {
   list: RecordingLogEntry[];

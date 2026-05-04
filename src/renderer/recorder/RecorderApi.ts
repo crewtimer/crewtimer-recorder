@@ -255,7 +255,23 @@ window.Util.onNativeMessage((nativeMessage: NativeMessage) => {
         if (message.startsWith('Error:')) {
           setLoggerAlert(getLoggerAlert() + 1);
         }
-        setSystemLog([...getSystemLog(), content]);
+        const log = getSystemLog();
+        const last = log[log.length - 1];
+        if (
+          last &&
+          last.message === message &&
+          last.subsystem === content.subsystem
+        ) {
+          const updated = [...log];
+          updated[updated.length - 1] = {
+            ...last,
+            count: (last.count ?? 1) + 1,
+            tsMilli: content.tsMilli,
+          };
+          setSystemLog(updated);
+        } else {
+          setSystemLog([...log, content]);
+        }
       }
       break;
 

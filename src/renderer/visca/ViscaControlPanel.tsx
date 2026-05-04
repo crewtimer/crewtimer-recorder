@@ -40,6 +40,10 @@ const ViscaControlPanel = () => {
   const [viscaIP] = useViscaIP();
   const [viscaPort] = useViscaPort();
   useEffect(() => {
+    if (!viscaIP || viscaPort === 0) {
+      return;
+    }
+
     const monitor = () => {
       sendViscaCommand({ type: 'AUTO_FOCUS_VALUE' })
         .then(() => {
@@ -48,7 +52,7 @@ const ViscaControlPanel = () => {
         .catch(() => {});
     };
     monitor();
-  }, []);
+  }, [viscaIP, viscaPort]);
 
   // Query camera state when connected
   useEffect(() => {
@@ -262,21 +266,23 @@ const ViscaControlPanel = () => {
           >
             <ViscaPresets />
             <Tooltip title={`Open Camera Web Page at ${viscaIP}`}>
-              <IconButton
-                disabled={viscaState !== 'Connected'}
-                color="inherit"
-                aria-label="Open Camera"
-                onClick={() => window.open(`http://${viscaIP}`)}
-                size="medium"
-              >
-                <CameraIcon />
-              </IconButton>
+              <span>
+                <IconButton
+                  disabled={viscaState !== 'Connected'}
+                  color="inherit"
+                  aria-label="Open Camera"
+                  onClick={() => window.open(`http://${viscaIP}`)}
+                  size="medium"
+                >
+                  <CameraIcon />
+                </IconButton>
+              </span>
             </Tooltip>
           </Box>
         </Grid>
       </Grid>
-      {/* Conditionally render "Disconnected" overlay if not connected */}
-      {viscaState !== 'Connected' && (
+      {/* Conditionally render "Disconnected" overlay if explicitly disconnected */}
+      {viscaState === 'Disconnected' && (
         <Box
           position="absolute"
           top={0}

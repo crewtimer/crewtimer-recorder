@@ -49,7 +49,8 @@ static std::vector<uint8_t> encodeFrameAsJpeg(const FramePtr &videoFrame, int qu
 
   ctx->width = videoFrame->xres;
   ctx->height = videoFrame->yres;
-  ctx->pix_fmt = AV_PIX_FMT_YUVJ420P;
+  ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+  ctx->color_range = AVCOL_RANGE_JPEG;
   ctx->time_base = AVRational{1, 25};
   ctx->flags |= AV_CODEC_FLAG_QSCALE;
   // Map quality 0-100 → QP 31-2 (lower QP = better)
@@ -62,7 +63,8 @@ static std::vector<uint8_t> encodeFrameAsJpeg(const FramePtr &videoFrame, int qu
   }
 
   AVFrame *frame = av_frame_alloc();
-  frame->format = AV_PIX_FMT_YUVJ420P;
+  frame->format = AV_PIX_FMT_YUV420P;
+  frame->color_range = AVCOL_RANGE_JPEG;
   frame->width = videoFrame->xres;
   frame->height = videoFrame->yres;
   frame->pts = 0;
@@ -92,7 +94,7 @@ static std::vector<uint8_t> encodeFrameAsJpeg(const FramePtr &videoFrame, int qu
 
   SwsContext *sws = sws_getContext(
       videoFrame->xres, videoFrame->yres, srcFmt,
-      videoFrame->xres, videoFrame->yres, AV_PIX_FMT_YUVJ420P,
+      videoFrame->xres, videoFrame->yres, AV_PIX_FMT_YUV420P,
       SWS_BILINEAR, nullptr, nullptr, nullptr);
 
   if (sws)

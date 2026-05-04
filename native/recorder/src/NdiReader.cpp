@@ -181,28 +181,21 @@ class NdiReader : public VideoReader
 
     if (foundCamera.name == "")
     {
-      SystemEventQueue::push("Debug", "Error: Camera not found " + srcName);
+      SystemEventQueue::push("NDI", "Error: Camera not found " + srcName);
       return "";
     }
 
-    std::cout << "Camera found" << std::endl;
     if (!ndiRecv)
     {
-      std::cout << "Connecting..." << std::endl;
       // Only create this once as calling destroy on it seems to segfault
       NDIlib_recv_create_v3_t recv_create;
-
       recv_create.color_format = NDIlib_recv_color_format_UYVY_BGRA;
-      // We now have at least one source, so we create a receiver to look at it.
       auto pNDI_recv = NDIlib_recv_create_v3(&recv_create);
       if (!pNDI_recv)
         return "NDIlib_recv_create_v3() failed";
       ndiRecv = std::make_shared<NdiRecv>(pNDI_recv);
     }
-    // Connect to the source
-    SystemEventQueue::push("Debug", std::string("Connecting to ") +
-                                        foundCamera.name + " at " +
-                                        foundCamera.url);
+    SystemEventQueue::push("NDI", "Connecting to " + foundCamera.name);
     // Connect to our sources
     p_source.p_ndi_name = foundCamera.name.c_str();
     p_source.p_url_address = foundCamera.url.c_str();
@@ -242,7 +235,7 @@ class NdiReader : public VideoReader
         break;
       // No data
       case NDIlib_frame_type_none:
-        SystemEventQueue::push("NDI", std::string("Error: No data received"));
+        SystemEventQueue::push("NDI", "Disconnected: " + srcName);
         ndiRecv = nullptr;
         break;
 
@@ -254,7 +247,7 @@ class NdiReader : public VideoReader
           frameCount++;
           if (frameCount == 1)
           {
-            SystemEventQueue::push("Debug", std::string("Stream active"));
+            SystemEventQueue::push("NDI", "Connected: " + srcName);
             break; // 1st frame often old frame cached from ndi sender.
                    // Ignore.
           }
@@ -369,6 +362,12 @@ public:
     if (ndiThread.joinable())
     {
       stop();
+    }
+    // Pre-seed camList so connect() can find the source without waiting for the
+    // scan loop, which is paused during active use.
+    {
+      std::unique_lock<std::mutex> lock(scanMutex);
+      camList = {camera};
     }
     this->srcName = camera.name;
     this->addFrameFunction = addFrameFunction;

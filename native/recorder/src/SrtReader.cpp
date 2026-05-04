@@ -151,6 +151,7 @@ class SrtReader : public VideoReader
     // Register disconnect callback so higher layers can react (emit a SOURCE_DISCONNECTED frame)
     reader->setDisconnectCallback([this]()
                                   {
+      SystemEventQueue::push("SRT", "Disconnected: " + url);
       if (addFrameFunction)
       {
         auto f = std::make_shared<Frame>();
@@ -166,7 +167,7 @@ class SrtReader : public VideoReader
     }
 
     readerGeneration = reader->connectionGeneration();
-    SystemEventQueue::push("SRT", "SRT  opened " + url);
+    SystemEventQueue::push("SRT", "Connected: " + url);
     if (!refreshStreamInfo())
     {
       SystemEventQueue::push("SRT", "Error: No video stream in SRT input");
@@ -534,7 +535,7 @@ class SrtReader : public VideoReader
       if (currentGeneration != readerGeneration)
       {
         readerGeneration = currentGeneration;
-        SystemEventQueue::push("SRT", "Info: SRT input reopened; resetting timing calibration");
+        SystemEventQueue::push("SRT", "Reconnecting: " + url);
         avcodec_flush_buffers(vdecCtx);
         waitingForKeyframe = true;
         frameCount = 0;
@@ -737,7 +738,7 @@ public:
 
     const auto ipAddress = camera.address;
     const auto port = 1600;
-    SystemEventQueue::push("SRT", "Starting SRT reader for " + camera.name + " at " + ipAddress + ":" + std::to_string(port));
+    SystemEventQueue::push("SRT", "Connecting to " + camera.name);
     url = "srt://" + ipAddress + ":" + std::to_string(port) + "?mode=caller&transtype=live&latency=120&streamid=r=0";
 
     addFrameFunction = cb;
