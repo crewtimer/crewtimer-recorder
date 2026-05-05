@@ -55,6 +55,7 @@
     "build:native": "cd release/app && yarn add ../../native/recorder",
     "cleanbasic": "ts-node ./.erb/scripts/clean.js && rm -rf release/build",
     "build:release": "yarn clean && yarn build && yarn build:mac && yarn build:win && open release/build",
+    "build:publish": "ts-node ./.erb/scripts/publish-build-artifacts.js",
     "clean": "rm -rf .erb/node_modules .erb/dll node_modules src/node_modules release/build release/app/node_modules native/recorder/prebuilds native/recorder/build && yarn install"
   },
   "browserslist": [
