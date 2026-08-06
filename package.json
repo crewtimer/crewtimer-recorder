@@ -1,7 +1,9 @@
 {
   "name": "crewtimer-recorder",
   "resolutions": {
-    "@electron/node-gyp": "https://github.com/electron/node-gyp#0453f4fe4656c63277185b35feedec5716a27d90"
+    "@electron/node-gyp": "https://github.com/electron/node-gyp#0453f4fe4656c63277185b35feedec5716a27d90",
+    "browserslist": "4.28.7",
+    "electron-to-chromium": "1.5.401"
   },
   "description": "A video recorder app for CrewTimer Video Review",
   "keywords": [
@@ -108,17 +110,17 @@
     }
   },
   "dependencies": {
-    "@electron/notarize": "^2.3.2",
+    "@electron/notarize": "^3.1.1",
     "@emotion/react": "^11.11.4",
     "@emotion/styled": "^11.11.5",
     "@fontsource/roboto": "^5.0.13",
     "@mui/icons-material": "^5.15.15",
     "@mui/material": "^5.15.15",
     "crewtimer-common": "^1.0.14",
-    "electron-debug": "^3.2.0",
-    "electron-log": "^5.1.2",
-    "electron-store": "^8.2.0",
-    "electron-updater": "^6.1.8",
+    "electron-debug": "^4.1.0",
+    "electron-log": "^5.4.4",
+    "electron-store": "^11.0.2",
+    "electron-updater": "^6.8.9",
     "firebase": "^9.9.0",
     "github-markdown-css": "^5.8.1",
     "react": "^18.2.0",
@@ -133,7 +135,7 @@
     "short-uuid": "^5.2.0"
   },
   "devDependencies": {
-    "@electron/rebuild": "^3.3.0",
+    "@electron/rebuild": "^4.2.0",
     "@pmmmwh/react-refresh-webpack-plugin": "^0.5.11",
     "@svgr/webpack": "^8.1.0",
     "@teamsupercell/typings-for-css-modules-loader": "^2.5.2",
@@ -149,6 +151,7 @@
     "@types/webpack-bundle-analyzer": "^4.6.0",
     "@typescript-eslint/eslint-plugin": "^6.7.0",
     "@typescript-eslint/parser": "^6.7.0",
+    "browserslist": "^4.28.7",
     "browserslist-config-erb": "^0.0.3",
     "chalk": "^4.1.2",
     "concurrently": "^8.2.1",
@@ -157,10 +160,11 @@
     "css-loader": "^6.8.1",
     "css-minimizer-webpack-plugin": "^5.0.1",
     "detect-port": "^1.5.1",
-    "electron": "^31.3.0",
-    "electron-builder": "^24.13.3",
-    "electron-devtools-installer": "^3.2.0",
-    "electronmon": "^2.0.2",
+    "electron": "^43.3.0",
+    "electron-builder": "^26.15.3",
+    "electron-devtools-installer": "^4.0.0",
+    "electron-to-chromium": "^1.5.401",
+    "electronmon": "^2.0.4",
     "eslint": "^8.49.0",
     "eslint-config-airbnb-base": "^15.0.0",
     "eslint-config-erb": "^4.1.0-0",
@@ -301,7 +305,7 @@
   "collective": {
     "url": "https://opencollective.com/electron-react-boilerplate-594"
   },
-  "devEngines": {
+  "engines": {
     "node": ">=14.x",
     "npm": ">=7.x"
   },

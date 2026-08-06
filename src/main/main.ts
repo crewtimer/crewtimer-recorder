@@ -10,6 +10,7 @@
  */
 import path from 'path';
 import { app, BrowserWindow, shell } from 'electron';
+import electronDebug from 'electron-debug';
 import { setLogFile, setNativeMessageCallback } from 'crewtimer_video_recorder';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
@@ -30,7 +31,7 @@ const isDebug =
   process.env.NODE_ENV === 'development' || process.env.DEBUG_PROD === 'true';
 
 if (isDebug) {
-  require('electron-debug')();
+  electronDebug();
 }
 
 // Create a write stream (in append mode)
