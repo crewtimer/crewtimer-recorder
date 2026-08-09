@@ -366,8 +366,9 @@ public:
                 pFrame->linesize);
     }
 
-    pFrame->pts =
-        av_rescale_q(frame_index++, pCodecCtx->time_base, video_st->time_base);
+    // Frame timestamps are expressed in the encoder time base. Packets are
+    // rescaled to the muxer's stream time base after encoding.
+    pFrame->pts = frame_index++;
 
     std::string errorMsg = "";
     if (avcodec_send_frame(pCodecCtx, pFrame) < 0)
@@ -392,6 +393,11 @@ public:
         // Continue draining packets even on error
         break;
       }
+
+      av_packet_rescale_ts(pkt, pCodecCtx->time_base, video_st->time_base);
+      pkt->duration = av_rescale_q(1, pCodecCtx->time_base,
+                                   video_st->time_base);
+      pkt->stream_index = video_st->index;
 
       if (av_write_frame(pFormatCtx, pkt) < 0)
       {
@@ -441,6 +447,11 @@ public:
           retval = msg;
           break;
         }
+        av_packet_rescale_ts(pkt, pCodecCtx->time_base, video_st->time_base);
+        pkt->duration = av_rescale_q(1, pCodecCtx->time_base,
+                                     video_st->time_base);
+        pkt->stream_index = video_st->index;
+
         if (av_write_frame(pFormatCtx, pkt) < 0)
         {
           av_packet_unref(pkt);
