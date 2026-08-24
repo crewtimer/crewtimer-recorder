@@ -8,8 +8,9 @@ if (
   Object.keys(dependencies || {}).length > 0 &&
   fs.existsSync(webpackPaths.appNodeModulesPath)
 ) {
-  const electronRebuildCmd =
-    '../../node_modules/.bin/electron-rebuild --force --types prod,dev,optional --module-dir .';
+  const buildFromSource =
+    process.env.NODE_ENV === 'development' ? ' --build-from-source' : '';
+  const electronRebuildCmd = `../../node_modules/.bin/electron-rebuild --force${buildFromSource} --types prod,dev,optional --module-dir .`;
   const cmd =
     process.platform === 'win32'
       ? electronRebuildCmd.replace(/\//g, '\\')
