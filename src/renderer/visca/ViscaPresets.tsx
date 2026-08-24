@@ -7,9 +7,30 @@ import {
   ToggleButtonGroup,
   CircularProgress,
 } from '@mui/material';
-import { useCameraPresets, useCameraState } from './ViscaState';
+import {
+  CameraState,
+  useCameraPresets,
+  useCameraState,
+} from './ViscaState';
 import { getCameraState, updateCameraState } from './ViscaAPI';
 import { setToast } from '../components/Toast';
+import { snooze } from '../util/Util';
+
+const reportPresetMismatches = async (
+  presetNumber: number,
+  preset: CameraState,
+) => {
+  await snooze(1000);
+  const actualState = await getCameraState();
+
+  (Object.keys(preset) as (keyof typeof preset)[]).forEach((setting) => {
+    if (actualState[setting] !== preset[setting]) {
+      console.warn(
+        `Preset ${presetNumber} mismatch: ${setting} expected=${preset[setting]}, actual=${actualState[setting]}`,
+      );
+    }
+  });
+};
 
 const ViscaPresets: React.FC = () => {
   const [, setCameraState] = useCameraState();
@@ -53,6 +74,7 @@ const ViscaPresets: React.FC = () => {
         if (newPreset) {
           setCameraState(newPreset); // in-memory settings
           await updateCameraState(newPreset); // send to cameras
+          await reportPresetMismatches(presetNumber, newPreset);
           setToast({ severity: 'info', msg: `Preset ${presetNumber} loaded` });
           console.log(`Load: ${JSON.stringify(newPreset)}`);
         }

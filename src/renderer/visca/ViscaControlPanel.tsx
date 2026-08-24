@@ -81,8 +81,18 @@ const ViscaControlPanel = () => {
   ) => {
     const exposureMode = event.target.value as ExposureMode;
     setCameraState((prev) => ({ ...prev, exposureMode }));
-    await sendViscaCommand({ type: 'EXPOSURE_MODE', value: exposureMode });
     await updateCameraState({ exposureMode });
+
+    if (exposureMode === ExposureMode.EXPOSURE_MANUAL) {
+      const result = await getCameraState();
+      setCameraState((prev) => ({
+        ...prev,
+        exposureMode,
+        iris: result.iris,
+        shutter: result.shutter,
+        gain: result.gain,
+      }));
+    }
   };
 
   // If the VISCA port is not set, do not render the control panel
