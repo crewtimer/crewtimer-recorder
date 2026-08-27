@@ -14,7 +14,6 @@ import {
 
 export const irisLabels = [
   'min',
-  'f/14.0',
   'f/11.0',
   'f/9.6',
   'f/8.0',
@@ -27,6 +26,7 @@ export const irisLabels = [
   'f/2.4',
   'f/2.0',
   'f/1.8',
+  'f/1.55',
 ];
 
 export const shutterLabels = [
