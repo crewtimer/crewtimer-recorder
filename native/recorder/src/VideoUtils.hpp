@@ -27,12 +27,16 @@ public:
   int frame_rate_N;
   int frame_rate_D;
   PixelFormat pixelFormat;
+  int sensorXres = 0;
+  int sensorYres = 0;
+  int rotation = 0;
   bool ownData;
   FrameType frameType = VIDEO;
 
   Frame() { ownData = false; }
   Frame(int width, int height, PixelFormat format)
-      : xres(width), yres(height), pixelFormat(format)
+      : xres(width), yres(height), pixelFormat(format), sensorXres(width),
+        sensorYres(height)
   {
     if (format == YUV420P)
     {
@@ -62,3 +66,4 @@ typedef std::shared_ptr<Frame> FramePtr;
 
 FramePtr cropFrame(const FramePtr &frame, int cropX, int cropY, int cropWidth,
                    int cropHeight);
+FramePtr rotateFrame90(const FramePtr &frame, bool clockwise);

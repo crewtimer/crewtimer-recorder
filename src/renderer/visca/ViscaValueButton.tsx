@@ -21,6 +21,7 @@ interface ViscaValueButtonProps {
   autoOn?: ViscaCommand;
   autoOff?: ViscaCommand;
   autoOnce?: ViscaCommand;
+  stepButtonsAfterMode?: boolean;
 }
 
 const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
@@ -32,6 +33,7 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
   autoOn,
   autoOff,
   autoOnce,
+  stepButtonsAfterMode = false,
 }) => {
   const [isAuto, setIsAuto] = useState<boolean>(value === true);
   const setTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -138,99 +140,93 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
     }
   };
 
+  const stepButtons = (
+    <>
+      <Grid item>
+        <IconButton
+          onMouseDown={handleDecrementPress}
+          onMouseUp={handleDecrementRelease}
+          onTouchStart={handleDecrementPress}
+          onTouchEnd={handleDecrementRelease}
+          size="small"
+          color="primary"
+          sx={{
+            padding: '4px',
+            border: '1px solid rgba(0,0,0,0.23)',
+            '&:active': { backgroundColor: 'rgba(0, 0, 0, 0.20)' },
+          }}
+        >
+          <RemoveIcon fontSize="small" />
+        </IconButton>
+      </Grid>
+      <Grid item>
+        <IconButton
+          onMouseDown={handleIncrementPress}
+          onMouseUp={handleIncrementRelease}
+          onTouchStart={handleIncrementPress}
+          onTouchEnd={handleIncrementRelease}
+          size="small"
+          color="primary"
+          sx={{
+            padding: '4px',
+            border: '1px solid rgba(0,0,0,0.23)',
+            '&:active': { backgroundColor: 'rgba(0, 0, 0, 0.20)' },
+          }}
+        >
+          <AddIcon fontSize="small" />
+        </IconButton>
+      </Grid>
+    </>
+  );
+
+  const modeButtons = autoOn ? (
+    <Grid item>
+      <ToggleButtonGroup
+        exclusive
+        value={isAuto ? 'auto' : 'man'}
+        onChange={handleToggleMode}
+        size="small"
+        sx={{
+          '& .MuiToggleButton-root': {
+            padding: '2px 6px',
+            minWidth: 0,
+            borderRadius: '4px',
+          },
+        }}
+      >
+        <ToggleButton color="primary" value="auto">
+          Auto
+        </ToggleButton>
+        <ToggleButton color="primary" value="man">
+          Man
+        </ToggleButton>
+        <ToggleButton color="primary" value="once">
+          Once
+        </ToggleButton>
+      </ToggleButtonGroup>
+    </Grid>
+  ) : null;
+
   return (
     <Grid
       container
+      direction="row"
+      wrap="nowrap"
       alignItems="center"
-      justifyContent="center"
-      spacing={1}
-      sx={{ width: 'fit-content' }}
+      justifyContent="flex-start"
+      columnGap={1}
+      sx={{ width: 'fit-content', margin: 0 }}
     >
-      <Grid
-        container
-        direction="row" // Explicitly use row direction
-        wrap="nowrap" // Prevent wrapping to a new line
-        alignItems="center"
-        justifyContent="flex-start"
-        spacing={1}
-        sx={{ width: 'fit-content' }}
-      >
-        {title && (
-          <Grid item sx={{ width: '50px' }}>
-            <Typography variant="subtitle2" noWrap>
-              {title}
-            </Typography>
-          </Grid>
-        )}
-
-        {/* Decrement Button */}
-        <Grid item>
-          <IconButton
-            onMouseDown={handleDecrementPress}
-            onMouseUp={handleDecrementRelease}
-            onTouchStart={handleDecrementPress}
-            onTouchEnd={handleDecrementRelease}
-            size="small"
-            color="primary"
-            sx={{
-              padding: '4px',
-              // backgroundColor: 'rgba(0, 0, 0, 0.04)',
-              border: '1px solid rgba(0,0,0,0.23)',
-              '&:active': { backgroundColor: 'rgba(0, 0, 0, 0.20)' },
-            }}
-          >
-            <RemoveIcon fontSize="small" />
-          </IconButton>
-        </Grid>
-
-        {/* Increment Button */}
-        <Grid item>
-          <IconButton
-            onMouseDown={handleIncrementPress}
-            onMouseUp={handleIncrementRelease}
-            onTouchStart={handleIncrementPress}
-            onTouchEnd={handleIncrementRelease}
-            size="small"
-            color="primary"
-            sx={{
-              padding: '4px',
-              // backgroundColor: 'rgba(0, 0, 0, 0.04)',
-              border: '1px solid rgba(0,0,0,0.23)',
-              '&:active': { backgroundColor: 'rgba(0, 0, 0, 0.20)' },
-            }}
-          >
-            <AddIcon fontSize="small" />
-          </IconButton>
-        </Grid>
-      </Grid>
-      {/* Toggle Button Group (Optional) */}
-      {autoOn && (
-        <Grid item>
-          <ToggleButtonGroup
-            exclusive
-            value={isAuto ? 'auto' : 'man'}
-            onChange={handleToggleMode}
-            size="small"
-            sx={{
-              '& .MuiToggleButton-root': {
-                padding: '2px 6px',
-                minWidth: 0,
-                borderRadius: '4px',
-              },
-            }}
-          >
-            <ToggleButton color="primary" value="auto">
-              Auto
-            </ToggleButton>
-            <ToggleButton color="primary" value="man">
-              Man
-            </ToggleButton>
-            <ToggleButton color="primary" value="once">
-              Once
-            </ToggleButton>
-          </ToggleButtonGroup>
+      {title && (
+        <Grid item sx={{ width: '50px' }}>
+          <Typography variant="subtitle2" noWrap>
+            {title}
+          </Typography>
         </Grid>
       )}
+      {stepButtonsAfterMode && modeButtons}
+      {stepButtons}
+      {!stepButtonsAfterMode && modeButtons}
     </Grid>
   );
 };

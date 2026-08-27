@@ -136,6 +136,9 @@ private:
   int16_t tzOffset;
   int lastXres = 0;
   int lastYres = 0;
+  int lastSensorXres = 0;
+  int lastSensorYres = 0;
+  int lastRotation = 0;
   float lastFPS = 0;
   std::string jsonFilename;
 

@@ -6,6 +6,7 @@
 #include <sstream>
 
 #include "SystemEventQueue.hpp"
+#include "TimingConstants.hpp"
 #include "VideoUtils.hpp"
 using namespace std::chrono;
 
@@ -113,6 +114,8 @@ FramePtr FrameProcessor::getLastFrame()
 
 void FrameProcessor::writeJsonSidecarFile()
 {
+  constexpr double LANDSCAPE_ROLLING_SHUTTER_SCAN_TIME_MS = 13.8;
+
   if (frameCount == 0)
   {
     return;
@@ -127,6 +130,11 @@ void FrameProcessor::writeJsonSidecarFile()
     return;
   }
 
+  const int recordedWidth = pxCropArea.width ? pxCropArea.width : lastXres;
+  const int recordedHeight = pxCropArea.height ? pxCropArea.height : lastYres;
+  const int cropX = pxCropArea.width ? pxCropArea.x : 0;
+  const int cropY = pxCropArea.height ? pxCropArea.y : 0;
+
   jsonFile << std::fixed << std::setprecision(7) << "{\n"
            << "  \"file\": {\n"
            << "    \"startTs\": \"" << startTs / 1e7 << "\",\n"
@@ -135,11 +143,48 @@ void FrameProcessor::writeJsonSidecarFile()
            << "    \"tzOffset\": " << tzOffset << "\n"
            << "  },\n"
            << "  \"source\": {\n"
-           << "    \"width\": "
-           << (pxCropArea.width ? pxCropArea.width : lastXres) << ",\n"
-           << "    \"height\": "
-           << (pxCropArea.height ? pxCropArea.height : lastYres) << "\n"
+           << "    \"width\": " << recordedWidth << ",\n"
+           << "    \"height\": " << recordedHeight << ",\n"
+           << "    \"originalWidth\": " << lastXres << ",\n"
+           << "    \"originalHeight\": " << lastYres << ",\n"
+           << "    \"crop\": {\n"
+           << "      \"x\": " << cropX << ",\n"
+           << "      \"y\": " << cropY << ",\n"
+           << "      \"width\": " << recordedWidth << ",\n"
+           << "      \"height\": " << recordedHeight << "\n"
+           << "    }\n"
            << "  },\n"
+           << "  \"sensor\": {\n";
+  if (lastSensorXres > lastSensorYres)
+  {
+    const bool rotated = lastRotation != 0;
+    const char *direction = lastRotation == 90 ? "right-to-left"
+                            : lastRotation == -90 ? "left-to-right"
+                                                  : "top-to-bottom";
+    const char *referenceAxis = rotated ? "x" : "y";
+    const double referencePosition =
+        static_cast<double>(rotated ? lastXres : lastYres) / 2.0;
+    jsonFile << "    \"nativeWidth\": " << lastSensorXres << ",\n"
+             << "    \"nativeHeight\": " << lastSensorYres << ",\n"
+             << "    \"sourceRotationDegrees\": " << lastRotation << ",\n"
+             << "    \"rollingShutter\": {\n"
+             << "      \"direction\": \"" << direction << "\",\n"
+             << "      \"scanTimeMs\": " << LANDSCAPE_ROLLING_SHUTTER_SCAN_TIME_MS << ",\n"
+             << "      \"frameTimeReference\": {\n"
+             << "        \"coordinateSpace\": \"original-image\",\n"
+             << "        \"axis\": \"" << referenceAxis << "\",\n"
+             << "        \"position\": " << referencePosition << "\n"
+             << "      }\n"
+             << "    }\n";
+  }
+  else
+  {
+    jsonFile << "    \"nativeWidth\": " << lastSensorXres << ",\n"
+             << "    \"nativeHeight\": " << lastSensorYres << ",\n"
+             << "    \"sourceRotationDegrees\": " << lastRotation << ",\n"
+             << "    \"rollingShutter\": null\n";
+  }
+  jsonFile << "  },\n"
            << "  \"guide\": {\n"
            << "    \"pt1\": " << guide.pt1 << ",\n"
            << "    \"pt2\": " << guide.pt2 << "\n"
@@ -156,6 +201,9 @@ void FrameProcessor::processFrames()
   auto useEmbeddedTimestamp = true;
   lastXres = 0;
   lastYres = 0;
+  lastSensorXres = 0;
+  lastSensorYres = 0;
+  lastRotation = 0;
   lastFPS = 0;
   frameCount = 0;
   int64_t keyFrameInterval = videoRecorder->getKeyFrameInterval();
@@ -206,6 +254,13 @@ void FrameProcessor::processFrames()
         lock.lock();
         continue;
       }
+
+      // Apply the global capture-time correction once, before deriving file
+      // metadata, sidecar timestamps, split boundaries, or encoded output.
+      if (video_frame->timestamp >= TimingConstants::GlobalTimestampCorrection100ns)
+      {
+        video_frame->timestamp -= TimingConstants::GlobalTimestampCorrection100ns;
+      }
       const auto fps =
           (float)video_frame->frame_rate_N / (float)video_frame->frame_rate_D;
 
@@ -218,6 +273,9 @@ void FrameProcessor::processFrames()
                         lastYres != video_frame->yres || lastFPS != fps;
       lastXres = video_frame->xres;
       lastYres = video_frame->yres;
+      lastSensorXres = video_frame->sensorXres ? video_frame->sensorXres : video_frame->xres;
+      lastSensorYres = video_frame->sensorYres ? video_frame->sensorYres : video_frame->yres;
+      lastRotation = video_frame->rotation;
       lastFPS = fps;
 
       {

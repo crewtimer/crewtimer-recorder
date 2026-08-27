@@ -1,3 +1,6 @@
+#### Version 1.0.21
+- Allow screen rotation and shrinking viewport to just cropped video
+
 #### Version 1.0.20
 - Utilize hardware accelerated video encode/decode
   

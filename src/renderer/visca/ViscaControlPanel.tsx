@@ -4,7 +4,6 @@ import {
   Grid,
   MenuItem,
   FormControl,
-  InputLabel,
   Select,
   SelectChangeEvent,
   FormControlLabel,
@@ -32,6 +31,7 @@ import ViscaValueButton from './ViscaValueButton';
 import RangeStepper from './RangeStepper';
 import ViscaPresets from './ViscaPresets';
 import { useFocusArea } from '../recorder/RecorderData';
+import RotationSelector from '../recorder/RotationSelector';
 
 const ViscaControlPanel = () => {
   const [cameraState, setCameraState] = useCameraState();
@@ -81,17 +81,31 @@ const ViscaControlPanel = () => {
   ) => {
     const exposureMode = event.target.value as ExposureMode;
     setCameraState((prev) => ({ ...prev, exposureMode }));
-    await updateCameraState({ exposureMode });
 
-    if (exposureMode === ExposureMode.EXPOSURE_MANUAL) {
-      const result = await getCameraState();
-      setCameraState((prev) => ({
-        ...prev,
-        exposureMode,
-        iris: result.iris,
-        shutter: result.shutter,
-        gain: result.gain,
-      }));
+    switch (exposureMode) {
+      case ExposureMode.EXPOSURE_MANUAL:
+        await updateCameraState({
+          exposureMode,
+          iris: cameraState.iris,
+          shutter: cameraState.shutter,
+          gain: cameraState.gain,
+        });
+        break;
+      case ExposureMode.EXPOSURE_SHUTTER:
+        await updateCameraState({ exposureMode, shutter: cameraState.shutter });
+        break;
+      case ExposureMode.EXPOSURE_IRIS:
+        await updateCameraState({ exposureMode, iris: cameraState.iris });
+        break;
+      case ExposureMode.EXPOSURE_BRIGHT:
+        await updateCameraState({
+          exposureMode,
+          brightness: cameraState.brightness,
+        });
+        break;
+      default:
+        await updateCameraState({ exposureMode });
+        break;
     }
   };
 
@@ -106,25 +120,40 @@ const ViscaControlPanel = () => {
         {/* Focus Controls */}
         <Grid
           item
-          xs={12}
-          md={3}
+          xs="auto"
           container
+          wrap="nowrap"
           alignItems="flex-start"
           justifyContent="flex-start"
-          sx={{ marginTop: '8px' }}
+          sx={{ flexShrink: 0 }}
         >
-          <ViscaValueButton
-            title="Focus"
-            decrement={{ type: 'FOCUS_OUT' }}
-            increment={{ type: 'FOCUS_IN' }}
-            reset={{ type: 'FOCUS_RESET' }}
-            value={cameraState.autoFocus}
-            autoOn={{ type: 'AUTO_FOCUS', value: true }}
-            autoOff={{ type: 'AUTO_FOCUS', value: false }}
-            autoOnce={{ type: 'FOCUS_ONCE' }}
-          />
-          {/* Focus On/Off Checkbox */}
-          <Box ml={1} display="flex" alignItems="center">
+          <Box
+            component="fieldset"
+            sx={{
+              margin: 0,
+              padding: '2px 8px 7px',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+            }}
+          >
+            <Box
+              component="legend"
+              sx={{ padding: '0 4px', fontSize: '0.875rem' }}
+            >
+              Focus
+            </Box>
+            <ViscaValueButton
+              title=""
+              decrement={{ type: 'FOCUS_OUT' }}
+              increment={{ type: 'FOCUS_IN' }}
+              reset={{ type: 'FOCUS_RESET' }}
+              value={cameraState.autoFocus}
+              autoOn={{ type: 'AUTO_FOCUS', value: true }}
+              autoOff={{ type: 'AUTO_FOCUS', value: false }}
+              autoOnce={{ type: 'FOCUS_ONCE' }}
+              stepButtonsAfterMode
+            />
             <Tooltip title="Show Focus metric to assist with manual focus">
               <FormControlLabel
                 control={
@@ -142,7 +171,10 @@ const ViscaControlPanel = () => {
                 }
                 label="Focus Assist"
                 sx={{
-                  marginLeft: 1,
+                  display: 'flex',
+                  width: 'fit-content',
+                  marginLeft: 0,
+                  marginTop: '4px',
                   '& .MuiFormControlLabel-label': { fontSize: '0.95rem' },
                 }}
               />
@@ -151,143 +183,198 @@ const ViscaControlPanel = () => {
         </Grid>
         <Grid
           item
-          xs={12}
-          md={2}
+          xs="auto"
           container
           alignItems="flex-start"
           justifyContent="flex-start"
-          sx={{ marginTop: '8px' }}
+          sx={{ flexShrink: 0 }}
         >
-          <ViscaValueButton
-            title="Zoom"
-            decrement={{ type: 'ZOOM_OUT' }}
-            increment={{ type: 'ZOOM_IN' }}
-            reset={{ type: 'ZOOM_RESET' }}
-          />
+          <Box
+            component="fieldset"
+            sx={{
+              margin: 0,
+              padding: '2px 8px 7px',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+            }}
+          >
+            <Box
+              component="legend"
+              sx={{ padding: '0 4px', fontSize: '0.875rem' }}
+            >
+              Zoom
+            </Box>
+            <ViscaValueButton
+              title=""
+              decrement={{ type: 'ZOOM_OUT' }}
+              increment={{ type: 'ZOOM_IN' }}
+              reset={{ type: 'ZOOM_RESET' }}
+            />
+          </Box>
         </Grid>
         {/* Exposure Controls */}
-        <Grid item xs={12} md={2}>
-          <FormControl
-            margin="dense"
-            size="small" // makes form components (including Select) smaller
-            sx={{ minWidth: 120, zIndex: 101 }}
+        <Grid item xs="auto" sx={{ flexShrink: 0 }}>
+          <Box
+            component="fieldset"
+            sx={{
+              margin: 0,
+              padding: '2px 8px 7px',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+            }}
           >
-            <InputLabel id="select-label">Exposure Mode</InputLabel>
-            <Select
-              id="select-id"
-              labelId="select-label"
-              label="Exposure Mode"
-              value={cameraState.exposureMode}
-              onChange={onExposureModeChange}
-              // Option A: put smaller padding via sx
-              sx={{
-                // The select container; tweak as you like
-                // smaller vertical & horizontal padding
-                '.MuiSelect-select': {
-                  padding: '6px 14px',
-                  fontSize: '0.8rem',
-                },
-              }}
-              // Option B: if you prefer an inline style for the displayed value
-              // SelectDisplayProps={{ style: { padding: '6px 14px' } }}
+            <Box
+              component="legend"
+              sx={{ padding: '0 4px', fontSize: '0.875rem' }}
             >
-              <MenuItem value={ExposureMode.EXPOSURE_AUTO}>Full Auto</MenuItem>
-              <MenuItem value={ExposureMode.EXPOSURE_MANUAL}>Manual</MenuItem>
-              <MenuItem value={ExposureMode.EXPOSURE_SHUTTER}>
-                Shutter Priority
-              </MenuItem>
-              <MenuItem value={ExposureMode.EXPOSURE_IRIS}>
-                Iris Priority
-              </MenuItem>
-              <MenuItem value={ExposureMode.EXPOSURE_BRIGHT}>
-                Brightness Priority
-              </MenuItem>
-            </Select>
-          </FormControl>
+              Exposure
+            </Box>
+            <Box display="flex" alignItems="flex-start" gap={1}>
+              <FormControl
+                margin="dense"
+                size="small"
+                sx={{ minWidth: 120, zIndex: 101 }}
+              >
+                <Select
+                  id="select-id"
+                  value={cameraState.exposureMode}
+                  onChange={onExposureModeChange}
+                  sx={{
+                    '.MuiSelect-select': {
+                      padding: '6px 14px',
+                      fontSize: '0.8rem',
+                    },
+                  }}
+                >
+                  <MenuItem value={ExposureMode.EXPOSURE_AUTO}>
+                    Full Auto
+                  </MenuItem>
+                  <MenuItem value={ExposureMode.EXPOSURE_MANUAL}>
+                    Manual
+                  </MenuItem>
+                  <MenuItem value={ExposureMode.EXPOSURE_SHUTTER}>
+                    Shutter Priority
+                  </MenuItem>
+                  <MenuItem value={ExposureMode.EXPOSURE_IRIS}>
+                    Iris Priority
+                  </MenuItem>
+                  <MenuItem value={ExposureMode.EXPOSURE_BRIGHT}>
+                    Brightness Priority
+                  </MenuItem>
+                </Select>
+              </FormControl>
+              <Box>
+                {(cameraState.exposureMode === ExposureMode.EXPOSURE_MANUAL ||
+                  cameraState.exposureMode === ExposureMode.EXPOSURE_IRIS) && (
+                  <RangeStepper
+                    title="Iris"
+                    min={0}
+                    max={13}
+                    step={-1}
+                    labels={irisLabels}
+                    value={cameraState.iris}
+                    onChange={(value) => {
+                      setCameraState((prev) => ({ ...prev, iris: value }));
+                      sendViscaCommand({ type: 'SET_IRIS', value });
+                    }}
+                  />
+                )}
+                {(cameraState.exposureMode === ExposureMode.EXPOSURE_MANUAL ||
+                  cameraState.exposureMode ===
+                    ExposureMode.EXPOSURE_SHUTTER) && (
+                  <RangeStepper
+                    title="Shutter"
+                    min={5}
+                    max={21}
+                    labels={shutterLabels}
+                    value={cameraState.shutter}
+                    onChange={(value) => {
+                      setCameraState((prev) => ({ ...prev, shutter: value }));
+                      sendViscaCommand({ type: 'SET_SHUTTER', value });
+                    }}
+                  />
+                )}
+                {cameraState.exposureMode === ExposureMode.EXPOSURE_MANUAL && (
+                  <RangeStepper
+                    title="Gain"
+                    min={0}
+                    max={15}
+                    value={cameraState.gain}
+                    onChange={(value) => {
+                      setCameraState((prev) => ({ ...prev, gain: value }));
+                      sendViscaCommand({ type: 'SET_GAIN', value });
+                    }}
+                  />
+                )}
+                {cameraState.exposureMode === ExposureMode.EXPOSURE_BRIGHT && (
+                  <RangeStepper
+                    title="Bright"
+                    min={0}
+                    max={27}
+                    value={cameraState.brightness}
+                    onChange={(value) => {
+                      setCameraState((prev) => ({
+                        ...prev,
+                        brightness: value,
+                      }));
+                      sendViscaCommand({ type: 'SET_BRIGHTNESS', value });
+                    }}
+                  />
+                )}
+              </Box>
+            </Box>
+          </Box>
         </Grid>
-        <Grid item xs={12} md={3}>
-          {(cameraState.exposureMode === ExposureMode.EXPOSURE_MANUAL ||
-            cameraState.exposureMode === ExposureMode.EXPOSURE_IRIS) && (
-            <RangeStepper
-              title="Iris"
-              min={0}
-              max={13}
-              step={-1}
-              labels={irisLabels}
-              value={cameraState.iris}
-              onChange={(value) => {
-                setCameraState((prev) => ({ ...prev, iris: value }));
-                sendViscaCommand({ type: 'SET_IRIS', value });
-              }}
-            />
-          )}
-          {(cameraState.exposureMode === ExposureMode.EXPOSURE_MANUAL ||
-            cameraState.exposureMode === ExposureMode.EXPOSURE_SHUTTER) && (
-            <RangeStepper
-              title="Shutter"
-              min={5}
-              max={21}
-              labels={shutterLabels}
-              value={cameraState.shutter}
-              onChange={(value) => {
-                setCameraState((prev) => ({ ...prev, shutter: value }));
-                sendViscaCommand({ type: 'SET_SHUTTER', value });
-              }}
-            />
-          )}
-          {cameraState.exposureMode === ExposureMode.EXPOSURE_MANUAL && (
-            <RangeStepper
-              title="Gain"
-              min={0}
-              max={15}
-              value={cameraState.gain}
-              onChange={(value) => {
-                setCameraState((prev) => ({ ...prev, gain: value }));
-                sendViscaCommand({ type: 'SET_GAIN', value });
-              }}
-            />
-          )}
-          {cameraState.exposureMode === ExposureMode.EXPOSURE_BRIGHT && (
-            <RangeStepper
-              title="Bright"
-              min={0}
-              max={27}
-              value={cameraState.brightness}
-              onChange={(value) => {
-                setCameraState((prev) => ({ ...prev, brightness: value }));
-                sendViscaCommand({ type: 'SET_BRIGHTNESS', value });
-              }}
-            />
-          )}
+        <Grid item xs="auto" sx={{ flexShrink: 0 }}>
+          <RotationSelector />
         </Grid>
         <Grid
           item
-          xs={12}
-          md={2}
+          xs="auto"
           container
           alignItems="flex-start"
           justifyContent="flex-start"
+          sx={{ flexShrink: 0 }}
         >
           <Box
-            display="flex"
-            flexDirection="column"
-            alignItems="flex-start"
-            gap={1}
+            component="fieldset"
+            sx={{
+              margin: 0,
+              padding: '2px 8px 7px',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+            }}
           >
-            <ViscaPresets />
-            <Tooltip title={`Open Camera Web Page at ${viscaIP}`}>
-              <span>
-                <IconButton
-                  disabled={viscaState !== 'Connected'}
-                  color="inherit"
-                  aria-label="Open Camera"
-                  onClick={() => window.open(`http://${viscaIP}`)}
-                  size="medium"
-                >
-                  <CameraIcon />
-                </IconButton>
-              </span>
-            </Tooltip>
+            <Box
+              component="legend"
+              sx={{ padding: '0 4px', fontSize: '0.875rem' }}
+            >
+              Control
+            </Box>
+            <Box
+              display="flex"
+              flexDirection="column"
+              alignItems="flex-start"
+              gap={1}
+            >
+              <ViscaPresets />
+              <Tooltip title={`Open Camera Web Page at ${viscaIP}`}>
+                <span>
+                  <IconButton
+                    disabled={viscaState !== 'Connected'}
+                    color="inherit"
+                    aria-label="Open Camera"
+                    onClick={() => window.open(`http://${viscaIP}`)}
+                    size="medium"
+                  >
+                    <CameraIcon />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </Box>
           </Box>
         </Grid>
       </Grid>

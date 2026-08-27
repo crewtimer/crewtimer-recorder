@@ -74,6 +74,7 @@ export const startPreview = () => {
       props: {
         networkCamera: recordingProps.networkCamera,
         protocol: recordingProps.protocol,
+        rotation: recordingProps.rotation,
       },
     })
     .catch((e) => {

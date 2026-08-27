@@ -287,6 +287,15 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
         reportAllGaps = props.Get("reportAllGaps").As<Napi::Boolean>();
       }
       auto protocol = getNapiStringField(props, "protocol", "SRT");
+      const int rotation = props.Has("rotation")
+                               ? props.Get("rotation").As<Napi::Number>().Int32Value()
+                               : 0;
+      if (rotation != -90 && rotation != 0 && rotation != 90)
+      {
+        Napi::TypeError::New(env, "rotation must be -90, 0, or 90")
+            .ThrowAsJavaScriptException();
+        return ret;
+      }
       auto folder = props.Get("recordingFolder").As<Napi::String>().Utf8Value();
       auto prefix = getNapiStringField(props, "recordingPrefix", "CT_");
       auto networkCamera =
@@ -309,7 +318,7 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
       guide.pt2 = guideObj.Get("pt2").As<Napi::Number>().FloatValue();
 
       auto result = videoController->start(networkCamera, protocol, "ffmpeg", folder, prefix,
-                                           interval, cropRect, guide, reportAllGaps);
+                                           interval, cropRect, guide, rotation, reportAllGaps);
       if (!result.empty())
       {
         std::cerr << "Error: " << result << std::endl;
@@ -344,7 +353,16 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
       auto props = args.Get("props").As<Napi::Object>();
       auto protocol = getNapiStringField(props, "protocol", "SRT");
       auto networkCamera = getNapiStringField(props, "networkCamera");
-      auto result = videoController->startPreview(networkCamera, protocol);
+      const int rotation = props.Has("rotation")
+                               ? props.Get("rotation").As<Napi::Number>().Int32Value()
+                               : 0;
+      if (rotation != -90 && rotation != 0 && rotation != 90)
+      {
+        Napi::TypeError::New(env, "rotation must be -90, 0, or 90")
+            .ThrowAsJavaScriptException();
+        return ret;
+      }
+      auto result = videoController->startPreview(networkCamera, protocol, rotation);
       if (!result.empty())
       {
         ret.Set("status", Napi::String::New(env, "Fail"));

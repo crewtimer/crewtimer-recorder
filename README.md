@@ -162,6 +162,10 @@ Note: As of 12/2024 the notarize.js script in .erb/scripts is not utilized.
 
 ## Run-time files
 
+The JSON files written beside recorded videos are documented in the
+[video sidecar metadata specification](doc/Video_Sidecar_Metadata.md), including
+the rolling-shutter correction formula.
+
 Debug Log: /Users/glenne/Library/Application Support/crewtimer-recorder/applog.txt
 Debug settings: /Users/glenne/Library/Application Support/crewtimer-recorder/ct-recorder.json
 Release Log: /Users/glenne/Library/Application Support/crewtimer-video-recorder/applog.txt

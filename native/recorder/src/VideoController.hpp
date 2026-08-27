@@ -59,6 +59,7 @@ private:
   std::string activeSourceName;
   FramePtr lastPreviewFrame;
   std::mutex frameSinkMutex;
+  std::atomic<int> frameRotation{0};
 
   // mdns
   std::shared_ptr<ndi_mdns::NdiMdns> mdns;
@@ -161,6 +162,13 @@ private:
     videoReader->setProperties(reportAllGaps);
     err = videoReader->start(camera, [this](FramePtr frame)
                              {
+                               if (frame->frameType == Frame::FrameType::VIDEO &&
+                                   frameRotation.load() != 0)
+                               {
+                                 auto rotated = rotateFrame90(frame, frameRotation.load() == 90);
+                                 if (rotated)
+                                   frame = rotated;
+                               }
                                std::shared_ptr<FrameProcessor> processor;
                                {
                                  std::lock_guard<std::mutex> lock(frameSinkMutex);
@@ -349,6 +357,7 @@ public:
                     const int interval,
                     const FrameProcessor::FRectangle cropArea,
                     const FrameProcessor::Guide guide,
+                    const int rotation,
                     const bool reportAllGaps)
   {
     std::lock_guard<std::recursive_mutex> lock(controlMutex);
@@ -357,6 +366,7 @@ public:
     this->dir = dir;
     this->prefix = prefix;
     this->interval = interval;
+    frameRotation = rotation;
     statusInfo.error = "";
     statusInfo.frameProcessor.error = "";
     if (videoRecorder)
@@ -481,9 +491,11 @@ public:
     return "";
   }
 
-  std::string startPreview(const std::string srcName, const std::string protocol)
+  std::string startPreview(const std::string srcName, const std::string protocol,
+                           const int rotation)
   {
     std::lock_guard<std::recursive_mutex> lock(controlMutex);
+    frameRotation = rotation;
     VideoReader::CameraInfo camera;
     if (!findCamera(srcName, camera))
     {

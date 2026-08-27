@@ -508,6 +508,10 @@ class SrtReader : public VideoReader
     lastPtsRaw = AV_NOPTS_VALUE;
     AVRational frameRate{60, 1};
     double msPerFrame = 1000 / 60.0;
+    // A normal SRT frame interval is measured in milliseconds.  A jump this
+    // large means the sender's timestamp clock changed (for example, after a
+    // camera reboot) even if the transport connection itself stayed alive.
+    constexpr int64_t maxContinuousTimestampStep100ns = 30LL * 10000000LL;
 
     // Startup sampling state is kept in member fields (init_first_unwrapped, init_last_unwrapped, init_samples)
     AVPacket *pkt = av_packet_alloc();
@@ -607,10 +611,28 @@ class SrtReader : public VideoReader
             int64_t utcMilli = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
             auto approxUtc = approxUtcFromDts_lockedToRef(pts, utcMilli);
             auto delay = (utcMilli - approxUtc.utcMs);
-            SystemEventQueue::push("SRT", "pts=" + std::to_string(pts) + " Approx UTC: " + std::to_string(approxUtc.utcMs) + " ms delta=" + std::to_string(delay) + " drift=" + std::to_string(delay - encodingDelay / 10000));
+            SystemEventQueue::push("SRT", "pts=" + std::to_string(pts) + " Approx UTC: " + std::to_string(approxUtc.utcMs) + " ms delta=" + std::to_string(delay));
           }
 
           int64_t ts100ns = (pts == AV_NOPTS_VALUE) ? 0 : pts_to_100ns(pts);
+
+          // A camera can reboot and restart its MPEG timestamp clock without
+          // causing SRT to establish a new connection generation.  Continuing
+          // to unwrap against the old clock produces enormous gaps and leaves
+          // every subsequent frame incorrectly timestamped.  Re-run the same
+          // timing calibration used at startup and on a transport reconnect.
+          if (lastTS100ns > 0 &&
+              (ts100ns <= 0 || ts100ns < lastTS100ns ||
+               (ts100ns > lastTS100ns &&
+                ts100ns - lastTS100ns > maxContinuousTimestampStep100ns)))
+          {
+            SystemEventQueue::push("SRT", "Timestamp discontinuity detected; recalibrating");
+            frameCount = 0;
+            lastTS100ns = 0;
+            resetTimingCalibration();
+            av_frame_unref(frm);
+            continue;
+          }
 
           // Initialize sws lazily for non-YUV420P sources (e.g. NV12 from HW decoders)
           auto srcFmt = static_cast<AVPixelFormat>(srcFrm->format);
@@ -687,7 +709,7 @@ class SrtReader : public VideoReader
                 msg << "Duplicate frame timestamp";
               else
               {
-                int framesMissing = (int)std::round((double)deltaMs / msPerFrame - 1);
+                int64_t framesMissing = static_cast<int64_t>(std::llround(static_cast<double>(deltaMs) / msPerFrame - 1.0));
                 msg << "Gap=" << deltaMs << "ms (" << framesMissing << " frames missing)" << " assuming " << msPerFrame << "ms/frame";
               }
               std::cerr << msg.str() << std::endl;

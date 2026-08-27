@@ -169,6 +169,7 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
     isRecording,
     recordingProps.livePreview,
     recordingProps.protocol,
+    recordingProps.rotation,
     selectedCamera,
     camFound,
   ]);

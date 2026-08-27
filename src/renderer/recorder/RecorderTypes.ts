@@ -19,6 +19,7 @@ export interface RecordingProps {
   cropArea: Rect;
   waypoint: string;
   protocol: string;
+  rotation: -90 | 0 | 90;
 }
 
 export interface RecorderMessage {
@@ -50,6 +51,7 @@ export interface StartRecorderMessage extends RecorderMessage {
     cropArea: Rect;
     guide: { pt1: number; pt2: number };
     reportAllGaps?: boolean;
+    rotation: -90 | 0 | 90;
   };
 }
 export interface PreviewRecorderMessage extends RecorderMessage {
@@ -57,6 +59,7 @@ export interface PreviewRecorderMessage extends RecorderMessage {
   props?: {
     networkCamera: string;
     protocol: string;
+    rotation: -90 | 0 | 90;
   };
 }
 export interface RecorderResponse extends HandlerResponse {}
@@ -112,6 +115,7 @@ export const DefaultRecordingProps: RecordingProps = {
   cropArea: { x: 0, y: 0, width: 1, height: 1 },
   waypoint: '',
   protocol: 'SRT',
+  rotation: 0,
 };
 
 export interface RecordingLogEntry {

@@ -4,6 +4,8 @@ import { Box } from '@mui/material';
 import CropIcon from '@mui/icons-material/Crop';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter';
+import FitScreenIcon from '@mui/icons-material/FitScreen';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import {
   getGuide,
   getIsRecording,
@@ -38,6 +40,11 @@ import { GrabFrameResponse, Rect } from '../recorder/RecorderTypes';
 import { showErrorDialog } from './ErrorDialog';
 import CanvasIcon from './CanvasIcon';
 import useRetriggerableOneShot from './RetriggerableOneshot';
+import {
+  ExposureMode,
+  useCameraState,
+  useViscaState,
+} from '../visca/ViscaState';
 
 const VIDEO_STOPPED_MESSAGE = 'Recording stopped. Press START to resume.';
 
@@ -343,6 +350,14 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   const [videoScaling] = useVideoScaling();
   // State for the selection rectangle
   const [recordingProps, setRecordingProps] = useRecordingProps();
+  const [cameraState] = useCameraState();
+  const [viscaState] = useViscaState();
+  const hasSupportedExposureMode =
+    cameraState.exposureMode === ExposureMode.EXPOSURE_MANUAL ||
+    cameraState.exposureMode === ExposureMode.EXPOSURE_SHUTTER;
+  const showExposureWarning =
+    viscaState === 'Connected' &&
+    (!hasSupportedExposureMode || cameraState.shutter < 13); // shutterLabels[13] is 1/500s
 
   // Focus area vertical position normalized value
   const [focusArea, setFocusArea] = useFocusArea();
@@ -370,8 +385,26 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     useState<HTMLImageElement | null>(null);
   const [snapToCenterImage, setSnapToCenterImage] =
     useState<HTMLImageElement | null>(null);
+  const [cropViewImage, setCropViewImage] = useState<HTMLImageElement | null>(
+    null,
+  );
+  const [exposureWarningImage, setExposureWarningImage] =
+    useState<HTMLImageElement | null>(null);
+  const [hoveredIconTooltip, setHoveredIconTooltip] = useState<
+    { text: string; y: number } | undefined
+  >();
+  const [iconTooltip, setIconTooltip] = useState<
+    { text: string; y: number } | undefined
+  >();
 
   const [timeoutMessage, setTimeoutMessage] = useState('');
+
+  useEffect(() => {
+    setIconTooltip(undefined);
+    if (!hoveredIconTooltip) return () => {};
+    const timeout = setTimeout(() => setIconTooltip(hoveredIconTooltip), 500);
+    return () => clearTimeout(timeout);
+  }, [hoveredIconTooltip]);
 
   const [applyChanges] = useRetriggerableOneShot((cropArea: Rect) => {
     const priorCropArea = getRecordingProps().cropArea;
@@ -508,6 +541,74 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     );
   };
 
+  const handleCanvasPointerMove = (e: React.MouseEvent) => {
+    if (!canvasRef.current) return;
+    const componentRect = canvasRef.current.getBoundingClientRect();
+    const offsetX = e.clientX - componentRect.left;
+    const offsetY = e.clientY - componentRect.top;
+    const iconSize = 24;
+    const iconPadding = 10;
+    const { drawableRect } = videoScaling;
+    const iconX =
+      drawableRect.x + drawableRect.width - (iconSize + iconPadding);
+    const tooltips = [
+      {
+        text: isAdjustingCrop ? 'Use full frame' : 'Adjust crop',
+        y: iconPadding,
+      },
+      { text: 'Center finish line', y: iconPadding * 2 + 24 },
+      {
+        text:
+          videoScaling.zoomMode === ZoomMode.Maximize
+            ? 'Show whole view'
+            : 'Show cropped view',
+        y: iconPadding * 3 + 48,
+      },
+      ...(showExposureWarning
+        ? [
+            {
+              text: 'Exposure warning: use Manual or Shutter Priority at 1/500s or faster',
+              y: iconPadding * 4 + 72,
+            },
+          ]
+        : []),
+    ];
+    const tooltip = tooltips.find(({ y }) =>
+      isInIcon(offsetX, offsetY, iconX, y),
+    );
+    setHoveredIconTooltip((prior) =>
+      prior?.text === tooltip?.text && prior?.y === tooltip?.y
+        ? prior
+        : tooltip,
+    );
+  };
+
+  const cycleZoomAt = (x: number, y: number) => {
+    const center = translateDestCanvas2SrcCanvas({ x, y });
+    let { zoomMode } = getVideoScaling();
+    switch (zoomMode) {
+      case ZoomMode.Fit:
+        zoomMode = isDefaultCrop(clip) ? ZoomMode.Zoom : ZoomMode.Maximize;
+        break;
+      case ZoomMode.Maximize:
+        zoomMode = ZoomMode.Zoom;
+        break;
+      case ZoomMode.Zoom:
+      default:
+        zoomMode = ZoomMode.Fit;
+        break;
+    }
+    applyZoom({ center, zoomMode, cropRect: clip });
+  };
+
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    if (!canvasRef.current) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const componentRect = canvasRef.current.getBoundingClientRect();
+    cycleZoomAt(e.clientX - componentRect.left, e.clientY - componentRect.top);
+  };
+
   const handleMouseDown = (e: React.MouseEvent) => {
     if (!canvasRef.current) return;
     const componentRect = canvasRef.current.getBoundingClientRect();
@@ -545,32 +646,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     if (isZoomClick) {
       e.preventDefault();
       e.stopPropagation();
-      const center = translateDestCanvas2SrcCanvas({
-        x: offsetX,
-        y: offsetY,
-      }); // mouse pos in src units
-      let { zoomMode } = getVideoScaling();
-      switch (zoomMode) {
-        case ZoomMode.Fit:
-          if (isDefaultCrop(clip)) {
-            zoomMode = ZoomMode.Zoom;
-          } else {
-            zoomMode = ZoomMode.Maximize;
-          }
-          break;
-        case ZoomMode.Maximize:
-          zoomMode = ZoomMode.Zoom;
-          break;
-        case ZoomMode.Zoom:
-        default:
-          zoomMode = ZoomMode.Fit;
-          break;
-      }
-      applyZoom({
-        center,
-        zoomMode,
-        cropRect: clip,
-      });
+      cycleZoomAt(offsetX, offsetY);
     } else if (isInIcon(offsetX, offsetY, maxSizeIconX, iconPadding)) {
       ignoreClick.current = true;
       e.stopPropagation();
@@ -581,6 +657,16 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       setGuide({
         pt1: 0,
         pt2: 0,
+      });
+    } else if (isInIcon(offsetX, offsetY, maxSizeIconX, iconPadding * 3 + 48)) {
+      ignoreClick.current = true;
+      e.stopPropagation();
+      applyZoom({
+        zoomMode:
+          videoScaling.zoomMode === ZoomMode.Maximize
+            ? ZoomMode.Fit
+            : ZoomMode.Maximize,
+        cropRect: clip,
       });
     } else {
       const corner = isInCorner(offsetX, offsetY);
@@ -897,7 +983,10 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
             destClipRect.height,
           ); // Inner rectangle to exclude
           ctx.closePath();
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+          ctx.fillStyle =
+            videoScaling.zoomMode === ZoomMode.Maximize
+              ? 'rgba(0, 0, 0, 1)'
+              : 'rgba(0, 0, 0, 0.5)';
           ctx.fill('evenodd'); // Fills everything except the inner rectangle
 
           // Restore the canvas state
@@ -977,6 +1066,27 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
           iconPadding * 2 + 24,
           true,
         );
+        drawSvgIcon(ctx, cropViewImage, maxSizeIconX, iconPadding * 3 + 48);
+        if (showExposureWarning) {
+          drawSvgIcon(
+            ctx,
+            exposureWarningImage,
+            maxSizeIconX,
+            iconPadding * 4 + 72,
+          );
+        }
+        if (iconTooltip) {
+          ctx.save();
+          ctx.font = '16px Arial';
+          const tooltipWidth = ctx.measureText(iconTooltip.text).width + 8;
+          drawText(
+            ctx,
+            Math.max(0, maxSizeIconX - tooltipWidth - 8),
+            iconTooltip.y,
+            iconTooltip.text,
+          );
+          ctx.restore();
+        }
 
         // Draw the WxH text in the upper-left corner of the rectangle with a background
         const text = `${Math.round((clip.width * frame.width) / 4) * 4}x${Math.round((clip.height * frame.height) / 4) * 4}`;
@@ -1025,7 +1135,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
             12,
             'br',
           );
-        } else {
+        } else if (videoScaling.zoomMode !== ZoomMode.Maximize) {
           // Draw selection rectangle
           ctx.strokeStyle = '#ffffffb0';
           ctx.lineWidth = 2;
@@ -1075,6 +1185,10 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     cropImage,
     fullscreenImage,
     snapToCenterImage,
+    cropViewImage,
+    exposureWarningImage,
+    showExposureWarning,
+    iconTooltip,
     videoScaling,
     focusArea,
     alertMessage,
@@ -1084,7 +1198,10 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     <Box
       sx={{ width: divwidth, height: divheight, position: 'relative' }}
       onMouseDown={handleMouseDown}
+      onDoubleClick={handleDoubleClick}
       onMouseUp={handleMouseUp}
+      onMouseMove={handleCanvasPointerMove}
+      onMouseLeave={() => setHoveredIconTooltip(undefined)}
       onContextMenu={(event) => {
         event.preventDefault();
       }}
@@ -1106,6 +1223,18 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         iconSize={24}
         color="white"
         setImage={setSnapToCenterImage}
+      />
+      <CanvasIcon
+        icon={FitScreenIcon}
+        iconSize={24}
+        color="white"
+        setImage={setCropViewImage}
+      />
+      <CanvasIcon
+        icon={WarningAmberIcon}
+        iconSize={24}
+        color="#ffca28"
+        setImage={setExposureWarningImage}
       />
       <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }} />
     </Box>
