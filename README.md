@@ -135,7 +135,7 @@ In package.json add svg to the "moduleNameMapper" suffix list along with png:
 
 ## Code signing for MacOS
 
-In order to install apps downloaded outside the app store without diving into security exception settings, apps must be signed and notarized. This process takes several minutes as the binary must be uploaded to Apple to get notarized. To disable notariztion during development, set `"notarize" : "false"` in the build.mac section of [package.json](package.json)
+In order to install apps downloaded outside the app store without diving into security exception settings, apps must be signed and notarized. This process takes several minutes as the binary must be uploaded to Apple to get notarized. To disable notarization during development, set `"notarize": false` in the build.mac section of [package.json](package.json).
 
 Requirements for signing:
 

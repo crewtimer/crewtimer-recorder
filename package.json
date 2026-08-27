@@ -38,7 +38,7 @@
     "build:dll": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack --config ./.erb/configs/webpack.config.renderer.dev.dll.ts",
     "build:main": "cross-env NODE_ENV=production TS_NODE_TRANSPILE_ONLY=true webpack --config ./.erb/configs/webpack.config.main.prod.ts",
     "build:renderer": "cross-env NODE_ENV=production TS_NODE_TRANSPILE_ONLY=true webpack --config ./.erb/configs/webpack.config.renderer.prod.ts",
-    "postinstall": "yarn copy:ndi && ts-node .erb/scripts/check-native-dep.js && electron-builder install-app-deps && npm run build:dll",
+    "postinstall": "install-electron && yarn copy:ndi && ts-node .erb/scripts/check-native-dep.js && electron-builder install-app-deps && npm run build:dll",
     "lint": "cross-env NODE_ENV=development eslint . --ext .js,.jsx,.ts,.tsx",
     "lint:fix": "cross-env NODE_ENV=development eslint . --ext .js,.jsx,.ts,.tsx --fix",
     "package": "ts-node ./.erb/scripts/clean.js dist && npm run build && electron-builder build --publish never && npm run build:dll",
@@ -50,9 +50,9 @@
     "start:preload": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack --config ./.erb/configs/webpack.config.preload.dev.ts",
     "start:renderer": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack serve --config ./.erb/configs/webpack.config.renderer.dev.ts",
     "test": "jest",
-    "build:win": "npm run build && node_modules/.bin/electron-builder --win",
-    "build:mac": "npm run build && APPLE_KEYCHAIN_PROFILE=crewtimer-app-signing node_modules/.bin/electron-builder --mac",
-    "macx64build": "npm run build && node_modules/.bin/electron-builder --mac --x64",
+    "install:native:win": "cd release/app/node_modules/crewtimer_video_recorder && node node_modules/prebuild-install/bin.js --verbose --force --runtime napi --platform win32 --arch x64",
+    "build:win": "npm run build && npm run install:native:win && node_modules/.bin/electron-builder --win --x64 --config.npmRebuild=false",
+    "build:mac": "npm run build && APPLE_KEYCHAIN_PROFILE=crewtimer-app-signing node_modules/.bin/electron-builder --mac --arm64",
     "kill": "kill -9 `lsof -i:1213 -t`",
     "build:native": "cd release/app && yarn add ../../native/recorder",
     "cleanbasic": "ts-node ./.erb/scripts/clean.js && rm -rf release/build",
@@ -225,12 +225,11 @@
       "!node_modules/**/lib-build/**/*"
     ],
     "mac": {
-      "notarize": {},
+      "notarize": true,
       "target": {
         "target": "default",
         "arch": [
-          "arm64",
-          "x64"
+          "arm64"
         ]
       },
       "type": "distribution",
