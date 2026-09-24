@@ -11,7 +11,11 @@
 import path from 'path';
 import { app, BrowserWindow, shell } from 'electron';
 import electronDebug from 'electron-debug';
-import { setLogFile, setNativeMessageCallback } from 'crewtimer_video_recorder';
+import {
+  requestLocalNetworkPermission,
+  setLogFile,
+  setNativeMessageCallback,
+} from 'crewtimer_video_recorder';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
 import './store/store';
@@ -155,6 +159,9 @@ app.on('window-all-closed', () => {
 app
   .whenReady()
   .then(() => {
+    if (process.platform === 'darwin') {
+      requestLocalNetworkPermission();
+    }
     createWindow();
     app.on('activate', () => {
       // On macOS it's common to re-create a window in the app when the

@@ -23,6 +23,7 @@ declare module 'crewtimer_video_recorder' {
     content: { [key: string]: any };
   }) => void;
   export function setNativeMessageCallback(func: CallbackFunc): void;
+  export function requestLocalNetworkPermission(): void;
   export function setLogFile(filename: string): void;
   export function shutdownRecorder(): void;
 }

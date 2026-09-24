@@ -648,17 +648,24 @@ Napi::Value setLogFile(const Napi::CallbackInfo &info)
   return env.Undefined();
 }
 
-// Initialize the addon
-Napi::Object Init(Napi::Env env, Napi::Object exports)
+Napi::Value requestLocalNetworkPermission(const Napi::CallbackInfo &info)
 {
 #ifdef __APPLE__
   triggerMacOSLocalNetworkPermission();
 #endif
+  return info.Env().Undefined();
+}
+
+// Initialize the addon
+Napi::Object Init(Napi::Env env, Napi::Object exports)
+{
   exports.Set(Napi::String::New(env, "nativeVideoRecorder"),
               Napi::Function::New(env, nativeVideoRecorder));
   exports.Set("setNativeMessageCallback",
               Napi::Function::New(env, initThreadSafeFunction));
   exports.Set("setLogFile", Napi::Function::New(env, setLogFile));
+  exports.Set("requestLocalNetworkPermission",
+              Napi::Function::New(env, requestLocalNetworkPermission));
   exports.Set("shutdownRecorder", Napi::Function::New(env, shutdownRecorder));
   return exports;
 }

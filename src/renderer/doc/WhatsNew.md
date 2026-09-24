@@ -1,3 +1,6 @@
+#### Version 1.0.22
+- Prompt for LocalNetwork access on macos
+
 #### Version 1.0.21
 - Allow screen rotation and shrinking viewport to just cropped video
 
