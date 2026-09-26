@@ -32,6 +32,7 @@ import generateTestPattern, {
 } from '../util/ImageUtils';
 import {
   Point,
+  ZoomMode,
   getVideoScaling,
   setVideoScaling,
   useVideoScaling,
@@ -229,12 +230,6 @@ const getNativeGuideCoords = () => {
   return { pt1, pt2 };
 };
 
-enum ZoomMode {
-  Fit,
-  Zoom,
-  Maximize,
-}
-
 const applyZoom = ({
   center,
   zoomMode,
@@ -268,7 +263,9 @@ const applyZoom = ({
         srcPoint.x = (cropRect.x + cropRect.width / 2) * srcWidth;
         srcPoint.y = (cropRect.y + cropRect.height / 2) * srcHeight;
 
-        // Retain max scale while retaining aspect ratio
+        // Fit the entire crop in the preview. In cropped-view mode the canvas
+        // itself has the crop's aspect ratio, so both dimensions fill without
+        // clipping, stretching, or exposing the masked area around the crop.
         const maxScale = Math.min(
           destWidth / (cropRect.width * srcWidth),
           destHeight / (cropRect.height * srcHeight),
@@ -320,7 +317,6 @@ const applyZoom = ({
     destWidth,
     destHeight,
   });
-
   setVideoScaling((prior) => ({
     ...prior,
     destX,
@@ -348,6 +344,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   const [settings] = useRecordingProps();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [videoScaling] = useVideoScaling();
+  const showCroppedView = videoScaling.zoomMode === ZoomMode.Maximize;
   // State for the selection rectangle
   const [recordingProps, setRecordingProps] = useRecordingProps();
   const [cameraState] = useCameraState();
@@ -399,6 +396,18 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
 
   const [timeoutMessage, setTimeoutMessage] = useState('');
 
+  const cropAspectRatio =
+    (clip.width * frame.width) / (clip.height * frame.height);
+  let previewWidth = divwidth;
+  let previewHeight = divheight;
+  if (showCroppedView && Number.isFinite(cropAspectRatio)) {
+    if (divwidth / divheight > cropAspectRatio) {
+      previewWidth = divheight * cropAspectRatio;
+    } else {
+      previewHeight = divwidth / cropAspectRatio;
+    }
+  }
+
   useEffect(() => {
     setIconTooltip(undefined);
     if (!hoveredIconTooltip) return () => {};
@@ -433,8 +442,11 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     draggingCornerRef.current = draggingCorner;
   }, [draggingCorner]);
   useEffect(() => {
-    setIsAdjustingCrop(clip.width !== 1 || clip.height !== 1);
-  }, [clip, setIsAdjustingCrop]);
+    setIsAdjustingCrop(
+      videoScaling.zoomMode !== ZoomMode.Maximize &&
+        (clip.width !== 1 || clip.height !== 1),
+    );
+  }, [clip, setIsAdjustingCrop, videoScaling.zoomMode]);
 
   if (frame?.data) {
     lastGoodFrame = frame;
@@ -456,14 +468,15 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       ...prior,
       srcWidth: frame.width,
       srcHeight: frame.height,
-      destWidth: divwidth,
-      destHeight: divheight,
+      destWidth: previewWidth,
+      destHeight: previewHeight,
     }));
     applyZoom({
-      zoomMode: ZoomMode.Fit,
+      zoomMode: getVideoScaling().zoomMode,
+      cropRect: clip,
     });
     // drawContentDebounced();
-  }, [frame.width, frame.height, divwidth, divheight]);
+  }, [frame.width, frame.height, previewWidth, previewHeight, clip]);
 
   useEffect(() => {
     if (!isRecording) {
@@ -552,10 +565,14 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     const iconX =
       drawableRect.x + drawableRect.width - (iconSize + iconPadding);
     const tooltips = [
-      {
-        text: isAdjustingCrop ? 'Use full frame' : 'Adjust crop',
-        y: iconPadding,
-      },
+      ...(videoScaling.zoomMode !== ZoomMode.Maximize
+        ? [
+            {
+              text: isAdjustingCrop ? 'Use full frame' : 'Adjust crop',
+              y: iconPadding,
+            },
+          ]
+        : []),
       { text: 'Center finish line', y: iconPadding * 2 + 24 },
       {
         text:
@@ -647,7 +664,10 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       e.preventDefault();
       e.stopPropagation();
       cycleZoomAt(offsetX, offsetY);
-    } else if (isInIcon(offsetX, offsetY, maxSizeIconX, iconPadding)) {
+    } else if (
+      videoScaling.zoomMode !== ZoomMode.Maximize &&
+      isInIcon(offsetX, offsetY, maxSizeIconX, iconPadding)
+    ) {
       ignoreClick.current = true;
       e.stopPropagation();
       handleMaximizeIconClick();
@@ -661,17 +681,22 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     } else if (isInIcon(offsetX, offsetY, maxSizeIconX, iconPadding * 3 + 48)) {
       ignoreClick.current = true;
       e.stopPropagation();
+      const enteringCroppedView = videoScaling.zoomMode !== ZoomMode.Maximize;
+      if (enteringCroppedView) {
+        setIsAdjustingCrop(false);
+      }
       applyZoom({
-        zoomMode:
-          videoScaling.zoomMode === ZoomMode.Maximize
-            ? ZoomMode.Fit
-            : ZoomMode.Maximize,
+        zoomMode: enteringCroppedView ? ZoomMode.Maximize : ZoomMode.Fit,
         cropRect: clip,
       });
     } else {
       const corner = isInCorner(offsetX, offsetY);
       // Only enable dragging if we're adjusting crop already or it's the finish line that is selected
-      if (corner && (isAdjustingCrop || corner?.name.startsWith('f'))) {
+      if (
+        corner &&
+        (corner.name.startsWith('f') ||
+          (isAdjustingCrop && videoScaling.zoomMode !== ZoomMode.Maximize))
+      ) {
         ignoreClick.current = true;
         e.stopPropagation();
         setDraggingCorner(corner.name);
@@ -807,35 +832,41 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
           const clipValue = (v: number) => {
             return Math.min(1, Math.max(0, v));
           };
+          const minWidth = Math.min(1, 128 / videoScaling.srcWidth);
+          const minHeight = Math.min(1, 128 / videoScaling.srcHeight);
+          const right = prevRect.x + prevRect.width;
+          const bottom = prevRect.y + prevRect.height;
+          const pointerX = clipValue(offsetX);
+          const pointerY = clipValue(offsetY);
 
           switch (draggingCornerRef.current) {
             case 'tl':
-              newRect.width += newRect.x - offsetX;
-              newRect.height += newRect.y - offsetY;
-              newRect.x = offsetX;
-              newRect.y = offsetY;
+              newRect.x = Math.min(pointerX, right - minWidth);
+              newRect.y = Math.min(pointerY, bottom - minHeight);
+              newRect.width = right - newRect.x;
+              newRect.height = bottom - newRect.y;
               break;
             case 'tr':
-              newRect.width = offsetX - newRect.x;
-              newRect.height += newRect.y - offsetY;
-              newRect.y = offsetY;
+              newRect.width =
+                Math.max(pointerX, prevRect.x + minWidth) - prevRect.x;
+              newRect.y = Math.min(pointerY, bottom - minHeight);
+              newRect.height = bottom - newRect.y;
               break;
             case 'bl':
-              newRect.width += newRect.x - offsetX;
-              newRect.x = offsetX;
-              newRect.height = offsetY - newRect.y;
+              newRect.x = Math.min(pointerX, right - minWidth);
+              newRect.width = right - newRect.x;
+              newRect.height =
+                Math.max(pointerY, prevRect.y + minHeight) - prevRect.y;
               break;
             case 'br':
-              newRect.width = offsetX - newRect.x;
-              newRect.height = offsetY - newRect.y;
+              newRect.width =
+                Math.max(pointerX, prevRect.x + minWidth) - prevRect.x;
+              newRect.height =
+                Math.max(pointerY, prevRect.y + minHeight) - prevRect.y;
               break;
             default:
               break;
           }
-          newRect.x = clipValue(newRect.x);
-          newRect.y = clipValue(newRect.y);
-          newRect.width = clipValue(newRect.width);
-          newRect.height = clipValue(newRect.height);
 
           applyChanges(newRect);
           return newRect;
@@ -1053,12 +1084,14 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         const maxSizeIconX =
           drawableRect.x + drawableRect.width - (iconSize + iconPadding);
 
-        drawSvgIcon(
-          ctx,
-          isAdjustingCrop ? fullscreenImage : cropImage,
-          maxSizeIconX,
-          iconPadding,
-        );
+        if (videoScaling.zoomMode !== ZoomMode.Maximize) {
+          drawSvgIcon(
+            ctx,
+            isAdjustingCrop ? fullscreenImage : cropImage,
+            maxSizeIconX,
+            iconPadding,
+          );
+        }
         drawSvgIcon(
           ctx,
           snapToCenterImage,
@@ -1196,47 +1229,62 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
 
   return (
     <Box
-      sx={{ width: divwidth, height: divheight, position: 'relative' }}
-      onMouseDown={handleMouseDown}
-      onDoubleClick={handleDoubleClick}
-      onMouseUp={handleMouseUp}
-      onMouseMove={handleCanvasPointerMove}
-      onMouseLeave={() => setHoveredIconTooltip(undefined)}
-      onContextMenu={(event) => {
-        event.preventDefault();
+      sx={{
+        width: divwidth,
+        height: divheight,
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
       }}
     >
-      <CanvasIcon
-        icon={CropIcon}
-        iconSize={24}
-        color="white"
-        setImage={setEditImage}
-      />
-      <CanvasIcon
-        icon={FullscreenIcon}
-        iconSize={24}
-        color="white"
-        setImage={setFullscreenImage}
-      />
-      <CanvasIcon
-        icon={VerticalAlignCenterIcon}
-        iconSize={24}
-        color="white"
-        setImage={setSnapToCenterImage}
-      />
-      <CanvasIcon
-        icon={FitScreenIcon}
-        iconSize={24}
-        color="white"
-        setImage={setCropViewImage}
-      />
-      <CanvasIcon
-        icon={WarningAmberIcon}
-        iconSize={24}
-        color="#ffca28"
-        setImage={setExposureWarningImage}
-      />
-      <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }} />
+      <Box
+        sx={{
+          width: previewWidth,
+          height: previewHeight,
+          position: 'relative',
+          flexShrink: 0,
+        }}
+        onMouseDown={handleMouseDown}
+        onDoubleClick={handleDoubleClick}
+        onMouseUp={handleMouseUp}
+        onMouseMove={handleCanvasPointerMove}
+        onMouseLeave={() => setHoveredIconTooltip(undefined)}
+        onContextMenu={(event) => {
+          event.preventDefault();
+        }}
+      >
+        <CanvasIcon
+          icon={CropIcon}
+          iconSize={24}
+          color="white"
+          setImage={setEditImage}
+        />
+        <CanvasIcon
+          icon={FullscreenIcon}
+          iconSize={24}
+          color="white"
+          setImage={setFullscreenImage}
+        />
+        <CanvasIcon
+          icon={VerticalAlignCenterIcon}
+          iconSize={24}
+          color="white"
+          setImage={setSnapToCenterImage}
+        />
+        <CanvasIcon
+          icon={FitScreenIcon}
+          iconSize={24}
+          color="white"
+          setImage={setCropViewImage}
+        />
+        <CanvasIcon
+          icon={WarningAmberIcon}
+          iconSize={24}
+          color="#ffca28"
+          setImage={setExposureWarningImage}
+        />
+        <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }} />
+      </Box>
     </Box>
   );
 };

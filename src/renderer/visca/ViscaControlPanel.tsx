@@ -33,7 +33,13 @@ import ViscaPresets from './ViscaPresets';
 import { useFocusArea } from '../recorder/RecorderData';
 import RotationSelector from '../recorder/RotationSelector';
 
-const ViscaControlPanel = () => {
+interface ViscaControlPanelProps {
+  vertical?: boolean;
+}
+
+const ViscaControlPanel: React.FC<ViscaControlPanelProps> = ({
+  vertical = false,
+}) => {
   const [cameraState, setCameraState] = useCameraState();
   const [viscaState] = useViscaState();
   const [focusAreaProps, setFocusAreaProps] = useFocusArea();
@@ -115,8 +121,14 @@ const ViscaControlPanel = () => {
   }
 
   return (
-    <Box sx={{ paddingBottom: 1, position: 'relative' }}>
-      <Grid container spacing={2}>
+    <Box
+      sx={{
+        paddingBottom: vertical ? 0 : 1,
+        paddingRight: vertical ? 1 : 0,
+        position: 'relative',
+      }}
+    >
+      <Grid container spacing={2} direction={vertical ? 'column' : 'row'}>
         {/* Focus Controls */}
         <Grid
           item

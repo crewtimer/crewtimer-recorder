@@ -3,7 +3,7 @@ import { Rect } from '../recorder/RecorderTypes';
 
 export type Point = { x: number; y: number };
 
-enum ZoomMode {
+export enum ZoomMode {
   Fit,
   Zoom,
   Maximize,
