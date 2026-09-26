@@ -165,7 +165,10 @@ private:
                                if (frame->frameType == Frame::FrameType::VIDEO &&
                                    frameRotation.load() != 0)
                                {
-                                 auto rotated = rotateFrame90(frame, frameRotation.load() == 90);
+                                 const int rotation = frameRotation.load();
+                                 auto rotated = rotation == -180
+                                                    ? rotateFrame180(frame)
+                                                    : rotateFrame90(frame, rotation == 90);
                                  if (rotated)
                                    frame = rotated;
                                }

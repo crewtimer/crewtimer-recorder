@@ -67,3 +67,4 @@ typedef std::shared_ptr<Frame> FramePtr;
 FramePtr cropFrame(const FramePtr &frame, int cropX, int cropY, int cropWidth,
                    int cropHeight);
 FramePtr rotateFrame90(const FramePtr &frame, bool clockwise);
+FramePtr rotateFrame180(const FramePtr &frame);

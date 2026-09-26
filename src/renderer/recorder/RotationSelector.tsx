@@ -15,7 +15,7 @@ const RotationSelector: React.FC = () => {
     setRecordingPropsPending(true);
     setRecordingProps({
       ...recordingProps,
-      rotation: Number(event.target.value) as -90 | 0 | 90,
+      rotation: Number(event.target.value) as -180 | -90 | 0 | 90,
       cropArea: { x: 0, y: 0, width: 1, height: 1 },
     });
     setGuide({ pt1: 0, pt2: 0 });
@@ -33,6 +33,7 @@ const RotationSelector: React.FC = () => {
     >
       <MenuItem value={0}>0°</MenuItem>
       <MenuItem value={-90}>-90°</MenuItem>
+      <MenuItem value={-180}>-180°</MenuItem>
       <MenuItem value={90}>+90°</MenuItem>
     </TextField>
   );

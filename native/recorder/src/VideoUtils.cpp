@@ -157,3 +157,79 @@ FramePtr rotateFrame90(const FramePtr &frame, bool clockwise)
 
   return rotated;
 }
+
+FramePtr rotateFrame180(const FramePtr &frame)
+{
+  if (!frame || frame->xres <= 0 || frame->yres <= 0)
+    return nullptr;
+
+  auto rotated =
+      std::make_shared<Frame>(frame->xres, frame->yres, frame->pixelFormat);
+  rotated->timestamp = frame->timestamp;
+  rotated->frame_rate_N = frame->frame_rate_N;
+  rotated->frame_rate_D = frame->frame_rate_D;
+  rotated->sensorXres = frame->sensorXres ? frame->sensorXres : frame->xres;
+  rotated->sensorYres = frame->sensorYres ? frame->sensorYres : frame->yres;
+  rotated->rotation = frame->rotation - 180;
+
+  if (frame->pixelFormat == Frame::YUV420P)
+  {
+    const int yPlaneSize = frame->xres * frame->yres;
+    const int chromaPlaneSize = (frame->xres / 2) * (frame->yres / 2);
+    const uint8_t *sourcePlanes[] = {
+        frame->data,
+        frame->data + yPlaneSize,
+        frame->data + yPlaneSize + chromaPlaneSize};
+    uint8_t *destinationPlanes[] = {
+        rotated->data,
+        rotated->data + yPlaneSize,
+        rotated->data + yPlaneSize + chromaPlaneSize};
+    const int planeSizes[] = {yPlaneSize, chromaPlaneSize, chromaPlaneSize};
+    for (int plane = 0; plane < 3; ++plane)
+    {
+      for (int i = 0; i < planeSizes[plane]; ++i)
+        destinationPlanes[plane][i] =
+            sourcePlanes[plane][planeSizes[plane] - 1 - i];
+    }
+  }
+  else if (frame->pixelFormat == Frame::UYVY422)
+  {
+    for (int destinationY = 0; destinationY < frame->yres; ++destinationY)
+    {
+      uint8_t *destination =
+          rotated->data + destinationY * rotated->stride;
+      const uint8_t *sourceRow =
+          frame->data + (frame->yres - 1 - destinationY) * frame->stride;
+      for (int destinationX = 0; destinationX < frame->xres;
+           destinationX += 2)
+      {
+        const int sourcePairX = frame->xres - 2 - destinationX;
+        const uint8_t *source = sourceRow + sourcePairX * 2;
+        destination[0] = source[0];
+        destination[1] = source[3];
+        destination[2] = source[2];
+        destination[3] = source[1];
+        destination += 4;
+      }
+    }
+  }
+  else
+  {
+    constexpr int bytesPerPixel = 3;
+    for (int destinationY = 0; destinationY < frame->yres; ++destinationY)
+    {
+      for (int destinationX = 0; destinationX < frame->xres; ++destinationX)
+      {
+        const int sourceX = frame->xres - 1 - destinationX;
+        const int sourceY = frame->yres - 1 - destinationY;
+        std::memcpy(rotated->data + destinationY * rotated->stride +
+                        destinationX * bytesPerPixel,
+                    frame->data + sourceY * frame->stride +
+                        sourceX * bytesPerPixel,
+                    bytesPerPixel);
+      }
+    }
+  }
+
+  return rotated;
+}

@@ -19,7 +19,7 @@ export interface RecordingProps {
   cropArea: Rect;
   waypoint: string;
   protocol: string;
-  rotation: -90 | 0 | 90;
+  rotation: -180 | -90 | 0 | 90;
 }
 
 export interface RecorderMessage {
@@ -51,7 +51,7 @@ export interface StartRecorderMessage extends RecorderMessage {
     cropArea: Rect;
     guide: { pt1: number; pt2: number };
     reportAllGaps?: boolean;
-    rotation: -90 | 0 | 90;
+    rotation: -180 | -90 | 0 | 90;
   };
 }
 export interface PreviewRecorderMessage extends RecorderMessage {
@@ -59,7 +59,7 @@ export interface PreviewRecorderMessage extends RecorderMessage {
   props?: {
     networkCamera: string;
     protocol: string;
-    rotation: -90 | 0 | 90;
+    rotation: -180 | -90 | 0 | 90;
   };
 }
 export interface RecorderResponse extends HandlerResponse {}

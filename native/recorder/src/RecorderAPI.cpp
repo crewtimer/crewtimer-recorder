@@ -290,9 +290,9 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
       const int rotation = props.Has("rotation")
                                ? props.Get("rotation").As<Napi::Number>().Int32Value()
                                : 0;
-      if (rotation != -90 && rotation != 0 && rotation != 90)
+      if (rotation != -180 && rotation != -90 && rotation != 0 && rotation != 90)
       {
-        Napi::TypeError::New(env, "rotation must be -90, 0, or 90")
+        Napi::TypeError::New(env, "rotation must be -180, -90, 0, or 90")
             .ThrowAsJavaScriptException();
         return ret;
       }
@@ -356,9 +356,9 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
       const int rotation = props.Has("rotation")
                                ? props.Get("rotation").As<Napi::Number>().Int32Value()
                                : 0;
-      if (rotation != -90 && rotation != 0 && rotation != 90)
+      if (rotation != -180 && rotation != -90 && rotation != 0 && rotation != 90)
       {
-        Napi::TypeError::New(env, "rotation must be -90, 0, or 90")
+        Napi::TypeError::New(env, "rotation must be -180, -90, 0, or 90")
             .ThrowAsJavaScriptException();
         return ret;
       }
