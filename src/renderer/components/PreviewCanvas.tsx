@@ -1,6 +1,6 @@
 /* eslint-disable no-bitwise */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Box } from '@mui/material';
+import { Box, IconButton, Tooltip } from '@mui/material';
 import CropIcon from '@mui/icons-material/Crop';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import VerticalAlignCenterIcon from '@mui/icons-material/VerticalAlignCenter';
@@ -12,6 +12,7 @@ import {
   getRecordingProps,
   useFocusArea,
   useFrameGrab,
+  useCameraTimeSample,
   useGuide,
   useIsRecording,
   useRecordingProps,
@@ -41,6 +42,8 @@ import { GrabFrameResponse, Rect } from '../recorder/RecorderTypes';
 import { showErrorDialog } from './ErrorDialog';
 import CanvasIcon from './CanvasIcon';
 import useRetriggerableOneShot from './RetriggerableOneshot';
+import { hasCameraTimeMismatch } from '../recorder/CameraTime';
+import { showCameraTimeDialog } from '../recorder/CameraTimeDialog';
 import {
   ExposureMode,
   useCameraState,
@@ -395,6 +398,15 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   >();
 
   const [timeoutMessage, setTimeoutMessage] = useState('');
+  const [timeWarningPosition, setTimeWarningPosition] = useState<Point>();
+  const [cameraTimeSample] = useCameraTimeSample();
+  const timeMismatch =
+    cameraTimeSample?.camera === recordingProps.networkCamera &&
+    cameraTimeSample?.protocol === recordingProps.protocol &&
+    hasCameraTimeMismatch(
+      cameraTimeSample.cameraTime,
+      cameraTimeSample.systemTime,
+    );
 
   const cropAspectRatio =
     (clip.width * frame.width) / (clip.height * frame.height);
@@ -1070,6 +1082,14 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
           const tsString = `${convertTimestampToString(tsMilli)}`;
 
           drawText(ctx, x, y, tsString);
+          if (timeMismatch) {
+            const warningX = x + ctx.measureText(tsString).width + 12;
+            setTimeWarningPosition((position) =>
+              position?.x === warningX && position.y === y + 12
+                ? position
+                : { x: warningX, y: y + 12 },
+            );
+          }
           if (focusArea.enabled) {
             const avgFocus = focusTracker(focus);
             const focusText = `focus=${Number((avgFocus.expAvg / 1000).toPrecision(2)).toFixed(1)}`;
@@ -1225,6 +1245,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     videoScaling,
     focusArea,
     alertMessage,
+    timeMismatch,
   ]);
 
   return (
@@ -1284,6 +1305,31 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
           setImage={setExposureWarningImage}
         />
         <canvas ref={canvasRef} style={{ width: '100%', height: '100%' }} />
+        {timeMismatch && frame?.tsMilli !== 0 && timeWarningPosition && (
+          <Tooltip title="⚠ Camera time differs by more than 2 minutes">
+            <IconButton
+              aria-label="Camera time mismatch information"
+              size="small"
+              onMouseDown={(event) => event.stopPropagation()}
+              onDoubleClick={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                showCameraTimeDialog();
+              }}
+              sx={{
+                position: 'absolute',
+                left: timeWarningPosition.x,
+                top: timeWarningPosition.y,
+                transform: 'translateY(-50%)',
+                padding: 0,
+                color: '#ffca28',
+                backgroundColor: 'rgba(50, 50, 50, 0.7)',
+              }}
+            >
+              <WarningAmberIcon />
+            </IconButton>
+          </Tooltip>
+        )}
       </Box>
     </Box>
   );

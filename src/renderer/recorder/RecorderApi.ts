@@ -18,6 +18,7 @@ import {
   getSystemLog,
   getWaypointList,
   setFrameGrab,
+  setCameraTimeSample,
   setIsRecording,
   setLoggerAlert,
   setRecordingPropsPending,
@@ -117,12 +118,19 @@ export const queryCameraList = () => {
 };
 
 export const requestVideoFrame = async () => {
+  const { networkCamera, protocol } = getRecordingProps();
   window.msgbus
     .sendMessage<RecorderMessage, GrabFrameResponse>('recorder', {
       op: 'grab-frame',
     })
     .then((frame) => {
       if (frame.status === 'OK' && frame.data) {
+        setCameraTimeSample({
+          camera: networkCamera,
+          protocol,
+          cameraTime: frame.tsMilli,
+          systemTime: Date.now(),
+        });
         setFrameGrab(frame);
       }
       // else {

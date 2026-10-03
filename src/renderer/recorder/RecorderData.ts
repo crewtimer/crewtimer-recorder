@@ -42,6 +42,17 @@ export const [useFrameGrab, setFrameGrab, getFrameGrab] = UseDatum<
   GrabFrameResponse | undefined
 >(generateTestPattern());
 
+export const [useCameraTimeSample, setCameraTimeSample, getCameraTimeSample] =
+  UseDatum<
+    | {
+        camera: string;
+        protocol: string;
+        cameraTime: number;
+        systemTime: number;
+      }
+    | undefined
+  >(undefined);
+
 export const [useGuide, setGuide, getGuide] = UseStoredDatum('guide', {
   pt1: 0,
   pt2: 0,

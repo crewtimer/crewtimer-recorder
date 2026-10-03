@@ -2,10 +2,17 @@ import React from 'react';
 import { Tooltip, Button } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
-import { useIsRecording, useRecordingProps } from '../recorder/RecorderData';
+import {
+  getCameraTimeSample,
+  getRecordingProps,
+  useIsRecording,
+  useRecordingProps,
+} from '../recorder/RecorderData';
 import { useCameraList } from '../recorder/CameraMonitor';
 import { startRecording, stopRecording } from '../recorder/RecorderApi';
 import { showErrorDialog } from './ErrorDialog';
+import { showCameraTimeDialog } from '../recorder/CameraTimeDialog';
+import { hasCameraTimeMismatch } from '../recorder/CameraTime';
 import {
   CAMERA_FALLBACK_IP,
   showCameraFallbackDialog,
@@ -30,13 +37,26 @@ export const StartButton: React.FC<StartButtonProps> = ({ hideStopButton }) => {
       const record = () => {
         startRecording().catch(showErrorDialog);
       };
+      const checkCameraTime = () => {
+        const sample = getCameraTimeSample();
+        const currentRecordingProps = getRecordingProps();
+        if (
+          sample?.camera === currentRecordingProps.networkCamera &&
+          sample?.protocol === currentRecordingProps.protocol &&
+          hasCameraTimeMismatch(sample.cameraTime, sample.systemTime)
+        ) {
+          showCameraTimeDialog(record);
+        } else {
+          record();
+        }
+      };
       const camera = cameraList.find(
         (c) => c.name === recordingProps.networkCamera,
       );
       if (camera?.address === CAMERA_FALLBACK_IP) {
-        showCameraFallbackDialog(record);
+        showCameraFallbackDialog(checkCameraTime);
       } else {
-        record();
+        checkCameraTime();
       }
     }
   };
