@@ -6,6 +6,10 @@ import { useIsRecording, useRecordingProps } from '../recorder/RecorderData';
 import { useCameraList } from '../recorder/CameraMonitor';
 import { startRecording, stopRecording } from '../recorder/RecorderApi';
 import { showErrorDialog } from './ErrorDialog';
+import {
+  CAMERA_FALLBACK_IP,
+  showCameraFallbackDialog,
+} from '../recorder/CameraFallbackDialog';
 
 interface StartButtonProps {
   hideStopButton?: boolean;
@@ -23,7 +27,17 @@ export const StartButton: React.FC<StartButtonProps> = ({ hideStopButton }) => {
     if (isRecording) {
       stopRecording().catch(showErrorDialog);
     } else {
-      startRecording().catch(showErrorDialog);
+      const record = () => {
+        startRecording().catch(showErrorDialog);
+      };
+      const camera = cameraList.find(
+        (c) => c.name === recordingProps.networkCamera,
+      );
+      if (camera?.address === CAMERA_FALLBACK_IP) {
+        showCameraFallbackDialog(record);
+      } else {
+        record();
+      }
     }
   };
 

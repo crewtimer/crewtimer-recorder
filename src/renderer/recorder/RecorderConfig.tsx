@@ -30,6 +30,10 @@ import { useViscaIP } from '../visca/ViscaState';
 import { useCameraList } from './CameraMonitor';
 import { ViscaPortSelector } from '../visca/ViscaPortSelector';
 import { startPreview, stopPreview, updateSettings } from './RecorderApi';
+import {
+  CAMERA_FALLBACK_IP,
+  showCameraFallbackDialog,
+} from './CameraFallbackDialog';
 
 const { openDirDialog, openFileExplorer } = window.Util;
 
@@ -144,6 +148,10 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
       ...recordingProps,
       networkCamera: event.target.value,
     });
+    const camera = cameraList.find((c) => c.name === event.target.value);
+    if (camera?.address === CAMERA_FALLBACK_IP) {
+      showCameraFallbackDialog();
+    }
   };
 
   const selectedCamera = recordingProps.networkCamera;
