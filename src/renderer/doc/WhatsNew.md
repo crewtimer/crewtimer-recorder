@@ -1,5 +1,6 @@
 | Version | What's New |
 | --- | --- |
+| 1.0.24 | Add warnings and hints for networking issues |
 | 1.0.23 | Improve support for portrait orientation video |
 | 1.0.22 | Prompt for LocalNetwork access on macos |
 | 1.0.21 | Allow screen rotation and shrinking viewport to just cropped video |
