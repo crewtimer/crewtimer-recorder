@@ -22,7 +22,8 @@ extern "C"
 
 class FFVideoRecorder : public VideoRecorder
 {
-  int frame_index;
+  uint64_t firstTimestamp100ns = 0;
+  int64_t lastFramePts = AV_NOPTS_VALUE;
   AVFrame *pFrame = nullptr;
   AVPacket *pkt = nullptr;
   struct SwsContext *sws_ctx = nullptr;
@@ -94,7 +95,8 @@ public:
   std::string openVideoStream(std::string directory, std::string filename,
                               int width, int height, float fps, uint64_t timestamp)
   {
-    frame_index = 0;
+    firstTimestamp100ns = timestamp;
+    lastFramePts = AV_NOPTS_VALUE;
     outputFile = filename + ".mp4";
     tmpFile = directory + "/" + "tmp-" + outputFile;
     outputFile = directory + "/" + outputFile;
@@ -196,8 +198,9 @@ public:
     pCodecCtx->bit_rate = 6000000;
     pCodecCtx->width = width;
     pCodecCtx->height = height;
-    pCodecCtx->framerate = av_make_q(static_cast<int>(fps), 1);
-    pCodecCtx->time_base = av_make_q(1, int(fps));
+    pCodecCtx->framerate = av_d2q(fps, 100000);
+    // Preserve source timing independently of the nominal frame rate.
+    pCodecCtx->time_base = av_make_q(1, 1000000);
     pCodecCtx->pix_fmt = AV_PIX_FMT_YUV420P;
     pCodecCtx->max_b_frames = 0;
     pCodecCtx->thread_count = 0; // let codec decide
@@ -366,9 +369,24 @@ public:
                 pFrame->linesize);
     }
 
-    // Frame timestamps are expressed in the encoder time base. Packets are
-    // rescaled to the muxer's stream time base after encoding.
-    pFrame->pts = frame_index++;
+    // Both NDI and SRT supply corrected capture times in 100 ns units.
+    // Start each segment at zero, preserving gaps in the source timeline.
+    if (video_frame->timestamp < firstTimestamp100ns)
+    {
+      const std::string msg = "Error: Frame timestamp precedes recording start";
+      SystemEventQueue::push("ffmpeg", msg);
+      return msg;
+    }
+    const int64_t pts = av_rescale_q(
+        video_frame->timestamp - firstTimestamp100ns,
+        av_make_q(1, 10000000), pCodecCtx->time_base);
+    if (lastFramePts != AV_NOPTS_VALUE && pts <= lastFramePts)
+    {
+      const std::string msg = "Error: Recording frame timestamps must increase";
+      SystemEventQueue::push("ffmpeg", msg);
+      return msg;
+    }
+    pFrame->pts = pts;
 
     std::string errorMsg = "";
     if (avcodec_send_frame(pCodecCtx, pFrame) < 0)
@@ -376,6 +394,10 @@ public:
       errorMsg = "Error: Cannot send a frame for encoding";
       SystemEventQueue::push("ffmpeg", errorMsg);
       // Do not return yet; still drain packets below
+    }
+    else
+    {
+      lastFramePts = pts;
     }
 
     while (1)
@@ -395,7 +417,7 @@ public:
       }
 
       av_packet_rescale_ts(pkt, pCodecCtx->time_base, video_st->time_base);
-      pkt->duration = av_rescale_q(1, pCodecCtx->time_base,
+      pkt->duration = av_rescale_q(1, av_inv_q(pCodecCtx->framerate),
                                    video_st->time_base);
       pkt->stream_index = video_st->index;
 
@@ -448,7 +470,7 @@ public:
           break;
         }
         av_packet_rescale_ts(pkt, pCodecCtx->time_base, video_st->time_base);
-        pkt->duration = av_rescale_q(1, pCodecCtx->time_base,
+        pkt->duration = av_rescale_q(1, av_inv_q(pCodecCtx->framerate),
                                      video_st->time_base);
         pkt->stream_index = video_st->index;
 
