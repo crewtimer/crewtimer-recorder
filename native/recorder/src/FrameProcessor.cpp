@@ -305,8 +305,23 @@ void FrameProcessor::processFrames()
 
         const auto ts100ns = video_frame->timestamp;
         startTs = ts100ns;
-        uint64_t complete_periods = ts100ns / (durationSecs * 10000000);
-        nextStartTime = (1 + complete_periods) * durationSecs * 10000000;
+        const uint64_t sliceDuration100ns = durationSecs * 10000000;
+        if (splitRequested)
+        {
+          // A requested split starts a full slice from the new file's first frame.
+          nextStartTime = ts100ns + sliceDuration100ns;
+        }
+        else if (count == 1)
+        {
+          const uint64_t completePeriods = ts100ns / sliceDuration100ns;
+          nextStartTime = (1 + completePeriods) * sliceDuration100ns;
+        }
+        else if (ts100ns >= nextStartTime)
+        {
+          // Keep subsequent slices on the schedule established by the last reset.
+          const uint64_t elapsedPeriods = (ts100ns - nextStartTime) / sliceDuration100ns;
+          nextStartTime += (1 + elapsedPeriods) * sliceDuration100ns;
+        }
 
         splitRequested = false;
         start = high_resolution_clock::now();
