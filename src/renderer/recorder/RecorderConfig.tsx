@@ -133,12 +133,17 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
         ? event.target.checked
         : event.target.value;
 
-    if (['recordingDuration', 'recordingPrefix'].includes(event.target.name)) {
+    if (
+      ['recordingDuration', 'recordingPrefix', 'recordingQuality'].includes(
+        event.target.name,
+      )
+    ) {
       setRecordingPropsPending(true);
     }
     setRecordingProps({
       ...recordingProps,
-      [event.target.name]: value,
+      [event.target.name]:
+        event.target.name === 'recordingQuality' ? Number(value) : value,
     });
   };
 
@@ -339,6 +344,24 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
               type="number"
             />
           </Tooltip>
+        </Grid>
+        <Grid item xs={3}>
+          <TextField
+            select
+            size="small"
+            label="Recording Quality"
+            fullWidth
+            margin="normal"
+            name="recordingQuality"
+            value={recordingProps.recordingQuality ?? 80}
+            onChange={handleChange}
+            helperText="Higher quality uses more disk space. Applies on next start."
+          >
+            <MenuItem value={60}>Standard</MenuItem>
+            <MenuItem value={70}>Medium</MenuItem>
+            <MenuItem value={80}>High</MenuItem>
+            <MenuItem value={90}>Very High</MenuItem>
+          </TextField>
         </Grid>
         <Grid item xs={3}>
           <Tooltip

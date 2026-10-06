@@ -29,3 +29,25 @@ For more help beyond this document, visit the [CrewTimer Video Recorder website]
 All NDI capable cameras should work with CrewTimer Video Recorder.  However, some low end cameras provide unreliable frame timing.
 
 For a list of cameras and other useful accessories, visit the [CrewTimer Video Recorder website](https://admin.crewtimer.com/help/VideoRecorder).
+
+### Recording quality
+
+The Recording Quality setting targets image quality and lets the encoder vary the
+bitrate with scene complexity. Choose Standard for smaller files, Medium for a
+balance, High (the default) for more detail, or Very High for the most detail and larger files. A
+change takes effect the next time recording starts. It cannot recover detail
+already lost in the camera stream.
+
+Quality settings use the selected encoder's own scale, so results and file sizes
+vary across computers. Apple Silicon uses VideoToolbox quality mode; Intel Macs
+require a software x264 encoder in the native FFmpeg build. Windows uses NVIDIA
+CQ, Intel ICQ, AMD constant quantization, or Media Foundation. Media Foundation
+uses the GPU's hardware encoder when available, falling back to Microsoft's
+software encoder, and targets 20, 30, 40, or 60 Mbps for Standard, Medium, High,
+and Very High.
+
+The saved `recordingQuality` property accepts integers from 1 to 100 (higher is
+better). The UI presets are 60, 70, 80, and 90. For x264, NVIDIA, Intel, and AMD, these
+map to CRF/CQ/ICQ/QP values of 26, 23, 20, and 17 respectively. Apple VideoToolbox
+uses the property directly on its 0–100 quality scale.
+These are approximate mappings, not guarantees of equal visual quality.

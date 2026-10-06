@@ -12,6 +12,7 @@ export interface RecordingProps {
   recordingFolder: string;
   recordingPrefix: string;
   recordingDuration: number;
+  recordingQuality: number;
   networkCamera: string;
   networkIP: string;
   showFinishGuide: boolean;
@@ -47,6 +48,7 @@ export interface StartRecorderMessage extends RecorderMessage {
     recordingFolder: string;
     recordingPrefix: string;
     recordingDuration: number;
+    recordingQuality: number;
     networkCamera: string;
     cropArea: Rect;
     guide: { pt1: number; pt2: number };
@@ -108,6 +110,7 @@ export const DefaultRecordingProps: RecordingProps = {
   recordingFolder: './',
   recordingPrefix: 'CT_',
   recordingDuration: 120,
+  recordingQuality: 80,
   networkCamera: '',
   networkIP: '',
   showFinishGuide: true,

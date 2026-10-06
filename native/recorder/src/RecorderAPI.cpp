@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cstdint>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <map>
@@ -296,6 +297,22 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
             .ThrowAsJavaScriptException();
         return ret;
       }
+      int recordingQuality = 80;
+      if (props.Has("recordingQuality"))
+      {
+        auto value = props.Get("recordingQuality");
+        const double quality = value.IsNumber()
+                                   ? value.As<Napi::Number>().DoubleValue()
+                                   : 0;
+        if (!std::isfinite(quality) || quality < 1 || quality > 100 ||
+            std::floor(quality) != quality)
+        {
+          Napi::TypeError::New(env, "recordingQuality must be an integer from 1 to 100")
+              .ThrowAsJavaScriptException();
+          return ret;
+        }
+        recordingQuality = static_cast<int>(quality);
+      }
       auto folder = props.Get("recordingFolder").As<Napi::String>().Utf8Value();
       auto prefix = getNapiStringField(props, "recordingPrefix", "CT_");
       auto networkCamera =
@@ -318,7 +335,7 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
       guide.pt2 = guideObj.Get("pt2").As<Napi::Number>().FloatValue();
 
       auto result = videoController->start(networkCamera, protocol, "ffmpeg", folder, prefix,
-                                           interval, cropRect, guide, rotation, reportAllGaps);
+                                           interval, cropRect, guide, rotation, reportAllGaps, recordingQuality);
       if (!result.empty())
       {
         std::cerr << "Error: " << result << std::endl;

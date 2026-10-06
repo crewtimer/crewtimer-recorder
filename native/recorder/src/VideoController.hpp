@@ -361,7 +361,8 @@ public:
                     const FrameProcessor::FRectangle cropArea,
                     const FrameProcessor::Guide guide,
                     const int rotation,
-                    const bool reportAllGaps)
+                    const bool reportAllGaps,
+                    const int recordingQuality = 80)
   {
     std::lock_guard<std::recursive_mutex> lock(controlMutex);
     this->srcName = srcName;
@@ -406,7 +407,7 @@ public:
     if (encoder == "ffmpeg")
     {
       SystemEventQueue::push("VID", "Using ffmpeg encoder.");
-      videoRecorder = createFfmpegRecorder();
+      videoRecorder = createFfmpegRecorder(recordingQuality);
     }
 
     if (encoder == "null")
