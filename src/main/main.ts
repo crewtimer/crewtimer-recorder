@@ -10,7 +10,7 @@
  */
 import './dll-path';
 import path from 'path';
-import { app, BrowserWindow, nativeTheme, shell } from 'electron';
+import { app, BrowserWindow, nativeTheme, screen, shell } from 'electron';
 import electronDebug from 'electron-debug';
 import {
   requestLocalNetworkPermission,
@@ -98,12 +98,22 @@ const createWindow = async () => {
     return path.join(RESOURCES_PATH, ...paths);
   };
 
+  // The UI is laid out for about 1280x800; shrink it to fit smaller screens
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
+  const zoomFactor = Math.max(
+    0.67,
+    Math.min(1, workArea.width / 1280, workArea.height / 800),
+  );
+
   mainWindow = new BrowserWindow({
     show: false,
-    width: 1024,
-    height: 728,
+    width: Math.min(1280, workArea.width),
+    height: Math.min(800, workArea.height),
+    minWidth: 800,
+    minHeight: 540,
     icon: getAssetPath('icon.png'),
     webPreferences: {
+      zoomFactor,
       preload: app.isPackaged
         ? path.join(__dirname, 'preload.js')
         : path.join(__dirname, '../../.erb/dll/preload.js'),

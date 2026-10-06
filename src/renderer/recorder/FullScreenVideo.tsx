@@ -18,10 +18,9 @@ export const FullScreenVideo = () => {
   return (
     <div
       style={{
-        padding: '0px 10px',
         display: 'flex',
         flexDirection: isPortrait ? 'row' : 'column',
-        gap: isPortrait ? '10px' : 0,
+        gap: '16px',
         height: '100%',
         minHeight: 0,
       }}

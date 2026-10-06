@@ -1,7 +1,56 @@
 import React from 'react';
-import { IconButton, Typography, Grid } from '@mui/material';
+import { IconButton, IconButtonProps, Stack, Typography } from '@mui/material';
 import RemoveIcon from '@mui/icons-material/Remove';
 import AddIcon from '@mui/icons-material/Add';
+import { monoFont } from '../components/Panel';
+
+/** Square −/+ button shared by the camera control steppers. */
+export const StepButton: React.FC<
+  Pick<
+    IconButtonProps,
+    | 'aria-label'
+    | 'disabled'
+    | 'onClick'
+    | 'onMouseDown'
+    | 'onMouseUp'
+    | 'onTouchStart'
+    | 'onTouchEnd'
+  > & { direction: 'down' | 'up' }
+> = ({
+  direction,
+  'aria-label': ariaLabel,
+  disabled,
+  onClick,
+  onMouseDown,
+  onMouseUp,
+  onTouchStart,
+  onTouchEnd,
+}) => (
+  <IconButton
+    color="primary"
+    aria-label={ariaLabel}
+    disabled={disabled}
+    onClick={onClick}
+    onMouseDown={onMouseDown}
+    onMouseUp={onMouseUp}
+    onTouchStart={onTouchStart}
+    onTouchEnd={onTouchEnd}
+    sx={{
+      width: 36,
+      height: 36,
+      border: 1,
+      borderColor: 'divider',
+      borderRadius: 1,
+      '&:active': { bgcolor: 'action.selected' },
+    }}
+  >
+    {direction === 'down' ? (
+      <RemoveIcon fontSize="small" />
+    ) : (
+      <AddIcon fontSize="small" />
+    )}
+  </IconButton>
+);
 
 interface RangeStepperProps {
   title: string;
@@ -32,9 +81,6 @@ const RangeStepper: React.FC<RangeStepperProps> = ({
     const newValue = value - step;
     if (newValue >= min) {
       onChange(newValue);
-    } else {
-      // If you want to clamp the value at `min`, uncomment:
-      // onChange(min);
     }
   };
 
@@ -42,75 +88,32 @@ const RangeStepper: React.FC<RangeStepperProps> = ({
     const newValue = value + step;
     if (newValue <= max) {
       onChange(newValue);
-    } else {
-      // If you want to clamp the value at `max`, uncomment:
-      // onChange(max);
     }
   };
 
   return (
-    <Grid
-      container
-      direction="row" // Explicitly use row direction
-      wrap="nowrap" // Prevent wrapping to a new line
-      alignItems="center"
-      justifyContent="center"
-      spacing={1}
-      sx={{ width: 'fit-content' }}
-    >
-      {/* Title (fixed width to align multiple panels) */}
-      {title && (
-        <Grid item sx={{ width: '55px' }}>
-          <Typography variant="subtitle2" noWrap>
-            {title}
-          </Typography>
-        </Grid>
-      )}
-      <Grid item>
-        <IconButton
-          size="small"
-          disabled={step > 0 ? value === min : value === max}
-          onClick={handleDecrement}
-          color="primary"
-          sx={{
-            padding: '4px',
-            // backgroundColor: 'rgba(0, 0, 0, 0.04)',
-            border: '1px solid rgba(0,0,0,0.23)',
-            '&:active': {
-              backgroundColor: 'rgba(0, 0, 0, 0.20)',
-            },
-          }}
-        >
-          <RemoveIcon fontSize="small" />
-        </IconButton>
-      </Grid>
-      <Grid item>
-        <IconButton
-          disabled={step > 0 ? value === max : value === min}
-          size="small"
-          onClick={handleIncrement}
-          color="primary"
-          sx={{
-            padding: '4px',
-            // backgroundColor: 'rgba(0, 0, 0, 0.04)',
-            border: '1px solid rgba(0,0,0,0.23)',
-            '&:active': {
-              backgroundColor: 'rgba(0, 0, 0, 0.20)',
-            },
-          }}
-        >
-          <AddIcon fontSize="small" />
-        </IconButton>
-      </Grid>
-      <Grid item>
-        <Typography
-          variant="body2"
-          sx={{ minWidth: '2rem', textAlign: 'center' }}
-        >
-          {labels ? labels[value] : value}
-        </Typography>
-      </Grid>
-    </Grid>
+    <Stack direction="row" alignItems="center" spacing={0.75}>
+      <Typography variant="body2" color="text.secondary" sx={{ width: 52 }}>
+        {title}
+      </Typography>
+      <StepButton
+        direction="down"
+        aria-label={`Decrease ${title}`}
+        disabled={step > 0 ? value === min : value === max}
+        onClick={handleDecrement}
+      />
+      <StepButton
+        direction="up"
+        aria-label={`Increase ${title}`}
+        disabled={step > 0 ? value === max : value === min}
+        onClick={handleIncrement}
+      />
+      <Typography
+        sx={{ fontFamily: monoFont, fontSize: 14, minWidth: 48, pl: 0.5 }}
+      >
+        {labels ? labels[value] : value}
+      </Typography>
+    </Stack>
   );
 };
 

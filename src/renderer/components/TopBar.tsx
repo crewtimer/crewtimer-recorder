@@ -1,27 +1,22 @@
 import {
-  Toolbar,
-  IconButton,
   Typography,
   Box,
   Button,
   Stack,
   Link,
   Tooltip,
+  Tabs,
+  Tab,
 } from '@mui/material';
-import { UseDatum } from 'react-usedatum';
-import MenuIcon from '@mui/icons-material/Menu';
 import Visibility from '@mui/icons-material/Visibility';
-import logo from '../../../assets/icons/crewtimer.svg';
+import logo from '../../../assets/icons/64x64.png';
 import HamburgerMenu from './HamburgerMenu';
 import RecordingStatus from '../recorder/RecordingStatus';
 import { useFirebaseDatum } from '../util/UseFirebase';
 import { setDialogConfig } from './ConfirmDialog';
 import { StartButton } from './StartButton';
-import LoggerAlert from './LoggerAlert';
-import { useReportAllGaps } from '../recorder/RecorderData';
-
-export const drawerWidth = 240;
-export const [useDrawerOpen] = UseDatum(false);
+import { useRecordingProps, useReportAllGaps } from '../recorder/RecorderData';
+import { SETTINGS_PAGES, useSelectedPage } from '../pages/SelectedPage';
 
 const versionAsNumber = (version: string) => {
   const parts = version.split('.');
@@ -29,8 +24,9 @@ const versionAsNumber = (version: string) => {
 };
 
 export function TopBar() {
-  const [open, setOpen] = useDrawerOpen();
+  const [page, setSelectedPage] = useSelectedPage();
   const [reportAllGaps] = useReportAllGaps();
+  const [{ waypoint }] = useRecordingProps();
   const latestVersion =
     useFirebaseDatum<string, string>(
       '/global/config/video-recorder/latestVersion',
@@ -43,84 +39,106 @@ export function TopBar() {
     versionAsNumber(latestVersion) >
     versionAsNumber(window.platform.appVersion);
 
+  // Help and Privacy are reached from the menu and select no tab
+  const tab = SETTINGS_PAGES.includes(page)
+    ? '/'
+    : (['/video', '/log'].find((p) => p === page) ?? false);
+
   return (
-    <Toolbar
+    <Box
+      component="header"
       sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'flex-start',
+        bgcolor: 'background.paper',
+        borderBottom: 1,
+        borderColor: 'divider',
       }}
     >
-      <IconButton
-        edge="start"
-        color="inherit"
-        aria-label="open drawer"
-        onClick={() => setOpen(true)}
-        sx={{ marginRight: 2, display: open ? 'none' : 'inherit' }}
-        size="large"
-      >
-        <MenuIcon />
-      </IconButton>
-      <img
-        src={logo}
-        alt="CrewTimer"
-        width="40"
-        height="40"
-        style={{ marginLeft: 8, marginRight: 8 }}
-      />
-      <Typography component="h1" variant="h6" color="inherit" noWrap>
-        CrewTimer Video Recorder
-      </Typography>
-      <Box sx={{ flexGrow: 1 }} />
-      {updateAvailable && (
-        <Button
-          variant="outlined"
-          color="inherit"
-          size="small"
-          onClick={() =>
-            setDialogConfig({
-              title: 'Software Update Available',
-              body: (
-                <Stack>
-                  <Typography>
-                    Version: {latestVersion}: {latestText}.
-                  </Typography>
-                  <Link
-                    href="https://github.com/crewtimer/crewtimer-recorder/releases/latest"
-                    target="_blank"
-                  >
-                    Download from github
-                  </Link>
-                </Stack>
-              ),
-              button: 'OK',
-              showCancel: false,
-            })
-          }
-        >
-          Update
-        </Button>
-      )}
-      <Box sx={{ alignItems: 'center' }}>
-        <StartButton hideStopButton />
-        <RecordingStatus />
-      </Box>
-      <LoggerAlert />
-      {reportAllGaps && (
-        <Tooltip title="All recording gaps reported as errors">
-          <Visibility fontSize="small" sx={{ marginLeft: '1em' }} />
-        </Tooltip>
-      )}
       <Box
         sx={{
-          width: 48 + 8 + 8,
           display: 'flex',
-          justifyContent: 'flex-end', // Aligns the HamburgerMenu to the right
+          flexWrap: 'wrap',
           alignItems: 'center',
+          gap: '12px 24px',
+          px: 2.5,
+          py: 1.5,
         }}
       >
-        <HamburgerMenu />
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={1.5}
+          sx={{ flex: '1 1 220px' }}
+        >
+          <img src={logo} alt="" width="36" height="36" />
+          <Box>
+            <Typography
+              component="h1"
+              sx={{ fontWeight: 600, fontSize: 16, lineHeight: 1.3 }}
+            >
+              CrewTimer Video Recorder
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              {`v${window.platform.appVersion}${waypoint ? ` · ${waypoint} waypoint` : ''}`}
+            </Typography>
+          </Box>
+        </Stack>
+        <Box
+          sx={{ flex: '0 1 auto', display: 'flex', justifyContent: 'center' }}
+        >
+          <RecordingStatus />
+        </Box>
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={1}
+          sx={{ flex: '1 1 auto', justifyContent: 'flex-end' }}
+        >
+          {updateAvailable && (
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() =>
+                setDialogConfig({
+                  title: 'Software Update Available',
+                  body: (
+                    <Stack>
+                      <Typography>
+                        Version: {latestVersion}: {latestText}.
+                      </Typography>
+                      <Link
+                        href="https://github.com/crewtimer/crewtimer-recorder/releases/latest"
+                        target="_blank"
+                      >
+                        Download from github
+                      </Link>
+                    </Stack>
+                  ),
+                  button: 'OK',
+                  showCancel: false,
+                })
+              }
+            >
+              Update available
+            </Button>
+          )}
+          {reportAllGaps && (
+            <Tooltip title="All recording gaps reported as errors">
+              <Visibility fontSize="small" color="action" />
+            </Tooltip>
+          )}
+          <StartButton />
+          <HamburgerMenu />
+        </Stack>
       </Box>
-    </Toolbar>
+      <Tabs
+        value={tab}
+        onChange={(_, value: string) => setSelectedPage(value)}
+        sx={{ px: 1.5 }}
+      >
+        <Tab value="/" label="Recorder" />
+        <Tab value="/video" label="Camera control" />
+        <Tab value="/log" label="Event log" />
+      </Tabs>
+    </Box>
   );
 }

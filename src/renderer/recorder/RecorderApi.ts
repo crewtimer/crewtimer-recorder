@@ -12,7 +12,6 @@ import {
 } from './RecorderTypes';
 import {
   getGuide,
-  getLoggerAlert,
   getRecordingProps,
   getReportAllGaps,
   getSystemLog,
@@ -20,7 +19,6 @@ import {
   setFrameGrab,
   setCameraTimeSample,
   setIsRecording,
-  setLoggerAlert,
   setRecordingPropsPending,
   setRecordingStartTime,
   setSystemLog,
@@ -261,9 +259,6 @@ window.Util.onNativeMessage((nativeMessage: NativeMessage) => {
       {
         console.log(content.message);
         const { message } = content;
-        if (message.startsWith('Error:')) {
-          setLoggerAlert(getLoggerAlert() + 1);
-        }
         const log = getSystemLog();
         const last = log[log.length - 1];
         if (

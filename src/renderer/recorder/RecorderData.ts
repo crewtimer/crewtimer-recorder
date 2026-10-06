@@ -62,7 +62,6 @@ export const [useSystemLog, setSystemLog, getSystemLog] = UseDatum<
   RecordingLogEntry[]
 >([]);
 
-export const [useLoggerAlert, setLoggerAlert, getLoggerAlert] = UseDatum(0);
 export const [useReportAllGaps, , getReportAllGaps] = UseStoredDatum(
   'reportAllGaps',
   false,

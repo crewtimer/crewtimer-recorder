@@ -1,17 +1,19 @@
 import React, { useEffect } from 'react';
 import {
+  Alert,
   Box,
-  Grid,
+  Button,
   MenuItem,
-  FormControl,
+  Paper,
   Select,
   SelectChangeEvent,
+  Stack,
   FormControlLabel,
   Checkbox,
   Tooltip,
-  IconButton,
+  Typography,
 } from '@mui/material';
-import CameraIcon from '@mui/icons-material/Camera';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import {
   sendViscaCommand,
   getCameraState,
@@ -32,6 +34,41 @@ import RangeStepper from './RangeStepper';
 import ViscaPresets from './ViscaPresets';
 import { useFocusArea } from '../recorder/RecorderData';
 import RotationSelector from '../recorder/RotationSelector';
+
+/** A labelled cluster of controls in the camera control toolbar. */
+const Group: React.FC<{
+  label: string;
+  disabled?: boolean;
+  children: React.ReactNode;
+}> = ({ label, disabled, children }) => (
+  <Box
+    role="group"
+    aria-label={label}
+    sx={{
+      display: 'flex',
+      flexDirection: 'column',
+      gap: 0.75,
+      ...(disabled && { opacity: 0.45, pointerEvents: 'none' }),
+    }}
+  >
+    <Typography
+      variant="caption"
+      color="text.secondary"
+      sx={{
+        fontWeight: 600,
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+      }}
+    >
+      {label}
+    </Typography>
+    <Box
+      sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}
+    >
+      {children}
+    </Box>
+  </Box>
+);
 
 interface ViscaControlPanelProps {
   vertical?: boolean;
@@ -115,169 +152,81 @@ const ViscaControlPanel: React.FC<ViscaControlPanelProps> = ({
     }
   };
 
-  // If the VISCA port is not set, do not render the control panel
-  if (viscaPort === 0) {
-    return null;
-  }
+  const viscaEnabled = viscaPort !== 0;
+  const disconnected = viscaEnabled && viscaState === 'Disconnected';
 
   return (
-    <Box
-      sx={{
-        paddingBottom: vertical ? 0 : 1,
-        paddingRight: vertical ? 1 : 0,
-        position: 'relative',
-      }}
+    <Paper
+      variant="outlined"
+      sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}
     >
-      <Grid container spacing={2} direction={vertical ? 'column' : 'row'}>
-        {/* Focus Controls */}
-        <Grid
-          item
-          xs="auto"
-          container
-          wrap="nowrap"
-          alignItems="flex-start"
-          justifyContent="flex-start"
-          sx={{ flexShrink: 0 }}
-        >
-          <Box
-            component="fieldset"
-            sx={{
-              margin: 0,
-              padding: '2px 8px 7px',
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 1,
-            }}
-          >
-            <Box
-              component="legend"
-              sx={{ padding: '0 4px', fontSize: '0.875rem' }}
-            >
-              Focus
-            </Box>
-            <ViscaValueButton
-              title=""
-              decrement={{ type: 'FOCUS_OUT' }}
-              increment={{ type: 'FOCUS_IN' }}
-              reset={{ type: 'FOCUS_RESET' }}
-              value={cameraState.autoFocus}
-              autoOn={{ type: 'AUTO_FOCUS', value: true }}
-              autoOff={{ type: 'AUTO_FOCUS', value: false }}
-              autoOnce={{ type: 'FOCUS_ONCE' }}
-              stepButtonsAfterMode
-            />
-            <Tooltip title="Show Focus metric to assist with manual focus">
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={focusAreaProps.enabled}
-                    onChange={() =>
-                      setFocusAreaProps((prior) => ({
-                        ...prior,
-                        enabled: !prior.enabled,
-                      }))
-                    }
-                    color="primary"
-                    size="small"
-                  />
-                }
-                label="Focus Assist"
-                sx={{
-                  display: 'flex',
-                  width: 'fit-content',
-                  marginLeft: 0,
-                  marginTop: '4px',
-                  '& .MuiFormControlLabel-label': { fontSize: '0.95rem' },
-                }}
+      {disconnected && (
+        <Alert severity="warning">
+          {`Camera control (VISCA) is disconnected from ${viscaIP}:${viscaPort}. Check the camera and the VISCA port on the Recorder tab.`}
+        </Alert>
+      )}
+      {!viscaEnabled && (
+        <Typography variant="body2" color="text.secondary">
+          Camera control is off. Set a VISCA port on the Recorder tab to control
+          focus, zoom and exposure.
+        </Typography>
+      )}
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: vertical ? 'column' : 'row',
+          flexWrap: 'wrap',
+          alignItems: 'flex-start',
+          gap: vertical ? 2 : '16px 32px',
+        }}
+      >
+        {viscaEnabled && (
+          <>
+            <Group label="Focus" disabled={disconnected}>
+              <ViscaValueButton
+                name="Focus"
+                decrement={{ type: 'FOCUS_OUT' }}
+                increment={{ type: 'FOCUS_IN' }}
+                reset={{ type: 'FOCUS_RESET' }}
+                value={cameraState.autoFocus}
+                autoOn={{ type: 'AUTO_FOCUS', value: true }}
+                autoOff={{ type: 'AUTO_FOCUS', value: false }}
+                autoOnce={{ type: 'FOCUS_ONCE' }}
               />
-            </Tooltip>
-          </Box>
-        </Grid>
-        <Grid
-          item
-          xs="auto"
-          container
-          alignItems="flex-start"
-          justifyContent="flex-start"
-          sx={{ flexShrink: 0 }}
-        >
-          <Box
-            component="fieldset"
-            sx={{
-              margin: 0,
-              padding: '2px 8px 7px',
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 1,
-            }}
-          >
-            <Box
-              component="legend"
-              sx={{ padding: '0 4px', fontSize: '0.875rem' }}
-            >
-              Zoom
-            </Box>
-            <ViscaValueButton
-              title=""
-              decrement={{ type: 'ZOOM_OUT' }}
-              increment={{ type: 'ZOOM_IN' }}
-              reset={{ type: 'ZOOM_RESET' }}
-            />
-          </Box>
-        </Grid>
-        {/* Exposure Controls */}
-        <Grid item xs="auto" sx={{ flexShrink: 0 }}>
-          <Box
-            component="fieldset"
-            sx={{
-              margin: 0,
-              padding: '2px 8px 7px',
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 1,
-            }}
-          >
-            <Box
-              component="legend"
-              sx={{ padding: '0 4px', fontSize: '0.875rem' }}
-            >
-              Exposure
-            </Box>
-            <Box display="flex" alignItems="flex-start" gap={1}>
-              <FormControl
-                margin="dense"
-                size="small"
-                sx={{ minWidth: 120, zIndex: 101 }}
-              >
+            </Group>
+            <Group label="Zoom" disabled={disconnected}>
+              <ViscaValueButton
+                name="Zoom"
+                decrement={{ type: 'ZOOM_OUT' }}
+                increment={{ type: 'ZOOM_IN' }}
+                reset={{ type: 'ZOOM_RESET' }}
+              />
+            </Group>
+            <Group label="Exposure" disabled={disconnected}>
+              <Stack spacing={1}>
                 <Select
-                  id="select-id"
+                  size="small"
                   value={cameraState.exposureMode}
                   onChange={onExposureModeChange}
-                  sx={{
-                    '.MuiSelect-select': {
-                      padding: '6px 14px',
-                      fontSize: '0.8rem',
-                    },
-                  }}
+                  inputProps={{ 'aria-label': 'Exposure mode' }}
+                  sx={{ height: 36, minWidth: 180 }}
                 >
                   <MenuItem value={ExposureMode.EXPOSURE_AUTO}>
-                    Full Auto
+                    Full auto
                   </MenuItem>
                   <MenuItem value={ExposureMode.EXPOSURE_MANUAL}>
                     Manual
                   </MenuItem>
                   <MenuItem value={ExposureMode.EXPOSURE_SHUTTER}>
-                    Shutter Priority
+                    Shutter priority
                   </MenuItem>
                   <MenuItem value={ExposureMode.EXPOSURE_IRIS}>
-                    Iris Priority
+                    Iris priority
                   </MenuItem>
                   <MenuItem value={ExposureMode.EXPOSURE_BRIGHT}>
-                    Brightness Priority
+                    Brightness priority
                   </MenuItem>
                 </Select>
-              </FormControl>
-              <Box>
                 {(cameraState.exposureMode === ExposureMode.EXPOSURE_MANUAL ||
                   cameraState.exposureMode === ExposureMode.EXPOSURE_IRIS) && (
                   <RangeStepper
@@ -335,81 +284,45 @@ const ViscaControlPanel: React.FC<ViscaControlPanelProps> = ({
                     }}
                   />
                 )}
-              </Box>
-            </Box>
-          </Box>
-        </Grid>
-        <Grid item xs="auto" sx={{ flexShrink: 0 }}>
+              </Stack>
+            </Group>
+          </>
+        )}
+        <Group label="Preview">
           <RotationSelector />
-        </Grid>
-        <Grid
-          item
-          xs="auto"
-          container
-          alignItems="flex-start"
-          justifyContent="flex-start"
-          sx={{ flexShrink: 0 }}
-        >
-          <Box
-            component="fieldset"
-            sx={{
-              margin: 0,
-              padding: '2px 8px 7px',
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 1,
-            }}
-          >
-            <Box
-              component="legend"
-              sx={{ padding: '0 4px', fontSize: '0.875rem' }}
+          <Tooltip title="Show a sharpness metric on the preview to help with manual focus">
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={focusAreaProps.enabled}
+                  onChange={() =>
+                    setFocusAreaProps((prior) => ({
+                      ...prior,
+                      enabled: !prior.enabled,
+                    }))
+                  }
+                  size="small"
+                />
+              }
+              label="Focus assist"
+              sx={{ m: 0 }}
+            />
+          </Tooltip>
+        </Group>
+        {viscaEnabled && (
+          <Group label="Presets" disabled={disconnected}>
+            <ViscaPresets />
+            <Button
+              size="small"
+              endIcon={<OpenInNewIcon fontSize="small" />}
+              onClick={() => window.open(`http://${viscaIP}`)}
             >
-              Control
-            </Box>
-            <Box
-              display="flex"
-              flexDirection="column"
-              alignItems="flex-start"
-              gap={1}
-            >
-              <ViscaPresets />
-              <Tooltip title={`Open Camera Web Page at ${viscaIP}`}>
-                <span>
-                  <IconButton
-                    disabled={viscaState !== 'Connected'}
-                    color="inherit"
-                    aria-label="Open Camera"
-                    onClick={() => window.open(`http://${viscaIP}`)}
-                    size="medium"
-                  >
-                    <CameraIcon />
-                  </IconButton>
-                </span>
-              </Tooltip>
-            </Box>
-          </Box>
-        </Grid>
-      </Grid>
-      {/* Conditionally render "Disconnected" overlay if explicitly disconnected */}
-      {viscaState === 'Disconnected' && (
-        <Box
-          position="absolute"
-          top={0}
-          left={0}
-          width="100%"
-          height="100%"
-          display="flex"
-          justifyContent="center"
-          alignItems="center"
-          bgcolor="rgba(0, 0, 0, 0.4)"
-          color="#fff"
-          fontSize="1.5rem"
-          zIndex={9999}
-        >
-          Camera control channel disconnected
-        </Box>
-      )}
-    </Box>
+              Camera web page
+            </Button>
+          </Group>
+        )}
+      </Box>
+    </Paper>
   );
 };
 

@@ -13,7 +13,7 @@ import SettingsBrightnessIcon from '@mui/icons-material/SettingsBrightness';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import { Divider, IconButton, ListItemIcon, ListItemText } from '@mui/material';
-import { useSelectedPage } from '../pages/MainPage';
+import { useSelectedPage } from '../pages/SelectedPage';
 import { setToast } from './Toast';
 import { useViscaIP } from '../visca/ViscaState';
 import {

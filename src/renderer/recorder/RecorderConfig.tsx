@@ -1,18 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
+  Box,
+  Button,
   TextField,
   Typography,
-  Grid,
   MenuItem,
   Checkbox,
   FormControlLabel,
   Tooltip,
   IconButton,
+  Stack,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@mui/material';
-import CameraIcon from '@mui/icons-material/Camera';
 import FolderOpenIcon from '@mui/icons-material/FolderOpen';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import VideocamOffOutlinedIcon from '@mui/icons-material/VideocamOffOutlined';
 import {
   useRecordingStatus,
   useRecordingProps,
@@ -24,10 +28,10 @@ import {
 import { FullSizeWindow } from '../components/FullSizeWindow';
 import PreviewCanvas from '../components/PreviewCanvas';
 import { showErrorDialog } from '../components/ErrorDialog';
-import InfoPopup from '../components/InfoPopup';
-import RecorderTips from './RecorderTips';
+import { Panel } from '../components/Panel';
+import { SignalHealth } from './SignalHealth';
 import { useViscaIP } from '../visca/ViscaState';
-import { useCameraList } from './CameraMonitor';
+import { refreshCameraList, useCameraList } from './CameraMonitor';
 import { ViscaPortSelector } from '../visca/ViscaPortSelector';
 import { startPreview, stopPreview, updateSettings } from './RecorderApi';
 import {
@@ -36,52 +40,87 @@ import {
 } from './CameraFallbackDialog';
 
 const { openDirDialog, openFileExplorer } = window.Util;
+const isMac = window.platform.platform === 'darwin';
+
+type Camera = { name: string; address: string };
+const cameraLabel = (camera: Camera) =>
+  `${camera.name.replace(camera.address, '').replace('-)', ')')} — ${camera.address}`;
 
 const RecordingError = () => {
   const [recordingStatus] = useRecordingStatus();
   return recordingStatus.error ? (
-    <Typography
-      variant="body2"
-      color="error"
-      sx={{
-        marginBottom: '1em',
-        border: '1px solid red',
-        padding: '8px',
-      }}
-    >
-      {recordingStatus.error}
-    </Typography>
+    <Alert severity="error">{recordingStatus.error}</Alert>
   ) : null;
 };
 
-const ProtocolSelector: React.FC = () => {
-  const [recordingProps, setRecordingProps] = useRecordingProps();
-  const [, setRecordingPropsPending] = useRecordingPropsPending();
-  const protocols = ['SRT', 'NDI'];
-  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setRecordingPropsPending(true);
-    setRecordingProps({
-      ...recordingProps,
-      protocol: event.target.value,
-    });
-  };
+const NoCamera: React.FC<{
+  selectedCamera: string;
+  cameras: Camera[];
+  onSelect: (name: string) => void;
+}> = ({ selectedCamera, cameras, onSelect }) => {
+  // Discovery is slow on first launch; avoid flashing the macOS permission hint
+  const [hintReady, setHintReady] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setHintReady(true), 6000);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
-    <TextField
-      select
-      margin="normal"
-      label="Protocol"
-      name="protocol"
-      size="small"
-      value={recordingProps.protocol}
-      onChange={handleChange}
-      fullWidth
+    <Box
+      sx={{
+        height: '100%',
+        border: '1px dashed',
+        borderColor: 'divider',
+        borderRadius: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 2,
+        p: 4,
+        textAlign: 'center',
+      }}
     >
-      {protocols.map((protocol) => (
-        <MenuItem key={protocol} value={protocol}>
-          {protocol}
-        </MenuItem>
-      ))}
-    </TextField>
+      <VideocamOffOutlinedIcon sx={{ fontSize: 56, color: 'text.secondary' }} />
+      <Typography variant="h6" component="h2">
+        {selectedCamera
+          ? `${selectedCamera} isn't on the network`
+          : 'No camera selected'}
+      </Typography>
+      <Typography color="text.secondary" sx={{ maxWidth: 540 }}>
+        {isMac
+          ? 'Check that the camera is powered and on the same network as this Mac, and that Local Network access is allowed for this app.'
+          : 'Check that the camera is powered and on the same network as this PC, and that Windows Firewall allows NDI and SRT.'}{' '}
+        Cameras are searched for every 5 seconds.
+      </Typography>
+      <Stack direction="row" gap={1} flexWrap="wrap" justifyContent="center">
+        <Button variant="contained" onClick={refreshCameraList}>
+          Search again
+        </Button>
+        {isMac && hintReady && cameras.length === 0 && (
+          <Button
+            variant="outlined"
+            onClick={() =>
+              window.open(
+                'x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork',
+                '_blank',
+              )
+            }
+          >
+            Open Local Network settings
+          </Button>
+        )}
+        {cameras.slice(0, 4).map((camera) => (
+          <Button
+            key={camera.name}
+            variant="outlined"
+            onClick={() => onSelect(camera.name)}
+          >
+            {`Use ${cameraLabel(camera)}`}
+          </Button>
+        ))}
+      </Stack>
+    </Box>
   );
 };
 
@@ -99,14 +138,6 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
   if (waypoint && !waypointList.includes(waypoint)) {
     waypointList.push(waypoint);
   }
-  console.log(JSON.stringify(cameraList, null, 2));
-
-  const [hintReady, setHintReady] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setHintReady(true), 6000);
-    return () => clearTimeout(timer);
-  }, []);
 
   useEffect(() => {
     updateSettings({ waypoint });
@@ -142,16 +173,22 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
     });
   };
 
-  const handleCameraChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const selectCamera = (name: string) => {
     setRecordingPropsPending(true);
     setRecordingProps({
       ...recordingProps,
-      networkCamera: event.target.value,
+      networkCamera: name,
     });
-    const camera = cameraList.find((c) => c.name === event.target.value);
+    const camera = cameraList.find((c) => c.name === name);
     if (camera?.address === CAMERA_FALLBACK_IP) {
       showCameraFallbackDialog();
     }
+  };
+
+  const selectProtocol = (protocol: string | null) => {
+    if (!protocol) return;
+    setRecordingPropsPending(true);
+    setRecordingProps({ ...recordingProps, protocol });
   };
 
   const selectedCamera = recordingProps.networkCamera;
@@ -182,238 +219,230 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
     camFound,
   ]);
 
-  // console.log(
-  //   JSON.stringify({ cameraList, camFound, selectedCamera, viscaIP }, null, 2),
-  // );
+  const restartNote = isRecording && (
+    <Typography variant="caption" color="text.secondary" noWrap>
+      Applies when recording restarts
+    </Typography>
+  );
 
   return (
-    <div
-      style={{
-        padding: '0px 10px',
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
-      }}
+    <Box
+      sx={{ display: 'flex', flexDirection: 'column', gap: 2, height: '100%' }}
     >
       <RecordingError />
-      <Grid container spacing={2}>
-        <Grid container item spacing={2} xs={8}>
-          <Grid item xs={8}>
-            <TextField
-              select
-              margin="normal"
-              label="Camera"
-              name="networkCamera"
-              size="small"
-              value={selectedCamera}
-              onChange={handleCameraChange}
-              fullWidth
-              // Color the selected text red if invalid
-              sx={{
-                '& .MuiSelect-select': {
-                  color: camFound ? 'inherit' : 'red',
-                },
-              }}
-            >
-              {cameraList.map((camera) => (
-                <MenuItem key={camera.name} value={camera.name}>
-                  {`${camera.name.replace(camera.address, '').replace('-)', ')')} [${camera.address}]`}
-                </MenuItem>
-              ))}
-              {/* If the current value is not in the valid list, show a red fallback option */}
-              {!camFound && selectedCamera && (
-                <MenuItem value={selectedCamera} style={{ color: 'red' }}>
-                  {selectedCamera}
-                </MenuItem>
-              )}
-            </TextField>
-          </Grid>
-          <Grid item xs={1} container alignItems="center">
-            {window.platform.platform === 'darwin' &&
-              hintReady &&
-              cameraList.length === 0 && (
-                <Tooltip title="No cameras found. To allow camera discovery, enable Local Network access in System Settings → Privacy & Security → Local Network.">
-                  <IconButton
-                    size="small"
-                    onClick={() =>
-                      window.open(
-                        'x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork',
-                        '_blank',
-                      )
-                    }
-                  >
-                    <InfoOutlinedIcon fontSize="small" color="warning" />
-                  </IconButton>
-                </Tooltip>
-              )}
-          </Grid>
-          <Grid item xs={3}>
-            <ProtocolSelector />
-          </Grid>
-        </Grid>
-        <Grid item xs={3} container alignItems="center">
-          <ViscaPortSelector />
-        </Grid>
-        <Grid item xs={1} container alignItems="center">
-          {camFound && (
-            <Tooltip title={`Open Camera Web Page at ${viscaIP}`}>
-              <IconButton
-                color="inherit"
-                aria-label="Open Camera"
-                onClick={() => window.open(`http://${viscaIP}`)}
-                size="medium"
-              >
-                <CameraIcon />
-              </IconButton>
-            </Tooltip>
-          )}
-        </Grid>
-        <Grid item xs={8}>
-          <TextField
-            label="Recording Folder"
-            variant="outlined"
-            size="small"
-            fullWidth
-            name="recordingFolder"
-            value={recordingProps.recordingFolder}
-            onChange={handleChange}
-            onClick={chooseDir}
-          />
-        </Grid>
-        <Grid item xs={1}>
-          <Tooltip title="Select Recording Folder">
-            <IconButton
-              color="inherit"
-              aria-label="Open Folder"
-              onClick={chooseDir}
-              size="medium"
-            >
-              <FolderOpenIcon />
-            </IconButton>
-          </Tooltip>
-        </Grid>
-        <Grid item xs={1}>
-          <Tooltip title="Explore Recording Folder">
-            <IconButton
-              color="inherit"
-              aria-label="Open Folder"
-              onClick={() => openFileExplorer(recordingProps.recordingFolder)}
-              size="medium"
-            >
-              <OpenInNewIcon />
-            </IconButton>
-          </Tooltip>
-        </Grid>
-        <Grid item xs={2} />
-        <Grid item xs={2}>
-          <Tooltip
-            placement="top"
-            title="A prefix added to each recording file."
-          >
-            <TextField
-              size="small"
-              label="Filename Prefix"
-              variant="outlined"
-              fullWidth
-              margin="normal"
-              name="recordingPrefix"
-              value={recordingProps.recordingPrefix}
-              onChange={handleChange}
-            />
-          </Tooltip>
-        </Grid>
-        <Grid item xs={2}>
-          <Tooltip
-            placement="top"
-            title="The default duration of each recording file."
-          >
-            <TextField
-              size="small"
-              label="Recording Slice(sec)"
-              variant="outlined"
-              fullWidth
-              margin="normal"
-              name="recordingDuration"
-              value={String(recordingProps.recordingDuration)}
-              onChange={handleChange}
-              type="number"
-            />
-          </Tooltip>
-        </Grid>
-        <Grid item xs={3}>
-          <Tooltip
-            placement="top"
-            title="Bind this recorder instance to the selected Video Review waypoint"
-          >
-            <TextField
-              select
-              size="small"
-              label="Waypoint"
-              variant="outlined"
-              fullWidth
-              margin="normal"
-              value={waypoint || 'Any'}
-              onChange={(e) =>
-                setRecordingProps({
-                  ...recordingProps,
-                  waypoint: e.target.value === 'Any' ? '' : e.target.value,
-                })
-              }
-            >
-              <MenuItem value="Any">Any</MenuItem>
-              {waypointList.map((wp) => (
-                <MenuItem key={wp} value={wp}>
-                  {wp}
-                </MenuItem>
-              ))}
-            </TextField>
-          </Tooltip>
-        </Grid>
-        <Grid item xs={2}>
-          <Tooltip title="If checked, finish line location will be shown on video preview.">
-            <FormControlLabel
-              control={
-                <Checkbox
-                  name="showFinishGuide"
-                  checked={!!recordingProps.showFinishGuide}
-                  onChange={handleChange}
-                />
-              }
-              label="Finish Line"
-              sx={{ paddingTop: '1em' }}
-            />
-          </Tooltip>
-        </Grid>
-        <Grid item xs={2}>
-          <Tooltip title="If checked, video preview stays live while a selected source is available.">
-            <FormControlLabel
-              control={
-                <Checkbox
-                  name="livePreview"
-                  checked={!!recordingProps.livePreview}
-                  onChange={handleChange}
-                />
-              }
-              label="Live Preview"
-              sx={{ paddingTop: '1em' }}
-            />
-          </Tooltip>
-        </Grid>
-        <Grid item xs={1} container justifyContent="center" alignItems="center">
-          <InfoPopup body={<RecorderTips />} />
-        </Grid>
-      </Grid>
-      {showPreview && (
-        <div
-          style={{
-            marginTop: '10px',
-            flexGrow: 1,
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          // Side by side, preview filling the height, when there is room; stacked otherwise
+          flexWrap: { xs: 'wrap', md: 'nowrap' },
+          gap: 2.5,
+          alignItems: 'stretch',
+        }}
+      >
+        <Box
+          component="section"
+          aria-label="Live preview"
+          sx={{
+            flex: '999 1 440px',
+            minWidth: 0,
+            minHeight: { xs: 360, md: 0 },
+            // Contain the absolutely positioned preview canvas
+            position: 'relative',
+            overflow: 'hidden',
           }}
         >
-          <FullSizeWindow component={PreviewCanvas} />
-        </div>
-      )}
-    </div>
+          {camFound ? (
+            showPreview && <FullSizeWindow component={PreviewCanvas} />
+          ) : (
+            <NoCamera
+              selectedCamera={selectedCamera}
+              cameras={cameraList}
+              onSelect={selectCamera}
+            />
+          )}
+        </Box>
+
+        <Box
+          component="aside"
+          aria-label="Settings and health"
+          sx={{
+            flex: '1 1 320px',
+            maxWidth: 400,
+            overflowY: { md: 'auto' },
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+          }}
+        >
+          <SignalHealth connected={camFound} />
+
+          <Panel title="Source" aside={restartNote}>
+            <TextField
+              select
+              label="Camera"
+              size="small"
+              value={selectedCamera}
+              onChange={(e) => selectCamera(e.target.value)}
+              error={!camFound && !!selectedCamera}
+              helperText={
+                !camFound && selectedCamera
+                  ? 'Not found on the network. Searching every 5 s.'
+                  : undefined
+              }
+              fullWidth
+            >
+              {cameraList.map((c) => (
+                <MenuItem key={c.name} value={c.name}>
+                  {cameraLabel(c)}
+                </MenuItem>
+              ))}
+              {!camFound && selectedCamera && (
+                <MenuItem value={selectedCamera}>
+                  {`${selectedCamera} — not found`}
+                </MenuItem>
+              )}
+            </TextField>
+            <Stack direction="row" alignItems="flex-end" gap={1.5}>
+              <Box sx={{ flex: 1 }}>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  component="div"
+                  id="protocol-label"
+                >
+                  Protocol
+                </Typography>
+                <ToggleButtonGroup
+                  exclusive
+                  fullWidth
+                  size="small"
+                  color="primary"
+                  aria-labelledby="protocol-label"
+                  value={recordingProps.protocol}
+                  onChange={(_, value) => selectProtocol(value)}
+                  sx={{ height: 40 }}
+                >
+                  <ToggleButton value="NDI">NDI</ToggleButton>
+                  <ToggleButton value="SRT">SRT</ToggleButton>
+                </ToggleButtonGroup>
+              </Box>
+              <ViscaPortSelector />
+            </Stack>
+            {camFound && (
+              <Button
+                size="small"
+                endIcon={<OpenInNewIcon fontSize="small" />}
+                onClick={() => window.open(`http://${viscaIP}`)}
+                sx={{ alignSelf: 'flex-start' }}
+              >
+                {`Open camera web page (${viscaIP})`}
+              </Button>
+            )}
+          </Panel>
+
+          <Panel title="Recording" aside={restartNote}>
+            <Stack direction="row" spacing={0.75} alignItems="center">
+              <TextField
+                label="Folder"
+                size="small"
+                fullWidth
+                value={recordingProps.recordingFolder}
+                onClick={chooseDir}
+                InputProps={{ readOnly: true }}
+              />
+              <Button
+                variant="outlined"
+                onClick={chooseDir}
+                sx={{ flexShrink: 0 }}
+              >
+                Change…
+              </Button>
+              <Tooltip title="Open folder">
+                <IconButton
+                  aria-label="Open recording folder"
+                  onClick={() =>
+                    openFileExplorer(recordingProps.recordingFolder)
+                  }
+                >
+                  <FolderOpenIcon />
+                </IconButton>
+              </Tooltip>
+            </Stack>
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                gap: 1.5,
+              }}
+            >
+              <TextField
+                size="small"
+                label="File prefix"
+                name="recordingPrefix"
+                value={recordingProps.recordingPrefix}
+                onChange={handleChange}
+              />
+              <TextField
+                size="small"
+                label="Slice length (s)"
+                name="recordingDuration"
+                type="number"
+                value={String(recordingProps.recordingDuration)}
+                onChange={handleChange}
+              />
+              <Tooltip
+                placement="top"
+                title="Bind this recorder to a Video Review waypoint"
+              >
+                <TextField
+                  select
+                  size="small"
+                  label="Waypoint"
+                  value={waypoint || 'Any'}
+                  onChange={(e) =>
+                    setRecordingProps({
+                      ...recordingProps,
+                      waypoint: e.target.value === 'Any' ? '' : e.target.value,
+                    })
+                  }
+                >
+                  <MenuItem value="Any">Any</MenuItem>
+                  {waypointList.map((wp) => (
+                    <MenuItem key={wp} value={wp}>
+                      {wp}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Tooltip>
+            </Box>
+            <Stack direction="row" flexWrap="wrap" columnGap={2}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    name="showFinishGuide"
+                    checked={!!recordingProps.showFinishGuide}
+                    onChange={handleChange}
+                  />
+                }
+                label="Show finish line"
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    name="livePreview"
+                    checked={!!recordingProps.livePreview}
+                    onChange={handleChange}
+                  />
+                }
+                label="Live preview"
+              />
+            </Stack>
+          </Panel>
+        </Box>
+      </Box>
+    </Box>
   );
 };
 
