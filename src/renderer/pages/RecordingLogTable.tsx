@@ -62,7 +62,10 @@ const filters: { label: string; test: (e: RecordingLogEntry) => boolean }[] = [
   { label: 'All', test: () => true },
   { label: 'Errors', test: (e) => eventLevel(e) === 'Error' },
   { label: 'Warnings', test: (e) => eventLevel(e) === 'Warning' },
-  { label: 'Gaps & timing', test: isGapEvent },
+  {
+    label: 'Gaps & timing',
+    test: (e) => isGapEvent(e) || e.message.includes('clock stepped'),
+  },
 ];
 
 const LevelLabel = ({ level }: { level: Level }) => (
