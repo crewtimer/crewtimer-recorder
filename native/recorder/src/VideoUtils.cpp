@@ -16,6 +16,7 @@ FramePtr cropFrame(const FramePtr &frame, int cropX, int cropY, int cropWidth,
   auto croppedFrame =
       std::make_shared<Frame>(cropWidth, cropHeight, frame->pixelFormat);
   croppedFrame->timestamp = frame->timestamp;
+  croppedFrame->receivedTs100ns = frame->receivedTs100ns;
   croppedFrame->frame_rate_N = frame->frame_rate_N;
   croppedFrame->frame_rate_D = frame->frame_rate_D;
   croppedFrame->sensorXres = frame->sensorXres;
@@ -58,6 +59,7 @@ static void copyFrameProperties(const FramePtr &source, const FramePtr &destinat
                                 bool clockwise)
 {
   destination->timestamp = source->timestamp;
+  destination->receivedTs100ns = source->receivedTs100ns;
   destination->frame_rate_N = source->frame_rate_N;
   destination->frame_rate_D = source->frame_rate_D;
   destination->sensorXres = source->sensorXres ? source->sensorXres : source->xres;
@@ -166,6 +168,7 @@ FramePtr rotateFrame180(const FramePtr &frame)
   auto rotated =
       std::make_shared<Frame>(frame->xres, frame->yres, frame->pixelFormat);
   rotated->timestamp = frame->timestamp;
+  rotated->receivedTs100ns = frame->receivedTs100ns;
   rotated->frame_rate_N = frame->frame_rate_N;
   rotated->frame_rate_D = frame->frame_rate_D;
   rotated->sensorXres = frame->sensorXres ? frame->sensorXres : frame->xres;

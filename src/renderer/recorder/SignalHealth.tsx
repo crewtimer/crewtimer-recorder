@@ -74,14 +74,33 @@ export const useSignalStats = () => {
   const [timeSample] = useCameraTimeSample();
   const [log] = useSystemLog();
 
-  const { fps, frameBacklog, width, height } = status.frameProcessor;
+  const {
+    fps,
+    measuredFps,
+    clockOffsetMs,
+    lastTsMilli,
+    frameBacklog,
+    width,
+    height,
+  } = status.frameProcessor;
+  // More than 1% off the camera's declared rate means frames are missing or extra
+  const fpsOff = measuredFps > 0 && Math.abs(measuredFps - fps) > 0.01 * fps;
   const gaps = log.filter(isGapEvent);
-  const offset = timeSample
-    ? timeSample.cameraTime - timeSample.systemTime
-    : undefined;
-  const clockOff =
-    !!timeSample &&
-    hasCameraTimeMismatch(timeSample.cameraTime, timeSample.systemTime);
+  // While recording, the native module measures the offset where frames arrive;
+  // otherwise fall back to the preview frame sampled by the UI.
+  const offsetAtArrival = status.recording && measuredFps > 0;
+  let offset: number | undefined;
+  let clockOff = false;
+  if (offsetAtArrival) {
+    offset = clockOffsetMs;
+    clockOff = hasCameraTimeMismatch(lastTsMilli, lastTsMilli - clockOffsetMs);
+  } else if (timeSample) {
+    offset = timeSample.cameraTime - timeSample.systemTime;
+    clockOff = hasCameraTimeMismatch(
+      timeSample.cameraTime,
+      timeSample.systemTime,
+    );
+  }
   let backlogTone: Tone = 'success';
   if (frameBacklog > 200) backlogTone = 'error';
   else if (frameBacklog > 100) backlogTone = 'warning';
@@ -89,11 +108,14 @@ export const useSignalStats = () => {
   return {
     recording: status.recording,
     fps,
+    measuredFps,
+    fpsOff,
     width,
     height,
     frameBacklog,
     backlogTone,
     offset,
+    offsetAtArrival,
     clockOff,
     gapCount: total(gaps),
     lastGap: gaps[gaps.length - 1],
@@ -105,9 +127,12 @@ export const SignalHealth = ({ connected }: { connected: boolean }) => {
   const {
     recording,
     fps,
+    measuredFps,
+    fpsOff,
     frameBacklog,
     backlogTone,
     offset,
+    offsetAtArrival,
     clockOff,
     gapCount,
     lastGap,
@@ -124,9 +149,12 @@ export const SignalHealth = ({ connected }: { connected: boolean }) => {
     );
   }
 
-  const warnings = [gapCount > 0, clockOff, backlogTone !== 'success'].filter(
-    Boolean,
-  ).length;
+  const warnings = [
+    gapCount > 0,
+    clockOff,
+    fpsOff,
+    backlogTone !== 'success',
+  ].filter(Boolean).length;
 
   return (
     <Panel
@@ -150,14 +178,21 @@ export const SignalHealth = ({ connected }: { connected: boolean }) => {
         }}
       >
         <Metric
-          label="Frame rate"
-          value={recording && fps ? fps.toFixed(2) : '—'}
-          note={recording ? 'reported by camera' : 'while recording'}
+          label="Frame rate (actual)"
+          value={recording && measuredFps ? measuredFps.toFixed(2) : '—'}
+          note={
+            recording && fps ? `target ${fps.toFixed(2)}` : 'while recording'
+          }
+          tone={fpsOff ? 'warning' : undefined}
         />
         <Metric
           label="Camera clock vs PC"
           value={offset === undefined ? '—' : formatOffset(offset)}
-          note={clockOff ? 'check camera time' : 'incl. network delay'}
+          note={
+            clockOff
+              ? 'check camera time'
+              : `${offsetAtArrival ? 'at arrival' : 'preview'}, incl. network delay`
+          }
           tone={clockOff ? 'error' : undefined}
         />
         <Metric

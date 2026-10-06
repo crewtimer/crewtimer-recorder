@@ -28,6 +28,9 @@ public:
     std::uint32_t height = 0;
     std::uint64_t lastTsMilli = 0;
     float fps = 60;
+    float measuredFps = 0;
+    // Camera timestamp minus PC arrival time (least-delayed frame per window); valid when measuredFps > 0
+    float clockOffsetMs = 0;
     std::uint32_t frameBacklog = 0;
 
     friend std::ostream &operator<<(std::ostream &os, const StatusInfo &info)
@@ -39,6 +42,8 @@ public:
          << ", height=" << info.height
          << ", lastTsMilli=" << info.lastTsMilli
          << ", fps=" << info.fps
+         << ", measuredFps=" << info.measuredFps
+         << ", clockOffsetMs=" << info.clockOffsetMs
          << ", frameBacklog=" << info.frameBacklog << "}";
       return os;
     }

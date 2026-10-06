@@ -82,7 +82,15 @@ export const StatusBar = () => {
         {stats.recording && stats.width > 0 && (
           <>
             <Stat>{`${stats.width}×${stats.height}${cropText}`}</Stat>
-            <Stat>{`${stats.fps} fps`}</Stat>
+            <Tooltip title="Actual (from camera timestamps) / target frame rate">
+              <span>
+                <Stat tone={stats.fpsOff ? 'warning' : undefined}>
+                  {stats.measuredFps
+                    ? `${stats.measuredFps.toFixed(2)} / ${stats.fps.toFixed(2)} fps`
+                    : `${stats.fps.toFixed(2)} fps`}
+                </Stat>
+              </span>
+            </Tooltip>
             <Tooltip title="Frames waiting to be encoded">
               <span>
                 <Stat
@@ -99,7 +107,9 @@ export const StatusBar = () => {
           </>
         )}
         {camera && stats.offset !== undefined && (
-          <Tooltip title="Camera clock vs this PC, including network delay">
+          <Tooltip
+            title={`Camera clock vs this PC, including network delay (${stats.offsetAtArrival ? 'measured at frame arrival' : 'from the preview'})`}
+          >
             <span>
               <Stat tone={stats.clockOff ? 'error' : undefined}>
                 {`clock ${formatOffset(stats.offset)}`}

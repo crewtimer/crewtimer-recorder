@@ -312,6 +312,7 @@ class NdiReader : public VideoReader
           txframe->yres = video_frame.yres & ~1;
           txframe->stride = video_frame.line_stride_in_bytes;
           txframe->timestamp = video_frame.timestamp;
+          txframe->receivedTs100ns = duration_cast<microseconds>(system_clock::now().time_since_epoch()).count() * 10;
           txframe->data = video_frame.p_data;
           txframe->frame_rate_N = video_frame.frame_rate_N;
           txframe->frame_rate_D = video_frame.frame_rate_D;

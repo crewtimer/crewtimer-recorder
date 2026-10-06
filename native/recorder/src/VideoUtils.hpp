@@ -24,6 +24,7 @@ public:
   int stride;
   uint8_t *data;
   uint64_t timestamp;
+  uint64_t receivedTs100ns = 0; // PC UTC clock when the reader received the frame
   int frame_rate_N;
   int frame_rate_D;
   PixelFormat pixelFormat;
