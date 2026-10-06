@@ -18,13 +18,16 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import {
   sendViscaCommand,
   getCameraState,
+  approachFocus,
   getLensPosition,
+  settleLens,
   shutterLabels,
   irisLabels,
   updateCameraState,
 } from './ViscaAPI';
 import { setToast } from '../components/Toast';
 import {
+  defaultLensRange,
   ExposureMode,
   FocusReach,
   getFocusReach,
@@ -131,42 +134,40 @@ const Squeezed = () => (
 
 /**
  * The lens position, and when a range is qualified, a slider to send the lens straight to a
- * position. A direct position move runs at the camera's top speed. The mark shows where the
- * lens was sent until it gets there, or until it stops short at the lens's limit. Ends known
- * for the current zoom get the middle of the bar, with the unreachable full range squeezed
- * into broken-axis stretches at the ends.
+ * position. A direct position move runs at the camera's top speed. While it moves, the thumb
+ * stays on the target and the mark follows the lens; onSet resolves with where the lens ended,
+ * and ending short of the target is the lens limit. Ends known for the current zoom get the
+ * middle of the bar, with the unreachable full range squeezed into broken-axis stretches at
+ * the ends.
  */
 const LensSlider: React.FC<{
   label: string;
   value: number;
   range?: { min: number; max: number };
   reach?: { low?: number; high?: number };
-  onSet: (value: number) => void;
+  onSet: (value: number) => Promise<number>;
   onLimit?: (value: number, end: 'low' | 'high') => void;
 }> = ({ label, value, range, reach, onSet, onLimit }) => {
   const [drag, setDrag] = useState<number>();
   const [target, setTarget] = useState<number>();
   const [limit, setLimit] = useState<number>();
   const tolerance = range ? (range.max - range.min) * 0.005 : 0;
-  // The parent passes a new callback every render; the limit timer must not restart on it.
-  const onLimitRef = useRef(onLimit);
-  onLimitRef.current = onLimit;
+  // Only the latest move may report; an earlier one still finishing would clear its target.
+  const move = useRef(0);
 
-  useEffect(() => {
-    if (target === undefined) return undefined;
-    if (Math.abs(value - target) <= tolerance) {
-      setTarget(undefined);
-      return undefined;
+  const moveTo = async (goal: number) => {
+    move.current += 1;
+    const id = move.current;
+    setLimit(undefined);
+    setTarget(goal);
+    const ended = await onSet(goal);
+    if (id !== move.current) return;
+    setTarget(undefined);
+    if (Math.abs(ended - goal) > tolerance) {
+      setLimit(ended);
+      onLimit?.(ended, goal > ended ? 'high' : 'low');
     }
-    // Every position change restarts this; a lens still for 1.5 s short of the target is at
-    // its limit (focus travel narrows with zoom).
-    const timer = setTimeout(() => {
-      onLimitRef.current?.(value, target > value ? 'high' : 'low');
-      setLimit(value);
-      setTarget(undefined);
-    }, 1500);
-    return () => clearTimeout(timer);
-  }, [target, tolerance, value]);
+  };
 
   useEffect(() => {
     if (limit !== undefined && value !== limit) setLimit(undefined);
@@ -202,13 +203,17 @@ const LensSlider: React.FC<{
                 aria-label={label}
                 min={low}
                 max={high}
-                value={drag ?? Math.min(high, Math.max(low, value))}
-                marks={target === undefined ? false : [{ value: target }]}
+                value={drag ?? target ?? Math.min(high, Math.max(low, value))}
+                marks={
+                  target === undefined
+                    ? false
+                    : [{ value: Math.min(high, Math.max(low, value)) }]
+                }
                 valueLabelDisplay="auto"
                 sx={{
                   // Inline-block would add a baseline gap and lift the rail above the squeezed ends.
                   display: 'block',
-                  // Taller than the thumb and orange, so the target shows over the filled track too.
+                  // Taller than the thumb and orange, so the lens shows over the filled track too.
                   '& .MuiSlider-mark, & .MuiSlider-markActive': {
                     width: 3,
                     height: 22,
@@ -220,9 +225,12 @@ const LensSlider: React.FC<{
                 onChange={(_event, v) => setDrag(v as number)}
                 onChangeCommitted={(_event, v) => {
                   setDrag(undefined);
-                  setLimit(undefined);
-                  setTarget(v as number);
-                  onSet(v as number);
+                  moveTo(v as number).catch((error) =>
+                    setToast({
+                      severity: 'error',
+                      msg: `${label} move failed: ${error}`,
+                    }),
+                  );
                 }}
               />
             </Box>
@@ -279,9 +287,8 @@ const LensSlider: React.FC<{
 
 /** Whether a focus end learned at one zoom applies at another; ends shift across a band. */
 const nearZoom = (zoom: number, learned?: number) => {
-  const range = getLensRange();
+  const range = getLensRange() ?? defaultLensRange;
   return (
-    !!range &&
     learned !== undefined &&
     Math.abs(zoom - learned) <= (range.zoom.max - range.zoom.min) * 0.01
   );
@@ -292,8 +299,7 @@ const updateReach = (
   zoom: number,
   change: (reach: FocusReach) => FocusReach,
 ) => {
-  const range = getLensRange();
-  if (!range) return;
+  const range = getLensRange() ?? defaultLensRange;
   const band = zoomBand(zoom, range.zoom);
   const reach = getFocusReach();
   const current = reach[band] ?? {};
@@ -308,7 +314,8 @@ const ViscaControlPanel: React.FC = () => {
   const [focusAreaProps, setFocusAreaProps] = useFocusArea();
   const [viscaIP] = useViscaIP();
   const [viscaPort] = useViscaPort();
-  const [lensRange] = useLensRange();
+  const [savedRange] = useLensRange();
+  const lensRange = savedRange ?? defaultLensRange;
   const [focusReach] = useFocusReach();
   // The focus position at the last +/- press; unchanged a second later means a limit.
   const focusPress = useRef<{
@@ -316,8 +323,7 @@ const ViscaControlPanel: React.FC = () => {
     from: number;
     at: number;
   }>();
-  const bandReach =
-    lensRange && focusReach[zoomBand(cameraState.zoom, lensRange.zoom)];
+  const bandReach = focusReach[zoomBand(cameraState.zoom, lensRange.zoom)];
   // Only an end found at (nearly) this zoom applies; elsewhere in the band it may differ.
   const atZoom = (learned?: number) => nearZoom(cameraState.zoom, learned);
   const focusReachView = bandReach && {
@@ -361,9 +367,10 @@ const ViscaControlPanel: React.FC = () => {
     }
   }, [setCameraState, viscaState]);
 
-  // Follow zoom and focus as they move, from the buttons, autofocus or a lens sweep.
+  // Follow zoom and focus as they move, from the buttons, autofocus or a lens sweep. Not gated on
+  // 'Connected': the state is only sent on change, so a reloaded window stays 'Idle' on a live link.
   useEffect(() => {
-    if (viscaState !== 'Connected') {
+    if (!viscaIP || viscaPort === 0 || viscaState === 'Disconnected') {
       return undefined;
     }
     let stopped = false;
@@ -428,7 +435,7 @@ const ViscaControlPanel: React.FC = () => {
     return () => {
       stopped = true;
     };
-  }, [setCameraState, viscaState]);
+  }, [setCameraState, viscaIP, viscaPort, viscaState]);
 
   const onExposureModeChange = async (
     event: SelectChangeEvent<ExposureMode>,
@@ -471,6 +478,12 @@ const ViscaControlPanel: React.FC = () => {
         await updateCameraState({ exposureMode });
         break;
     }
+  };
+
+  // A manual focus position is only good for one zoom, so zooming hands focus back to the camera.
+  const autoFocus = () => {
+    setCameraState((prev) => ({ ...prev, autoFocus: true }));
+    return sendViscaCommand({ type: 'AUTO_FOCUS', value: true });
   };
 
   const viscaEnabled = viscaPort !== 0;
@@ -520,7 +533,7 @@ const ViscaControlPanel: React.FC = () => {
               <LensSlider
                 label="Focus position"
                 value={cameraState.focus}
-                range={lensRange?.focus}
+                range={lensRange.focus}
                 reach={focusReachView}
                 onLimit={(value, end) =>
                   updateReach(cameraState.zoom, (reach) => {
@@ -546,7 +559,7 @@ const ViscaControlPanel: React.FC = () => {
                   // The camera ignores a focus position while autofocus is on.
                   setCameraState((prev) => ({ ...prev, autoFocus: false }));
                   await sendViscaCommand({ type: 'AUTO_FOCUS', value: false });
-                  await sendViscaCommand({ type: 'SET_FOCUS', value });
+                  return approachFocus(value);
                 }}
               />
             </Group>
@@ -556,12 +569,18 @@ const ViscaControlPanel: React.FC = () => {
                 decrement={{ type: 'ZOOM_OUT' }}
                 increment={{ type: 'ZOOM_IN' }}
                 reset={{ type: 'ZOOM_RESET' }}
+                onPress={autoFocus}
               />
               <LensSlider
                 label="Zoom position"
                 value={cameraState.zoom}
-                range={lensRange?.zoom}
-                onSet={(value) => sendViscaCommand({ type: 'SET_ZOOM', value })}
+                range={lensRange.zoom}
+                onSet={async (value) => {
+                  await autoFocus();
+                  // A zoom move reports completion at once, so wait for the lens to stop.
+                  await sendViscaCommand({ type: 'SET_ZOOM', value });
+                  return settleLens('zoom');
+                }}
               />
             </Group>
             <Group label="Exposure" disabled={disconnected}>

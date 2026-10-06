@@ -9,14 +9,13 @@ import {
 } from '@mui/material';
 import {
   getCameraState,
-  getLensPosition,
   sendViscaCommand,
+  settleLens,
   updateCameraState,
   ViscaCommand,
 } from './ViscaAPI';
 import { LensRange, setFocusReach, useLensRange, zoomBand } from './ViscaState';
 import { setToast } from '../components/Toast';
-import { snooze } from '../util/Util';
 
 type Axis = keyof LensRange;
 type Direction = 'up' | 'down';
@@ -45,24 +44,10 @@ const motion: Record<
   },
 };
 
-/** Waits for the position to stop changing: at the commanded target or at the end of travel. */
-const settle = async (axis: Axis) => {
-  // A full zoom or focus run at the default speed takes about a minute.
-  const deadline = Date.now() + 120000;
-  let last = -1;
-  for (;;) {
-    await snooze(500);
-    const pos = await getLensPosition(axis);
-    if (pos === last) return pos;
-    if (Date.now() > deadline) throw new Error(`${axis} never stopped moving`);
-    last = pos;
-  }
-};
-
 const runToEnd = async (axis: Axis, dir: Direction) => {
   await sendViscaCommand(motion[axis][dir]);
   try {
-    return await settle(axis);
+    return await settleLens(axis);
   } finally {
     await sendViscaCommand(motion[axis].stop);
   }
@@ -83,7 +68,7 @@ const measure = async (
       await sendViscaCommand(
         motion[axis].set(dir === 'up' ? max - margin : min + margin),
       );
-      await settle(axis);
+      await settleLens(axis);
     }
     return runToEnd(axis, dir);
   };

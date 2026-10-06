@@ -306,6 +306,48 @@ export const getLensPosition = async (
   return extractViscaValue(reply, 4, 0);
 };
 
+/** Waits for the position to stop changing: at the commanded target or at the end of travel. */
+export const settleLens = async (axis: 'zoom' | 'focus') => {
+  // A full zoom or focus run at the default speed takes about a minute.
+  const deadline = Date.now() + 120000;
+  let last = -1;
+  for (;;) {
+    await snooze(500);
+    const pos = await getLensPosition(axis);
+    if (pos === last) return pos;
+    if (Date.now() > deadline) throw new Error(`${axis} never stopped moving`);
+    last = pos;
+  }
+};
+
+/**
+ * Sends focus toward a position and returns where it ends up. The X30 ignores a focus position
+ * out of reach at the current zoom (it reports completion without moving) instead of going as
+ * far as it can, so an ignored target is halved toward the lens until the furthest reachable
+ * position is found. A focus move reports completion only once the lens has stopped.
+ */
+export const approachFocus = async (target: number): Promise<number> => {
+  let reached = await getLensPosition('focus');
+  let goal = target;
+  let ignored: number | undefined;
+  for (;;) {
+    await sendViscaCommand({ type: 'SET_FOCUS', value: goal });
+    const pos = await getLensPosition('focus');
+    if (pos === reached) {
+      ignored = goal;
+    } else if (Math.abs(pos - goal) > 8) {
+      return pos; // Stopped short of the goal: the lens limit.
+    } else if (ignored === undefined) {
+      return pos;
+    } else {
+      reached = pos;
+    }
+    if (ignored === undefined || Math.abs(ignored - reached) <= 8)
+      return reached;
+    goal = Math.round((reached + ignored) / 2);
+  }
+};
+
 export const getCameraState = async (): Promise<CameraState> => {
   const autoFocus =
     extractViscaValue(

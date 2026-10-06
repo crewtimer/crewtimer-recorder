@@ -40,6 +40,12 @@ export const [useLensRange, setLensRange, getLensRange] = UseStoredDatum<
   LensRange | undefined
 >('lensRange', undefined);
 
+/** Sony VISCA position scales, used until a lens is qualified (zoom includes digital zoom). */
+export const defaultLensRange: LensRange = {
+  zoom: { min: 0, max: 0x7ac0 },
+  focus: { min: 0x1000, max: 0xf000 },
+};
+
 /**
  * Focus ends the lens stopped at within one zoom band, and the zoom each was found at; focus
  * travel narrows with zoom, so an end is only certain at that zoom.
