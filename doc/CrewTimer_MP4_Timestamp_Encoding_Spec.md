@@ -10,9 +10,9 @@
 
 CrewTimer MP4 files embed **precise UTC timing metadata** to synchronize captured video segments with external timing systems (e.g., finish-line clocks, telemetry, or event logs).
 
-The timestamps are written **without modifying frame PTS/DTS values**, ensuring that the MP4 files remain compliant with standard media players and editors while preserving accurate capture-time information in metadata.
+The FFmpeg recorder derives each frame's PTS from its corrected source capture timestamp relative to the first frame of the segment. NDI capture timestamps and UTC timestamps reconstructed from SRT PTS use the same recording path. Missing frames therefore leave gaps in the recorded PTS rather than compressing the timeline. Encoder timestamps use a microsecond time base and are rescaled to the MP4 stream time base when muxed.
 
-Timestamps for individual frames can be derived from the **UTC timing medata** and **PTS** values for each frame.
+Timestamps for individual frames can be derived from the **UTC timing metadata** and **PTS** values for each frame: `frame_utc_us = first_utc_us + pts * time_base * 1000000`. Each segment starts at PTS zero. Duplicate or backwards recording timestamps are reported as errors rather than assigned fabricated times.
 
 ---
 
@@ -42,9 +42,8 @@ Timestamps for individual frames can be derived from the **UTC timing medata** a
 The microsecond timestamp can be generated as:
 
 ```cpp
-using namespace std::chrono;
-int64_t utc_us = duration_cast<microseconds>(
-    system_clock::now().time_since_epoch()).count();
+// timestamp is the first frame's corrected source capture time in 100 ns units.
+int64_t utc_us = (timestamp + 5) / 10;
 ```
 
 This yields the number of microseconds elapsed since **1970-01-01T00:00:00Z**.
@@ -88,7 +87,7 @@ Players or analysis tools that understand PRFT boxes can use this to estimate re
 ## Encoding Rules
 
 1. **Clock Source:**  
-   All timestamps use the system’s **UTC clock** at the time of segment start (`system_clock::now()`).
+   NDI frames use the source's UTC capture timestamp. SRT frames use UTC reconstructed during startup calibration from the source PTS, then advance according to each received frame's PTS. The shared capture-time correction is applied before deriving metadata and recording PTS.
 
 2. **Resolution:**  
    Microseconds (1 × 10⁻⁶ s).  
@@ -112,7 +111,7 @@ Players or analysis tools that understand PRFT boxes can use this to estimate re
 
 To generate compatible files from other sources (e.g., RTSP, SDI, NDI, or camera ingest), simply:
 
-1. Capture the **system UTC timestamp** when the first encoded frame is written.  
+1. Obtain the **UTC capture timestamp** of the first frame, and preserve subsequent source timing in the output PTS.
 2. Add both fields to the output container metadata:
 
 ```bash
@@ -126,7 +125,7 @@ ffmpeg -i input.mp4 -metadata creation_time="2025-10-22T07:45:12.123Z" \
 ### Writing with FFmpeg C/C++ API
 
 ```c++
-    int64_t utc_us = duration_cast<microseconds>(system_clock::now().time_since_epoch()).count();
+    int64_t utc_us = (timestamp + 5) / 10; // corrected first-frame capture time
     AVFormatContext *ofmt = nullptr; 
     const AVOutputFormat *o = av_guess_format("mp4", nullptr, nullptr);
     if (!o) {

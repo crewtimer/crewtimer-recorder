@@ -164,12 +164,17 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
         ? event.target.checked
         : event.target.value;
 
-    if (['recordingDuration', 'recordingPrefix'].includes(event.target.name)) {
+    if (
+      ['recordingDuration', 'recordingPrefix', 'recordingQuality'].includes(
+        event.target.name,
+      )
+    ) {
       setRecordingPropsPending(true);
     }
     setRecordingProps({
       ...recordingProps,
-      [event.target.name]: value,
+      [event.target.name]:
+        event.target.name === 'recordingQuality' ? Number(value) : value,
     });
   };
 
@@ -373,7 +378,7 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
             <Box
               sx={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
                 gap: 1.5,
               }}
             >
@@ -392,6 +397,24 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
                 value={String(recordingProps.recordingDuration)}
                 onChange={handleChange}
               />
+              <Tooltip
+                placement="top"
+                title="Higher quality uses more disk space. Applies on next start."
+              >
+                <TextField
+                  select
+                  size="small"
+                  label="Quality"
+                  name="recordingQuality"
+                  value={recordingProps.recordingQuality ?? 80}
+                  onChange={handleChange}
+                >
+                  <MenuItem value={60}>Standard</MenuItem>
+                  <MenuItem value={70}>Medium</MenuItem>
+                  <MenuItem value={80}>High</MenuItem>
+                  <MenuItem value={90}>Very High</MenuItem>
+                </TextField>
+              </Tooltip>
               <Tooltip
                 placement="top"
                 title="Bind this recorder to a Video Review waypoint"

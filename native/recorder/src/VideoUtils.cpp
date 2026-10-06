@@ -1,4 +1,6 @@
 #include <iostream>
+#include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <stdint.h>
 #include "VideoUtils.hpp"
@@ -67,20 +69,125 @@ static void copyFrameProperties(const FramePtr &source, const FramePtr &destinat
   destination->rotation = source->rotation + (clockwise ? 90 : -90);
 }
 
+// Square tiles keep both the row-wise reads and column-wise writes of a
+// rotation within cache. Must be even so UYVY/I420 2x2 blocks stay whole.
+static constexpr int kRotateTile = 32;
+
 static void rotatePlane90(const uint8_t *source, int sourceWidth, int sourceHeight,
                           int sourceStride, uint8_t *destination,
                           int destinationStride, bool clockwise)
 {
-  for (int y = 0; y < sourceHeight; ++y)
+  for (int tileY = 0; tileY < sourceHeight; tileY += kRotateTile)
   {
-    for (int x = 0; x < sourceWidth; ++x)
+    const int endY = std::min(tileY + kRotateTile, sourceHeight);
+    for (int tileX = 0; tileX < sourceWidth; tileX += kRotateTile)
     {
-      const int destinationX = clockwise ? sourceHeight - 1 - y : y;
-      const int destinationY = clockwise ? x : sourceWidth - 1 - x;
-      destination[destinationY * destinationStride + destinationX] =
-          source[y * sourceStride + x];
+      const int endX = std::min(tileX + kRotateTile, sourceWidth);
+      for (int y = tileY; y < endY; ++y)
+      {
+        for (int x = tileX; x < endX; ++x)
+        {
+          const int destinationX = clockwise ? sourceHeight - 1 - y : y;
+          const int destinationY = clockwise ? x : sourceWidth - 1 - x;
+          destination[destinationY * destinationStride + destinationX] =
+              source[y * sourceStride + x];
+        }
+      }
     }
   }
+}
+
+FramePtr rotateUyvyToI420(const FramePtr &frame, int rotation)
+{
+  if (!frame || frame->pixelFormat != Frame::UYVY422 || frame->xres <= 0 ||
+      frame->yres <= 0 || (frame->xres % 2) || (frame->yres % 2) ||
+      (rotation != 90 && rotation != -90 && rotation != -180 && rotation != 180))
+    return nullptr;
+
+  const int width = frame->xres;
+  const int height = frame->yres;
+  const bool quarterTurn = rotation != -180 && rotation != 180;
+  const int destinationWidth = quarterTurn ? height : width;
+  const int destinationHeight = quarterTurn ? width : height;
+  auto rotated = std::make_shared<Frame>(destinationWidth, destinationHeight,
+                                         Frame::YUV420P);
+  rotated->timestamp = frame->timestamp;
+  rotated->frame_rate_N = frame->frame_rate_N;
+  rotated->frame_rate_D = frame->frame_rate_D;
+  rotated->sensorXres = frame->sensorXres ? frame->sensorXres : width;
+  rotated->sensorYres = frame->sensorYres ? frame->sensorYres : height;
+  rotated->rotation = frame->rotation + (rotation == 180 ? -180 : rotation);
+
+  // Express the rotation as a destination origin plus the offset moved per
+  // source pixel step in x and in y, for luma and for 2x2-block chroma.
+  const ptrdiff_t lumaStride = destinationWidth;
+  const ptrdiff_t chromaStride = destinationWidth / 2;
+  ptrdiff_t lumaOrigin, lumaStepX, lumaStepY;
+  ptrdiff_t chromaOrigin, chromaStepX, chromaStepY;
+  if (rotation == 90)
+  {
+    lumaOrigin = height - 1;
+    lumaStepX = lumaStride;
+    lumaStepY = -1;
+    chromaOrigin = height / 2 - 1;
+    chromaStepX = chromaStride;
+    chromaStepY = -1;
+  }
+  else if (rotation == -90)
+  {
+    lumaOrigin = (width - 1) * lumaStride;
+    lumaStepX = -lumaStride;
+    lumaStepY = 1;
+    chromaOrigin = (width / 2 - 1) * chromaStride;
+    chromaStepX = -chromaStride;
+    chromaStepY = 1;
+  }
+  else
+  {
+    lumaOrigin = (height - 1) * lumaStride + width - 1;
+    lumaStepX = -1;
+    lumaStepY = -lumaStride;
+    chromaOrigin = (height / 2 - 1) * chromaStride + width / 2 - 1;
+    chromaStepX = -1;
+    chromaStepY = -chromaStride;
+  }
+
+  uint8_t *destinationY = rotated->data;
+  uint8_t *destinationU = destinationY + destinationWidth * destinationHeight;
+  uint8_t *destinationV =
+      destinationU + (destinationWidth / 2) * (destinationHeight / 2);
+
+  // Each 2x2 source block holds one UYVY chroma pair per row; their average
+  // is exactly the 4:2:0 sample for the rotated 2x2 destination block.
+  for (int tileY = 0; tileY < height; tileY += kRotateTile)
+  {
+    const int endY = std::min(tileY + kRotateTile, height);
+    for (int tileX = 0; tileX < width; tileX += kRotateTile)
+    {
+      const int endX = std::min(tileX + kRotateTile, width);
+      for (int y = tileY; y < endY; y += 2)
+      {
+        const uint8_t *row0 = frame->data + y * frame->stride;
+        const uint8_t *row1 = row0 + frame->stride;
+        for (int x = tileX; x < endX; x += 2)
+        {
+          const uint8_t *pair0 = row0 + x * 2;
+          const uint8_t *pair1 = row1 + x * 2;
+          uint8_t *luma = destinationY + lumaOrigin + x * lumaStepX + y * lumaStepY;
+          luma[0] = pair0[1];
+          luma[lumaStepX] = pair0[3];
+          luma[lumaStepY] = pair1[1];
+          luma[lumaStepX + lumaStepY] = pair1[3];
+          const ptrdiff_t chroma =
+              chromaOrigin + (x / 2) * chromaStepX + (y / 2) * chromaStepY;
+          destinationU[chroma] = static_cast<uint8_t>((pair0[0] + pair1[0] + 1) >> 1);
+          destinationV[chroma] = static_cast<uint8_t>((pair0[2] + pair1[2] + 1) >> 1);
+        }
+      }
+    }
+  }
+
+  return rotated;
 }
 
 FramePtr rotateFrame90(const FramePtr &frame, bool clockwise)

@@ -166,7 +166,9 @@ private:
                                    frameRotation.load() != 0)
                                {
                                  const int rotation = frameRotation.load();
-                                 auto rotated = rotation == -180
+                                 auto rotated = frame->pixelFormat == Frame::UYVY422
+                                                    ? rotateUyvyToI420(frame, rotation)
+                                                : rotation == -180
                                                     ? rotateFrame180(frame)
                                                     : rotateFrame90(frame, rotation == 90);
                                  if (rotated)
@@ -361,7 +363,8 @@ public:
                     const FrameProcessor::FRectangle cropArea,
                     const FrameProcessor::Guide guide,
                     const int rotation,
-                    const bool reportAllGaps)
+                    const bool reportAllGaps,
+                    const int recordingQuality = 80)
   {
     std::lock_guard<std::recursive_mutex> lock(controlMutex);
     this->srcName = srcName;
@@ -406,7 +409,7 @@ public:
     if (encoder == "ffmpeg")
     {
       SystemEventQueue::push("VID", "Using ffmpeg encoder.");
-      videoRecorder = createFfmpegRecorder();
+      videoRecorder = createFfmpegRecorder(recordingQuality);
     }
 
     if (encoder == "null")

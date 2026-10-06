@@ -23,6 +23,6 @@ public:
 
 std::shared_ptr<VideoRecorder> createOpenCVRecorder();
 std::shared_ptr<VideoRecorder> createAppleRecorder();
-std::shared_ptr<VideoRecorder> createFfmpegRecorder();
+std::shared_ptr<VideoRecorder> createFfmpegRecorder(int recordingQuality = 80);
 std::shared_ptr<VideoRecorder> createNullRecorder();
 void testopencv();
