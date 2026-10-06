@@ -117,27 +117,37 @@ const ViscaControlPanel: React.FC = () => {
     event: SelectChangeEvent<ExposureMode>,
   ) => {
     const exposureMode = event.target.value as ExposureMode;
-    setCameraState((prev) => ({ ...prev, exposureMode }));
+    // Start from what the camera uses right now (e.g. what auto exposure chose),
+    // not from the values read when VISCA connected.
+    const live = await getCameraState().catch((error) => {
+      setToast({
+        severity: 'error',
+        msg: `Error reading camera exposure: ${error}`,
+      });
+      return undefined;
+    });
+    if (!live) return;
+    setCameraState({ ...live, exposureMode });
 
     switch (exposureMode) {
       case ExposureMode.EXPOSURE_MANUAL:
         await updateCameraState({
           exposureMode,
-          iris: cameraState.iris,
-          shutter: cameraState.shutter,
-          gain: cameraState.gain,
+          iris: live.iris,
+          shutter: live.shutter,
+          gain: live.gain,
         });
         break;
       case ExposureMode.EXPOSURE_SHUTTER:
-        await updateCameraState({ exposureMode, shutter: cameraState.shutter });
+        await updateCameraState({ exposureMode, shutter: live.shutter });
         break;
       case ExposureMode.EXPOSURE_IRIS:
-        await updateCameraState({ exposureMode, iris: cameraState.iris });
+        await updateCameraState({ exposureMode, iris: live.iris });
         break;
       case ExposureMode.EXPOSURE_BRIGHT:
         await updateCameraState({
           exposureMode,
-          brightness: cameraState.brightness,
+          brightness: live.brightness,
         });
         break;
       default:
