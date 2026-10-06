@@ -15,6 +15,8 @@ interface ViscaValueButtonProps {
   autoOn?: ViscaCommand;
   autoOff?: ViscaCommand;
   autoOnce?: ViscaCommand;
+  /** Called when a step button is pressed. */
+  onPress?: (direction: 'down' | 'up') => void;
 }
 
 const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
@@ -26,6 +28,7 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
   autoOn,
   autoOff,
   autoOnce,
+  onPress,
 }) => {
   const [isAuto, setIsAuto] = useState<boolean>(value === true);
   const setTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -60,6 +63,7 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
   // Decrement press/release handlers
   const handleDecrementPress = () => {
     setIsAuto(false); // Turn off auto
+    onPress?.('down');
 
     // Send a quick decrement and then stop
     const sendDecrement = async () => {
@@ -85,6 +89,7 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
   // Increment press/release handlers
   const handleIncrementPress = () => {
     setIsAuto(false);
+    onPress?.('up');
 
     // Send a quick increment and then stop
     const sendIncrement = async () => {

@@ -83,17 +83,64 @@ const Group: React.FC<{
   </Paper>
 );
 
+/** A quarter of the bar standing for full range that can't be reached, with a break mark. */
+const Squeezed = () => (
+  <Box
+    aria-hidden
+    sx={{
+      width: '25%',
+      flexShrink: 0,
+      position: 'relative',
+      height: 28,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      color: 'text.disabled',
+    }}
+  >
+    <Box
+      sx={{
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        top: '50%',
+        height: 2,
+        transform: 'translateY(-50%)',
+        bgcolor: 'action.disabled',
+      }}
+    />
+    <Box
+      component="svg"
+      viewBox="0 0 10 10"
+      sx={{
+        width: 12,
+        height: 12,
+        position: 'relative',
+        bgcolor: 'background.paper',
+      }}
+    >
+      <path
+        d="M1 9 L5 1 M5 9 L9 1"
+        stroke="currentColor"
+        strokeWidth={1.5}
+        fill="none"
+      />
+    </Box>
+  </Box>
+);
+
 /**
  * The lens position, and when a range is qualified, a slider to send the lens straight to a
  * position. A direct position move runs at the camera's top speed. The mark shows where the
  * lens was sent until it gets there, or until it stops short at the lens's limit. Ends known
- * to be out of reach are grayed out; a hard end can't be dragged past.
+ * for the current zoom get the middle of the bar, with the unreachable full range squeezed
+ * into broken-axis stretches at the ends.
  */
 const LensSlider: React.FC<{
   label: string;
   value: number;
   range?: { min: number; max: number };
-  reach?: { low?: number; high?: number; lowHard: boolean; highHard: boolean };
+  reach?: { low?: number; high?: number };
   onSet: (value: number) => void;
   onLimit?: (value: number, end: 'low' | 'high') => void;
 }> = ({ label, value, range, reach, onSet, onLimit }) => {
@@ -130,28 +177,10 @@ const LensSlider: React.FC<{
   else if (limit !== undefined) status = `${value} – lens limit`;
 
   const low = Math.max(range?.min ?? 0, reach?.low ?? -Infinity);
-  const high = Math.min(range?.max ?? 0, reach?.high ?? Infinity);
-  const clamp = (v: number) =>
-    Math.min(
-      reach?.highHard ? high : Infinity,
-      Math.max(reach?.lowHard ? low : -Infinity, v),
-    );
-  const percent = (v: number) =>
-    range ? ((v - range.min) / (range.max - range.min)) * 100 : 0;
-  const gray = (left: number, width: number, hard?: boolean) => (
-    <Box
-      sx={{
-        position: 'absolute',
-        top: '50%',
-        left: `${left}%`,
-        width: `${width}%`,
-        height: 4,
-        transform: 'translateY(-50%)',
-        bgcolor: hard ? 'action.disabled' : 'action.disabledBackground',
-        zIndex: 1,
-        pointerEvents: 'none',
-      }}
-    />
+  // A slider needs some span; at full wide the X30 focus is a single position.
+  const high = Math.max(
+    low + 1,
+    Math.min(range?.max ?? 0, reach?.high ?? Infinity),
   );
 
   return (
@@ -165,52 +194,96 @@ const LensSlider: React.FC<{
       </Typography>
       {range && (
         <>
-          <Box sx={{ position: 'relative' }}>
-            {low > range.min && gray(0, percent(low), reach?.lowHard)}
-            {high < range.max &&
-              gray(percent(high), 100 - percent(high), reach?.highHard)}
-            <Slider
-              size="small"
-              aria-label={label}
-              min={range.min}
-              max={range.max}
-              value={drag ?? Math.min(range.max, Math.max(range.min, value))}
-              marks={target === undefined ? false : [{ value: target }]}
-              valueLabelDisplay="auto"
-              sx={{
-                // Taller than the thumb and orange, so the target shows over the filled track too.
-                '& .MuiSlider-mark, & .MuiSlider-markActive': {
-                  width: 3,
-                  height: 22,
-                  borderRadius: 1,
-                  bgcolor: 'warning.main',
-                  opacity: 1,
-                },
-              }}
-              onChange={(_event, v) => setDrag(clamp(v as number))}
-              onChangeCommitted={(_event, v) => {
-                setDrag(undefined);
-                setLimit(undefined);
-                setTarget(clamp(v as number));
-                onSet(clamp(v as number));
-              }}
-            />
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            {low > range.min && <Squeezed />}
+            <Box sx={{ flex: 1, minWidth: 0, mx: 1 }}>
+              <Slider
+                size="small"
+                aria-label={label}
+                min={low}
+                max={high}
+                value={drag ?? Math.min(high, Math.max(low, value))}
+                marks={target === undefined ? false : [{ value: target }]}
+                valueLabelDisplay="auto"
+                sx={{
+                  // Inline-block would add a baseline gap and lift the rail above the squeezed ends.
+                  display: 'block',
+                  // Taller than the thumb and orange, so the target shows over the filled track too.
+                  '& .MuiSlider-mark, & .MuiSlider-markActive': {
+                    width: 3,
+                    height: 22,
+                    borderRadius: 1,
+                    bgcolor: 'warning.main',
+                    opacity: 1,
+                  },
+                }}
+                onChange={(_event, v) => setDrag(v as number)}
+                onChangeCommitted={(_event, v) => {
+                  setDrag(undefined);
+                  setLimit(undefined);
+                  setTarget(v as number);
+                  onSet(v as number);
+                }}
+              />
+            </Box>
+            {high < range.max && <Squeezed />}
           </Box>
           <Box
             sx={{
-              display: 'flex',
-              justifyContent: 'space-between',
+              position: 'relative',
+              height: '1.5em',
               typography: 'caption',
               color: 'text.secondary',
-              mt: -1,
+              mt: -0.5,
             }}
           >
-            <span>{range.min}</span>
-            <span>{range.max}</span>
+            <Box component="span" sx={{ position: 'absolute', left: 0 }}>
+              {range.min}
+            </Box>
+            <Box component="span" sx={{ position: 'absolute', right: 0 }}>
+              {range.max}
+            </Box>
+            {low > range.min && (
+              <Box
+                component="span"
+                // Centered under the slider's left end: past the squeezed quarter and its margin.
+                sx={{
+                  position: 'absolute',
+                  left: 'calc(25% + 8px)',
+                  transform: 'translateX(-50%)',
+                  color: 'text.primary',
+                }}
+              >
+                {low}
+              </Box>
+            )}
+            {high < range.max && (
+              <Box
+                component="span"
+                sx={{
+                  position: 'absolute',
+                  right: 'calc(25% + 8px)',
+                  transform: 'translateX(50%)',
+                  color: 'text.primary',
+                }}
+              >
+                {high}
+              </Box>
+            )}
           </Box>
         </>
       )}
     </Box>
+  );
+};
+
+/** Whether a focus end learned at one zoom applies at another; ends shift across a band. */
+const nearZoom = (zoom: number, learned?: number) => {
+  const range = getLensRange();
+  return (
+    !!range &&
+    learned !== undefined &&
+    Math.abs(zoom - learned) <= (range.zoom.max - range.zoom.min) * 0.01
   );
 };
 
@@ -237,19 +310,19 @@ const ViscaControlPanel: React.FC = () => {
   const [viscaPort] = useViscaPort();
   const [lensRange] = useLensRange();
   const [focusReach] = useFocusReach();
+  // The focus position at the last +/- press; unchanged a second later means a limit.
+  const focusPress = useRef<{
+    end: 'low' | 'high';
+    from: number;
+    at: number;
+  }>();
   const bandReach =
     lensRange && focusReach[zoomBand(cameraState.zoom, lensRange.zoom)];
-  // An end found at (nearly) this zoom is a hard stop; from elsewhere in the band, a hint.
-  const atZoom = (zoom?: number) =>
-    !!lensRange &&
-    zoom !== undefined &&
-    Math.abs(cameraState.zoom - zoom) <=
-      (lensRange.zoom.max - lensRange.zoom.min) * 0.01;
+  // Only an end found at (nearly) this zoom applies; elsewhere in the band it may differ.
+  const atZoom = (learned?: number) => nearZoom(cameraState.zoom, learned);
   const focusReachView = bandReach && {
-    low: bandReach.low,
-    high: bandReach.high,
-    lowHard: atZoom(bandReach.lowZoom),
-    highHard: atZoom(bandReach.highZoom),
+    low: atZoom(bandReach.lowZoom) ? bandReach.low : undefined,
+    high: atZoom(bandReach.highZoom) ? bandReach.high : undefined,
   };
   useEffect(() => {
     if (!viscaIP || viscaPort === 0) {
@@ -321,14 +394,28 @@ const ViscaControlPanel: React.FC = () => {
           });
         }
         // Focus seen past a learned limit means that limit came from elsewhere in the band.
-        // The widened end is only seen, not a proven stop, so it loses its zoom.
+        const press = focusPress.current;
+        if (press && Date.now() - press.at > 1000) {
+          focusPress.current = undefined;
+          if (focus === press.from) {
+            updateReach(zoom, (reach) => ({
+              ...reach,
+              [press.end]: focus,
+              [`${press.end}Zoom`]: zoom,
+            }));
+          }
+        }
+        // An end learned at this zoom moves out to the new position (continuous moves reach a
+        // little further than direct ones); one from elsewhere in the band no longer applies.
         updateReach(zoom, (reach) => {
           let next = reach;
           if (reach.low !== undefined && focus < reach.low) {
-            next = { ...next, low: focus, lowZoom: undefined };
+            const lowZoom = nearZoom(zoom, reach.lowZoom) ? zoom : undefined;
+            next = { ...next, low: focus, lowZoom };
           }
           if (reach.high !== undefined && focus > reach.high) {
-            next = { ...next, high: focus, highZoom: undefined };
+            const highZoom = nearZoom(zoom, reach.highZoom) ? zoom : undefined;
+            next = { ...next, high: focus, highZoom };
           }
           return next;
         });
@@ -422,6 +509,13 @@ const ViscaControlPanel: React.FC = () => {
                 autoOn={{ type: 'AUTO_FOCUS', value: true }}
                 autoOff={{ type: 'AUTO_FOCUS', value: false }}
                 autoOnce={{ type: 'FOCUS_ONCE' }}
+                onPress={(direction) => {
+                  focusPress.current = {
+                    end: direction === 'up' ? 'high' : 'low',
+                    from: cameraState.focus,
+                    at: Date.now(),
+                  };
+                }}
               />
               <LensSlider
                 label="Focus position"
@@ -429,11 +523,24 @@ const ViscaControlPanel: React.FC = () => {
                 range={lensRange?.focus}
                 reach={focusReachView}
                 onLimit={(value, end) =>
-                  updateReach(cameraState.zoom, (reach) => ({
-                    ...reach,
-                    [end]: value,
-                    [`${end}Zoom`]: cameraState.zoom,
-                  }))
+                  updateReach(cameraState.zoom, (reach) => {
+                    // A direct move stops short of where continuous moves already got.
+                    const known = reach[end];
+                    const further =
+                      known !== undefined &&
+                      (end === 'high' ? known > value : known < value);
+                    if (
+                      further &&
+                      nearZoom(cameraState.zoom, reach[`${end}Zoom`])
+                    ) {
+                      return reach;
+                    }
+                    return {
+                      ...reach,
+                      [end]: value,
+                      [`${end}Zoom`]: cameraState.zoom,
+                    };
+                  })
                 }
                 onSet={async (value) => {
                   // The camera ignores a focus position while autofocus is on.
