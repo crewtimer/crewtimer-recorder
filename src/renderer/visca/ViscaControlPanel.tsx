@@ -70,13 +70,7 @@ const Group: React.FC<{
   </Box>
 );
 
-interface ViscaControlPanelProps {
-  vertical?: boolean;
-}
-
-const ViscaControlPanel: React.FC<ViscaControlPanelProps> = ({
-  vertical = false,
-}) => {
+const ViscaControlPanel: React.FC = () => {
   const [cameraState, setCameraState] = useCameraState();
   const [viscaState] = useViscaState();
   const [focusAreaProps, setFocusAreaProps] = useFocusArea();
@@ -174,10 +168,9 @@ const ViscaControlPanel: React.FC<ViscaControlPanelProps> = ({
       <Box
         sx={{
           display: 'flex',
-          flexDirection: vertical ? 'column' : 'row',
-          flexWrap: 'wrap',
+          flexDirection: 'column',
           alignItems: 'flex-start',
-          gap: vertical ? 2 : '16px 32px',
+          gap: 2,
         }}
       >
         {viscaEnabled && (
