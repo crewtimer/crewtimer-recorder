@@ -1,13 +1,13 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import {
   ThemeProvider,
-  useTheme,
   Theme,
   StyledEngineProvider,
   createTheme,
   styled,
 } from '@mui/material/styles';
 import Box from '@mui/material/Box';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import MuiDrawer, { DrawerProps as MuiDrawerProps } from '@mui/material/Drawer';
 import MuiAppBar, { AppBarProps as MuiAppBarProps } from '@mui/material/AppBar';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -23,7 +23,18 @@ import Toast from './components/Toast';
 import { CameraMonitor } from './recorder/CameraMonitor';
 import { openNagScreen } from './components/NagScreen';
 
-createTheme();
+const palettes = {
+  light: {
+    mode: 'light',
+    primary: { main: '#1F5FAD' },
+    background: { default: '#EEF1F4', paper: '#FFFFFF' },
+  },
+  dark: {
+    mode: 'dark',
+    primary: { main: '#7DB4F5' },
+    background: { default: '#0E1114', paper: '#151A1F' },
+  },
+} as const;
 
 const openedMixin = (theme: Theme) => ({
   width: drawerWidth,
@@ -104,7 +115,9 @@ const AppBar = styled(MuiAppBar, {
 
 function App() {
   const [open, setOpen] = useDrawerOpen();
-  const theme = useTheme();
+  // The main process maps the Theme menu choice onto prefers-color-scheme
+  const mode = useMediaQuery('(prefers-color-scheme: dark)') ? 'dark' : 'light';
+  const theme = useMemo(() => createTheme({ palette: palettes[mode] }), [mode]);
 
   useEffect(() => {
     setTimeout(() => {

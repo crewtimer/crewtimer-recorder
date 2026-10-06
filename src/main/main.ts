@@ -10,7 +10,7 @@
  */
 import './dll-path';
 import path from 'path';
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, nativeTheme, shell } from 'electron';
 import electronDebug from 'electron-debug';
 import {
   requestLocalNetworkPermission,
@@ -19,11 +19,22 @@ import {
 } from 'crewtimer_video_recorder';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
-import './store/store';
+import { getStoredValue } from './store/store';
 import './msgbus/msgbus-main';
 import { stopRecorder, initRecorder } from './recorder/recorder-main';
 import { setMainWindow } from './mainWindow';
 import './util/fileops-handler';
+import { onPropertyChange } from '../renderer/store/StoreUtil';
+
+// Drives prefers-color-scheme, so MUI, the markdown CSS and scrollbars all follow the in-app choice
+const applyThemeMode = () => {
+  nativeTheme.themeSource = getStoredValue<'system' | 'light' | 'dark'>(
+    'themeMode',
+    'system',
+  );
+};
+onPropertyChange('themeMode', applyThemeMode);
+applyThemeMode();
 
 let mainWindow: BrowserWindow | null = null;
 

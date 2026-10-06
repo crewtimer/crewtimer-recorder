@@ -7,6 +7,9 @@ import CameraIcon from '@mui/icons-material/Camera';
 import SecurityIcon from '@mui/icons-material/Security';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
+import LightModeIcon from '@mui/icons-material/LightMode';
+import DarkModeIcon from '@mui/icons-material/DarkMode';
+import SettingsBrightnessIcon from '@mui/icons-material/SettingsBrightness';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import { Divider, IconButton, ListItemIcon, ListItemText } from '@mui/material';
@@ -18,8 +21,23 @@ import {
   useReportAllGaps,
 } from '../recorder/RecorderData';
 import { openNagScreen } from './NagScreen';
+import { UseStoredDatum } from '../store/UseElectronDatum';
 
 const AboutText = `CrewTimer Video Recorder ${window.platform.appVersion}`;
+
+type ThemeMode = 'system' | 'light' | 'dark';
+const [useThemeMode] = UseStoredDatum<ThemeMode>('themeMode', 'system');
+
+const nextThemeMode: Record<ThemeMode, ThemeMode> = {
+  system: 'light',
+  light: 'dark',
+  dark: 'system',
+};
+const themeModeIcon = {
+  system: <SettingsBrightnessIcon />,
+  light: <LightModeIcon />,
+  dark: <DarkModeIcon />,
+};
 
 const HamburgerMenu = () => {
   const [, setSelectedPage] = useSelectedPage();
@@ -27,6 +45,7 @@ const HamburgerMenu = () => {
   const [reportAllGaps, setReportAllGaps] = useReportAllGaps();
   const [, setRecordingPropsPending] = useRecordingPropsPending();
   const [viscaIP] = useViscaIP();
+  const [themeMode, setThemeMode] = useThemeMode();
   const [shiftMenu, setShiftMenu] = useState(false);
   const open = Boolean(anchorEl);
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -92,6 +111,13 @@ const HamburgerMenu = () => {
             <InfoIcon />
           </ListItemIcon>
           <ListItemText primary="What's New" />
+        </MenuItem>
+        {/* Stays open so the user can cycle through modes and see each one */}
+        <MenuItem onClick={() => setThemeMode(nextThemeMode[themeMode])}>
+          <ListItemIcon>{themeModeIcon[themeMode]}</ListItemIcon>
+          <ListItemText
+            primary={`Theme: ${themeMode[0].toUpperCase()}${themeMode.slice(1)}`}
+          />
         </MenuItem>
         <MenuItem onClick={closeAndGo('/privacy')}>
           <ListItemIcon>
