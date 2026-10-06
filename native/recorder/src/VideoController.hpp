@@ -166,7 +166,9 @@ private:
                                    frameRotation.load() != 0)
                                {
                                  const int rotation = frameRotation.load();
-                                 auto rotated = rotation == -180
+                                 auto rotated = frame->pixelFormat == Frame::UYVY422
+                                                    ? rotateUyvyToI420(frame, rotation)
+                                                : rotation == -180
                                                     ? rotateFrame180(frame)
                                                     : rotateFrame90(frame, rotation == 90);
                                  if (rotated)

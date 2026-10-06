@@ -68,3 +68,6 @@ FramePtr cropFrame(const FramePtr &frame, int cropX, int cropY, int cropWidth,
                    int cropHeight);
 FramePtr rotateFrame90(const FramePtr &frame, bool clockwise);
 FramePtr rotateFrame180(const FramePtr &frame);
+// Rotate a UYVY422 frame by 90, -90 or +/-180 degrees and convert it to
+// YUV420P in a single pass. Returns nullptr for other formats or odd sizes.
+FramePtr rotateUyvyToI420(const FramePtr &frame, int rotation);
