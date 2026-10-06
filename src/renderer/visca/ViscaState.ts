@@ -30,6 +30,33 @@ export const [useViscaPort, , getViscaPort] = UseStoredDatum(
   52381,
 );
 export const [useViscaState, setViscaState, getViscastate] = UseDatum('Idle');
+
+/** End-of-travel positions found by sweeping the lens. Focus is measured at max zoom. */
+export interface LensRange {
+  zoom: { min: number; max: number };
+  focus: { min: number; max: number };
+}
+export const [useLensRange, setLensRange, getLensRange] = UseStoredDatum<
+  LensRange | undefined
+>('lensRange', undefined);
+
+/**
+ * Focus ends the lens stopped at within one zoom band, and the zoom each was found at; focus
+ * travel narrows with zoom, so an end is only certain at that zoom.
+ */
+export interface FocusReach {
+  low?: number;
+  high?: number;
+  lowZoom?: number;
+  highZoom?: number;
+}
+export const [useFocusReach, setFocusReach, getFocusReach] = UseStoredDatum<
+  Record<number, FocusReach>
+>('focusReach', {});
+
+/** Which of 16 equal slices of the zoom range a zoom position falls in. */
+export const zoomBand = (zoom: number, { min, max }: LensRange['zoom']) =>
+  Math.min(15, Math.max(0, Math.floor(((zoom - min) / (max - min)) * 16)));
 export const [useCameraPresets, setCameraPresets, getCameraPresets] =
   UseStoredDatum<CameraState[]>('presets', []);
 export const [useCameraState, setCameraState, getCameraState] =

@@ -56,8 +56,8 @@ export const shutterLabels = [
 
 export type ViscaCommand =
   | { type: 'AUTO_FOCUS'; value: boolean }
-  | { type: 'FOCUS_IN' }
-  | { type: 'FOCUS_OUT' }
+  | { type: 'FOCUS_FAR' }
+  | { type: 'FOCUS_NEAR' }
   | { type: 'FOCUS_ONCE' }
   | { type: 'FOCUS_RESET' }
   | { type: 'ZOOM_IN' }
@@ -105,9 +105,9 @@ function buildViscaPacket(cmd: ViscaCommand): Uint8Array {
         ? new Uint8Array([0x81, 0x01, 0x04, 0x38, 0x02, 0xff]) // AF on
         : new Uint8Array([0x81, 0x01, 0x04, 0x38, 0x03, 0xff]); // AF off
 
-    case 'FOCUS_IN':
+    case 'FOCUS_FAR':
       return new Uint8Array([0x81, 0x01, 0x04, 0x08, 0x22, 0xff]);
-    case 'FOCUS_OUT':
+    case 'FOCUS_NEAR':
       return new Uint8Array([0x81, 0x01, 0x04, 0x08, 0x32, 0xff]);
     case 'FOCUS_RESET':
       return new Uint8Array([0x81, 0x01, 0x04, 0x08, 0x00, 0xff]);
@@ -289,6 +289,21 @@ const extractViscaValue = (
     default:
       return defaultValue;
   }
+};
+
+/** Reads the zoom or focus position, throwing if the camera doesn't answer with one. */
+export const getLensPosition = async (
+  axis: 'zoom' | 'focus',
+): Promise<number> => {
+  const reply = await sendViscaCommand({
+    type: axis === 'zoom' ? 'ZOOM_VALUE' : 'FOCUS_VALUE',
+  });
+  if (reply.data?.[1] !== 0x50) {
+    throw new Error(
+      `No ${axis} position from camera (${reply.msg ?? reply.status})`,
+    );
+  }
+  return extractViscaValue(reply, 4, 0);
 };
 
 export const getCameraState = async (): Promise<CameraState> => {
