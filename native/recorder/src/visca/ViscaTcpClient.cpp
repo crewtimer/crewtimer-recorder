@@ -75,7 +75,7 @@ public:
 
   void start(const std::string &ip, uint16_t port) override
   {
-    std::lock_guard<std::recursive_mutex> lock(queueMutex_);
+    // No lock here: stop() joins the worker, which may need queueMutex_ to finish.
     if (workerThread_.joinable())
     {
       // If already running with the same config, do nothing
