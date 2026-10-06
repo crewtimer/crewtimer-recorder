@@ -35,6 +35,53 @@ Either check out the git repo or if in a Macos Parallels Desktop, map a network 
 
 In windows explorer, navigate to the scripts/ folder and double click on the Cygwin-vstudio.bat file.  This will open a bash terminal with the visual studio tools available from the command line.
 
+#### Alternative: Git Bash + MSVC (no Cygwin)
+
+`build-ffmpeg.sh` also runs from the Git for Windows bash shell. This uses the same
+setup as the crewtimer-video-review native module (see its `native/ffreader/README.md`,
+"Windows Toolchain (MSYS + MSVC)"), so a machine prepared for that can build this too.
+
+Prerequisites:
+
+- Visual Studio 2022 Build Tools with the *Desktop development with C++* workload
+- Git for Windows, Node.js and yarn
+- The portable build tools in `C:\buildtools` (nasm, yasm, cmake, make, Strawberry Perl)
+  as described in the video-review README
+- A native Windows `pkg-config.exe` on `PATH` (FFmpeg finds libsrt through it). Strawberry
+  Perl's `pkg-config` script is not accepted; the MSYS2 `pkg-config.exe` that vcpkg
+  downloads (`lib-build/vcpkg/downloads/tools/msys2/*/mingw64/bin`) works.
+- The NDI 6 SDK at its default location (`C:\Program Files\NDI\NDI 6 SDK`), from
+  `https://downloads.ndi.tv/SDK/NDI_SDK/NDI%206%20SDK.exe`
+
+Open a shell with the MSVC environment (video-review's `scripts/MSYS-vstudio.bat`, or
+`source` its generated `scripts/vs-env.sh`), add `pkg-config.exe` to `PATH`, then:
+
+```bash
+cd native/recorder
+./scripts/build-opencv.sh   # or copy a static OpenCV 4.9.0 build to lib-build/opencv-static-win
+./scripts/build-ffmpeg.sh   # SRT + FFmpeg n7.1, ~20-30 min
+```
+
+Under Git Bash the script works around three MSYS issues (path rewriting of MSVC
+arguments, FFmpeg's dependency awk, and the `lib.exe` archive step) and builds SRT with
+the static C runtime to match FFmpeg and node-gyp.
+
+To build the module locally and use it in the app (instead of the downloaded prebuild):
+
+```bash
+cd native/recorder
+yarn install --ignore-scripts      # the install script would fetch the prebuild
+npx node-gyp rebuild --arch=x64
+cp build/Release/crewtimer_video_recorder.node \
+   ../../release/app/node_modules/crewtimer_video_recorder/build/Release/
+cd ../..
+npm run build
+node_modules/.bin/electron-builder --win --x64 --config.npmRebuild=false
+```
+
+`yarn build:win` is not used here because its `install:native:win` step downloads the
+prebuild over the local module.
+
 ## Building the prebuilt binary
 
 Set up nvm/node:
