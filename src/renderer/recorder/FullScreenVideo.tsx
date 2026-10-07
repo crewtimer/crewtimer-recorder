@@ -1,49 +1,39 @@
+import { Box } from '@mui/material';
 import { FullSizeWindow } from '../components/FullSizeWindow';
 import PreviewCanvas from '../components/PreviewCanvas';
 import ViscaControlPanel from '../visca/ViscaControlPanel';
-import { useRecordingProps } from './RecorderData';
-import { useVideoScaling, ZoomMode } from '../util/VideoSettings';
 
-export const FullScreenVideo = () => {
-  const [videoScaling] = useVideoScaling();
-  const [recordingProps] = useRecordingProps();
-  const sourceIsPortrait = videoScaling.srcHeight > videoScaling.srcWidth;
-  const cropIsPortrait =
-    recordingProps.cropArea.height * videoScaling.srcHeight >
-    recordingProps.cropArea.width * videoScaling.srcWidth;
-  const isPortrait =
-    sourceIsPortrait ||
-    (videoScaling.zoomMode === ZoomMode.Maximize && cropIsPortrait);
-
-  return (
-    <div
-      style={{
-        padding: '0px 10px',
-        display: 'flex',
-        flexDirection: isPortrait ? 'row' : 'column',
-        gap: isPortrait ? '10px' : 0,
-        height: '100%',
-        minHeight: 0,
+/** Camera control tab: same layout as the Recorder tab, preview left and controls right. */
+export const FullScreenVideo = () => (
+  <Box
+    sx={{
+      display: 'flex',
+      flexWrap: { xs: 'wrap', md: 'nowrap' },
+      gap: 2.5,
+      height: '100%',
+      alignItems: 'stretch',
+    }}
+  >
+    <Box
+      component="section"
+      aria-label="Live preview"
+      sx={{
+        flex: '999 1 440px',
+        minWidth: 0,
+        minHeight: { xs: 360, md: 0 },
+        // Contain the absolutely positioned preview canvas
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
-      {/* <RecordingError /> */}
-      <div
-        style={
-          isPortrait
-            ? {
-                width: '300px',
-                maxWidth: '35%',
-                flexShrink: 0,
-                overflowY: 'auto',
-              }
-            : undefined
-        }
-      >
-        <ViscaControlPanel vertical={isPortrait} />
-      </div>
-      <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
-        <FullSizeWindow component={PreviewCanvas} />
-      </div>
-    </div>
-  );
-};
+      <FullSizeWindow component={PreviewCanvas} />
+    </Box>
+    <Box
+      component="aside"
+      aria-label="Camera controls"
+      sx={{ flex: '1 1 320px', maxWidth: 400, overflowY: { md: 'auto' } }}
+    >
+      <ViscaControlPanel />
+    </Box>
+  </Box>
+);

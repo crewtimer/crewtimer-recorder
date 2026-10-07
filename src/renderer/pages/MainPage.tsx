@@ -1,14 +1,10 @@
-import { UseDatum } from 'react-usedatum';
 import Markdown from '../components/Markdown';
 import PrivacyMarkdown from '../doc/PrivacyMarkdown.md';
 import CrewTimerVideoRecorder from '../doc/CrewTimerVideoRecorderHelp.md';
 import RecorderConfig from '../recorder/RecorderConfig';
 import RecordingLogTable from './RecordingLogTable';
 import { FullScreenVideo } from '../recorder/FullScreenVideo';
-
-export const [useSelectedPage] = UseDatum<string>('/');
-
-const SETTINGS_PAGES = ['/', '/home', '/index.html'];
+import { SETTINGS_PAGES, useSelectedPage } from './SelectedPage';
 
 const MainPage = () => {
   const [page] = useSelectedPage();

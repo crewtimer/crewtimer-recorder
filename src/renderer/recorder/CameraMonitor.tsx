@@ -9,6 +9,14 @@ export const [useCameraList, setCameraList] = UseDatum<
   { name: string; address: string }[]
 >([]);
 
+export const refreshCameraList = () =>
+  queryCameraList()
+    .then((result) => {
+      setCameraList(result?.cameras || []);
+      return null;
+    })
+    .catch(showErrorDialog);
+
 export const CameraMonitor = () => {
   const [isRecording] = useIsRecording();
   const [recordingProps] = useRecordingProps();
@@ -20,16 +28,8 @@ export const CameraMonitor = () => {
     if (isRecording) {
       return () => {};
     }
-    const monitor = async () => {
-      queryCameraList()
-        .then((result) => {
-          setCameraList(result?.cameras || []);
-          return null;
-        })
-        .catch(showErrorDialog);
-    };
-    monitor();
-    const timer = setInterval(monitor, 5000);
+    refreshCameraList();
+    const timer = setInterval(refreshCameraList, 5000);
     return () => clearInterval(timer);
   }, [isRecording]);
 

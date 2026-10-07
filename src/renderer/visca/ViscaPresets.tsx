@@ -7,11 +7,7 @@ import {
   ToggleButtonGroup,
   CircularProgress,
 } from '@mui/material';
-import {
-  CameraState,
-  useCameraPresets,
-  useCameraState,
-} from './ViscaState';
+import { CameraState, useCameraPresets, useCameraState } from './ViscaState';
 import { getCameraState, updateCameraState } from './ViscaAPI';
 import { setToast } from '../components/Toast';
 import { snooze } from '../util/Util';
@@ -97,29 +93,21 @@ const ViscaPresets: React.FC = () => {
   };
 
   return (
-    <Box display="flex" gap={2}>
-      {showProgress && <CircularProgress />}
+    <Box display="flex" alignItems="center" gap={1}>
       {/* Toggle Button Group for Load/Save */}
       <ToggleButtonGroup
         value={mode}
         exclusive
         onChange={handleModeChange}
         size="small"
-        sx={{
-          '& .MuiToggleButton-root': {
-            padding: '2px 6px',
-            minWidth: 0,
-            borderRadius: '4px',
-          },
-        }}
+        color="primary"
+        aria-label="Camera presets"
+        sx={{ height: 36 }}
       >
-        <ToggleButton value="load" color="primary">
-          Load
-        </ToggleButton>
-        <ToggleButton value="save" color="primary">
-          Save
-        </ToggleButton>
+        <ToggleButton value="load">Load</ToggleButton>
+        <ToggleButton value="save">Save</ToggleButton>
       </ToggleButtonGroup>
+      {showProgress && <CircularProgress size={20} />}
 
       {/* Menu pops up when user selects Load or Save */}
       <Menu

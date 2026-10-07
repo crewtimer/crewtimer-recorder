@@ -8,8 +8,9 @@
  * When running `npm run build` or `npm run build:main`, this file is compiled to
  * `./src/main.js` using webpack. This gives us some performance wins.
  */
+import './dll-path';
 import path from 'path';
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, nativeTheme, screen, shell } from 'electron';
 import electronDebug from 'electron-debug';
 import {
   requestLocalNetworkPermission,
@@ -18,11 +19,22 @@ import {
 } from 'crewtimer_video_recorder';
 import MenuBuilder from './menu';
 import { resolveHtmlPath } from './util';
-import './store/store';
+import { getStoredValue } from './store/store';
 import './msgbus/msgbus-main';
 import { stopRecorder, initRecorder } from './recorder/recorder-main';
 import { setMainWindow } from './mainWindow';
 import './util/fileops-handler';
+import { onPropertyChange } from '../renderer/store/StoreUtil';
+
+// Drives prefers-color-scheme, so MUI, the markdown CSS and scrollbars all follow the in-app choice
+const applyThemeMode = () => {
+  nativeTheme.themeSource = getStoredValue<'system' | 'light' | 'dark'>(
+    'themeMode',
+    'system',
+  );
+};
+onPropertyChange('themeMode', applyThemeMode);
+applyThemeMode();
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -86,12 +98,22 @@ const createWindow = async () => {
     return path.join(RESOURCES_PATH, ...paths);
   };
 
+  // The UI is laid out for about 1280x800; shrink it to fit smaller screens
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
+  const zoomFactor = Math.max(
+    0.67,
+    Math.min(1, workArea.width / 1280, workArea.height / 800),
+  );
+
   mainWindow = new BrowserWindow({
     show: false,
-    width: 1024,
-    height: 728,
+    width: Math.min(1280, workArea.width),
+    height: Math.min(800, workArea.height),
+    minWidth: 800,
+    minHeight: 540,
     icon: getAssetPath('icon.png'),
     webPreferences: {
+      zoomFactor,
       preload: app.isPackaged
         ? path.join(__dirname, 'preload.js')
         : path.join(__dirname, '../../.erb/dll/preload.js'),

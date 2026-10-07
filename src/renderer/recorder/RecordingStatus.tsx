@@ -1,14 +1,15 @@
 import React, { useEffect } from 'react';
-import { Stack, Typography } from '@mui/material';
-import RecordIcon from '@mui/icons-material/FiberManualRecord';
-import { queryRecordingStatus, stopRecording } from './RecorderApi';
+import { Box, LinearProgress, Stack, Typography } from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import { queryRecordingStatus } from './RecorderApi';
 import {
   setRecordingStatus,
   setIsRecording,
   useRecordingStatus,
-  getRecordingProps,
+  useRecordingProps,
 } from './RecorderData';
 import { DefaultRecordingStatus } from './RecorderTypes';
+import { monoFont } from '../components/Panel';
 
 const formatTime = (totalSeconds: number) => {
   const hours = Math.floor(totalSeconds / 3600);
@@ -20,7 +21,6 @@ const formatTime = (totalSeconds: number) => {
 const checkStatus = () => {
   queryRecordingStatus()
     .then((result) => {
-      // console.log(JSON.stringify(result));
       const status = { ...DefaultRecordingStatus, ...result };
       setRecordingStatus(status);
       setIsRecording(status.recording);
@@ -33,62 +33,109 @@ const checkStatus = () => {
 
 const RecordingStatus: React.FC = () => {
   const [recordingStatus] = useRecordingStatus();
-  const { cropArea } = getRecordingProps();
-
-  const isRecording = recordingStatus.recording;
-  const seconds = formatTime(recordingStatus.recordingDuration);
+  const [{ recordingDuration }] = useRecordingProps();
 
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null;
-    interval = setInterval(checkStatus, 1000);
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
+    const interval = setInterval(checkStatus, 1000);
+    return () => clearInterval(interval);
   }, []);
 
-  let cropText = '';
-  if (cropArea.width !== 1 || cropArea.height !== 1) {
-    cropText = ` -> ${Math.round((cropArea.width * recordingStatus.frameProcessor.width) / 4) * 4}x${Math.round((cropArea.height * recordingStatus.frameProcessor.height) / 4) * 4}`;
-  }
-
-  const { frameBacklog } = recordingStatus.frameProcessor;
-  return isRecording ? (
-    <Stack direction="column">
+  if (!recordingStatus.recording) {
+    return (
       <Stack
         direction="row"
-        sx={{ alignItems: 'center' }}
-        onClick={stopRecording}
+        alignItems="center"
+        spacing={1}
+        sx={{
+          px: 1.5,
+          py: 0.75,
+          borderRadius: 999,
+          border: 1,
+          borderColor: 'divider',
+          bgcolor: 'action.hover',
+        }}
       >
-        <RecordIcon style={{ color: '#ff0000' }} />
-        <Typography variant="body2">{`${seconds}`}</Typography>
-        <Typography
+        <Box
           sx={{
-            marginLeft: '0.5em',
-            paddingLeft: '0.5em',
-            paddingRight: '0.5em',
-            background:
-              frameBacklog > 100
-                ? '#ffff00'
-                : frameBacklog > 200
-                  ? '#ff0000'
-                  : undefined,
-            color: frameBacklog > 100 ? '#000000' : undefined,
+            width: 10,
+            height: 10,
+            borderRadius: '50%',
+            border: 2,
+            borderColor: 'text.secondary',
           }}
-        >{` backlog: ${frameBacklog}`}</Typography>
+        />
+        <Typography
+          sx={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em' }}
+        >
+          NOT RECORDING
+        </Typography>
       </Stack>
-      {recordingStatus.frameProcessor.filename ? (
-        <>
-          <Typography
-            sx={{ fontSize: 12 }}
-          >{`${recordingStatus.frameProcessor.filename}`}</Typography>
-          <Typography
-            sx={{ fontSize: 11 }}
-          >{`${recordingStatus.frameProcessor.width}x${recordingStatus.frameProcessor.height}${cropText} ${recordingStatus.frameProcessor.fps} fps`}</Typography>
-        </>
-      ) : null}
+    );
+  }
+
+  const { filename, lastTsMilli, sliceEndMilli } =
+    recordingStatus.frameProcessor;
+  // Clamped: the slice end can lag the first frame of a new file by a frame.
+  const sliceSecs = Math.min(
+    recordingDuration,
+    Math.max(
+      0,
+      recordingDuration - Math.ceil((sliceEndMilli - lastTsMilli) / 1000),
+    ),
+  );
+
+  return (
+    <Stack direction="row" alignItems="center" spacing={2}>
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={1}
+        sx={{
+          px: 1.5,
+          py: 0.75,
+          borderRadius: 999,
+          border: 1,
+          borderColor: (theme) => alpha(theme.palette.error.main, 0.5),
+          bgcolor: (theme) => alpha(theme.palette.error.main, 0.12),
+        }}
+      >
+        <Box
+          sx={{
+            width: 10,
+            height: 10,
+            borderRadius: '50%',
+            bgcolor: 'error.main',
+          }}
+        />
+        <Typography
+          color="error"
+          sx={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em' }}
+        >
+          REC
+        </Typography>
+        <Typography sx={{ fontFamily: monoFont, fontSize: 18 }}>
+          {formatTime(recordingStatus.recordingDuration)}
+        </Typography>
+      </Stack>
+      {filename && (
+        <Stack spacing={0.75} sx={{ minWidth: 200 }}>
+          <Typography sx={{ fontFamily: monoFont, fontSize: 13 }}>
+            {`${filename}.mp4`}
+          </Typography>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <LinearProgress
+              variant="determinate"
+              value={(100 * sliceSecs) / recordingDuration}
+              sx={{ flex: 1, height: 4, borderRadius: 2 }}
+            />
+            <Typography variant="caption" color="text.secondary">
+              {`${sliceSecs} / ${recordingDuration} s slice`}
+            </Typography>
+          </Stack>
+        </Stack>
+      )}
     </Stack>
-  ) : null;
+  );
 };
 
 export default RecordingStatus;

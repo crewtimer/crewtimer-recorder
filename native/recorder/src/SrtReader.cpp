@@ -724,6 +724,7 @@ class SrtReader : public VideoReader
           out->xres = outW;
           out->yres = outH;
           out->timestamp = ts100ns;
+          out->receivedTs100ns = duration_cast<microseconds>(system_clock::now().time_since_epoch()).count() * 10;
           out->frame_rate_N = frameRate.num ? frameRate.num : 60000;
           out->frame_rate_D = frameRate.den ? frameRate.den : 1001;
           if (addFrameFunction)

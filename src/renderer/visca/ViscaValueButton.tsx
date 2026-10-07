@@ -1,19 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
-import {
-  IconButton,
-  Grid,
-  Typography,
-  ToggleButtonGroup,
-  ToggleButton,
-} from '@mui/material';
-import RemoveIcon from '@mui/icons-material/Remove';
-import AddIcon from '@mui/icons-material/Add';
+import { Stack, ToggleButtonGroup, ToggleButton } from '@mui/material';
 import { sendViscaCommand, ViscaCommand } from './ViscaAPI';
 import { setToast } from '../components/Toast';
 import { snooze } from '../util/Util';
+import { StepButton } from './RangeStepper';
 
 interface ViscaValueButtonProps {
-  title: string;
+  /** Used in the step buttons' accessible names, e.g. "Zoom in". */
+  name: string;
   decrement: ViscaCommand;
   increment: ViscaCommand;
   reset: ViscaCommand;
@@ -21,11 +15,12 @@ interface ViscaValueButtonProps {
   autoOn?: ViscaCommand;
   autoOff?: ViscaCommand;
   autoOnce?: ViscaCommand;
-  stepButtonsAfterMode?: boolean;
+  /** Called when a step button is pressed. */
+  onPress?: (direction: 'down' | 'up') => void;
 }
 
 const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
-  title,
+  name,
   decrement,
   increment,
   reset,
@@ -33,7 +28,7 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
   autoOn,
   autoOff,
   autoOnce,
-  stepButtonsAfterMode = false,
+  onPress,
 }) => {
   const [isAuto, setIsAuto] = useState<boolean>(value === true);
   const setTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -66,8 +61,15 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
   };
 
   // Decrement press/release handlers
+  // The camera stays in autofocus through a step, and autofocus would undo it.
+  const leaveAuto = () => {
+    if (isAuto) handleCommand(autoOff);
+    setIsAuto(false);
+  };
+
   const handleDecrementPress = () => {
-    setIsAuto(false); // Turn off auto
+    leaveAuto();
+    onPress?.('down');
 
     // Send a quick decrement and then stop
     const sendDecrement = async () => {
@@ -92,7 +94,8 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
 
   // Increment press/release handlers
   const handleIncrementPress = () => {
-    setIsAuto(false);
+    leaveAuto();
+    onPress?.('up');
 
     // Send a quick increment and then stop
     const sendIncrement = async () => {
@@ -140,94 +143,40 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
     }
   };
 
-  const stepButtons = (
-    <>
-      <Grid item>
-        <IconButton
-          onMouseDown={handleDecrementPress}
-          onMouseUp={handleDecrementRelease}
-          onTouchStart={handleDecrementPress}
-          onTouchEnd={handleDecrementRelease}
-          size="small"
-          color="primary"
-          sx={{
-            padding: '4px',
-            border: '1px solid rgba(0,0,0,0.23)',
-            '&:active': { backgroundColor: 'rgba(0, 0, 0, 0.20)' },
-          }}
-        >
-          <RemoveIcon fontSize="small" />
-        </IconButton>
-      </Grid>
-      <Grid item>
-        <IconButton
-          onMouseDown={handleIncrementPress}
-          onMouseUp={handleIncrementRelease}
-          onTouchStart={handleIncrementPress}
-          onTouchEnd={handleIncrementRelease}
-          size="small"
-          color="primary"
-          sx={{
-            padding: '4px',
-            border: '1px solid rgba(0,0,0,0.23)',
-            '&:active': { backgroundColor: 'rgba(0, 0, 0, 0.20)' },
-          }}
-        >
-          <AddIcon fontSize="small" />
-        </IconButton>
-      </Grid>
-    </>
-  );
-
-  const modeButtons = autoOn ? (
-    <Grid item>
-      <ToggleButtonGroup
-        exclusive
-        value={isAuto ? 'auto' : 'man'}
-        onChange={handleToggleMode}
-        size="small"
-        sx={{
-          '& .MuiToggleButton-root': {
-            padding: '2px 6px',
-            minWidth: 0,
-            borderRadius: '4px',
-          },
-        }}
-      >
-        <ToggleButton color="primary" value="auto">
-          Auto
-        </ToggleButton>
-        <ToggleButton color="primary" value="man">
-          Man
-        </ToggleButton>
-        <ToggleButton color="primary" value="once">
-          Once
-        </ToggleButton>
-      </ToggleButtonGroup>
-    </Grid>
-  ) : null;
-
   return (
-    <Grid
-      container
-      direction="row"
-      wrap="nowrap"
-      alignItems="center"
-      justifyContent="flex-start"
-      columnGap={1}
-      sx={{ width: 'fit-content', margin: 0 }}
-    >
-      {title && (
-        <Grid item sx={{ width: '50px' }}>
-          <Typography variant="subtitle2" noWrap>
-            {title}
-          </Typography>
-        </Grid>
+    <Stack direction="row" alignItems="center" spacing={0.75}>
+      {autoOn && (
+        <ToggleButtonGroup
+          exclusive
+          value={isAuto ? 'auto' : 'man'}
+          onChange={handleToggleMode}
+          size="small"
+          color="primary"
+          aria-label={`${name} mode`}
+          sx={{ height: 36, mr: 0.5 }}
+        >
+          <ToggleButton value="auto">Auto</ToggleButton>
+          <ToggleButton value="man">Manual</ToggleButton>
+          <ToggleButton value="once">Once</ToggleButton>
+        </ToggleButtonGroup>
       )}
-      {stepButtonsAfterMode && modeButtons}
-      {stepButtons}
-      {!stepButtonsAfterMode && modeButtons}
-    </Grid>
+      <StepButton
+        direction="down"
+        aria-label={`${name} out`}
+        onMouseDown={handleDecrementPress}
+        onMouseUp={handleDecrementRelease}
+        onTouchStart={handleDecrementPress}
+        onTouchEnd={handleDecrementRelease}
+      />
+      <StepButton
+        direction="up"
+        aria-label={`${name} in`}
+        onMouseDown={handleIncrementPress}
+        onMouseUp={handleIncrementRelease}
+        onTouchStart={handleIncrementPress}
+        onTouchEnd={handleIncrementRelease}
+      />
+    </Stack>
   );
 };
 

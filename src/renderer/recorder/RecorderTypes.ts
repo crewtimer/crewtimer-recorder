@@ -84,8 +84,14 @@ export interface RecordingStatus extends HandlerResponse {
     width: number;
     height: number;
     fps: number;
+    /** Measured from camera timestamps; 0 until the first ~1 s window (or with an older native module). */
+    measuredFps: number;
+    /** Camera timestamp minus PC arrival time, least-delayed frame per ~1 s; valid when measuredFps > 0. */
+    clockOffsetMs: number;
     frameBacklog: number;
     lastTsMilli: number;
+    /** Camera time at which the current file ends; 0 before the first file. */
+    sliceEndMilli: number;
   };
 }
 
@@ -101,8 +107,11 @@ export const DefaultRecordingStatus: RecordingStatus = {
     width: 0,
     height: 0,
     fps: 0,
+    measuredFps: 0,
+    clockOffsetMs: 0,
     frameBacklog: 0,
     lastTsMilli: 0,
+    sliceEndMilli: 0,
   },
 };
 

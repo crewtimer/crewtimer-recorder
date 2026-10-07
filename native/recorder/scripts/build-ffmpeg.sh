@@ -1,9 +1,11 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Set the base build directory
 BASE_BUILD_DIR="$PWD/lib-build"
-if [[ "$OSTYPE" == "cygwin" ]]; then
+if [[ "$OSTYPE" == "cygwin" || "$OSTYPE" == "msys" ]]; then
   BASE_BUILD_DIR=`cygpath -m "${BASE_BUILD_DIR}"`
   echo BASE_BUILD_DIR=${BASE_BUILD_DIR}
 fi
@@ -21,6 +23,16 @@ elif [[ "$OSTYPE" == "cygwin" || "$OSTYPE" == "msys" || "$OSTYPE" == "win32" || 
   PLATFORM_FLAGS="--toolchain=msvc"
 else
   PLATFORM="linux"
+fi
+
+if [[ "$OSTYPE" == "msys" ]]; then
+  # FFmpeg's configure finds libsrt with pkg-config; under Git Bash it needs a native
+  # pkg-config.exe (Strawberry Perl's pkg-config script is not accepted).
+  PKG_CONFIG_EXE=$(command -v pkg-config.exe || true)
+  if [ -z "$PKG_CONFIG_EXE" ]; then
+    echo "ERROR: pkg-config.exe not found on PATH. See README.md (Windows Toolchain)."
+    exit 1
+  fi
 fi
 
 # Variables
@@ -110,10 +122,12 @@ for ARCH in $ARCH_FLAGS; do
         -DCMAKE_BUILD_TYPE=Release
       )
       if [[ "$PLATFORM" == "win" ]]; then
+        # SRT's CMake ignores CMAKE_MSVC_RUNTIME_LIBRARY (pre-CMP0091 project), so force the
+        # static runtime via flags. Dash form: Git Bash would rewrite /MT into a path.
         cmake_args+=(
           -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded
-          -DCMAKE_C_FLAGS_RELEASE="/MT"
-          -DCMAKE_CXX_FLAGS_RELEASE="/MT"
+          -DCMAKE_C_FLAGS_RELEASE="-MT -O2 -Ob2 -DNDEBUG"
+          -DCMAKE_CXX_FLAGS_RELEASE="-MT -O2 -Ob2 -DNDEBUG"
         )
       fi
       # allow platform-specific flags
@@ -129,6 +143,10 @@ for ARCH in $ARCH_FLAGS; do
       echo "SRT Built. Installing SRT for $ARCH..."
       cmake --install . --config Release
       echo "SRT Installed for $ARCH."
+      if [[ "$PLATFORM" == "win" ]]; then
+        # srt.pc says -lsrt, but MSVC builds srt_static.lib (the name binding.gyp links)
+        cp -f "${INSTALL_DIR}-${ARCH}/lib/srt_static.lib" "${INSTALL_DIR}-${ARCH}/lib/srt.lib"
+      fi
       popd > /dev/null
     fi
 
@@ -142,6 +160,18 @@ for ARCH in $ARCH_FLAGS; do
 
     EXTRA_CFLAGS="-I${INSTALL_DIR}-${ARCH}/include"
     EXTRA_LDFLAGS="-L${INSTALL_DIR}-${ARCH}/lib"
+    if [[ "$OSTYPE" == "msys" ]]; then
+      # --extra-ldflags is passed to link.exe untranslated, so use its own option
+      EXTRA_LDFLAGS="-libpath:${INSTALL_DIR}-${ARCH}/lib"
+      CONFIGURE_OPTIONS=(
+        --pkg-config="$PKG_CONFIG_EXE"
+        --pkg-config-flags=--static
+        --disable-programs
+      )
+      # Stop Git Bash from rewriting MSVC-style arguments as paths. Only for FFmpeg:
+      # these break CMake (used for SRT above).
+      export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+    fi
 
     echo "Configuring FFMPEG for static linking and $ARCH..."
     ./configure --prefix=${INSTALL_DIR}-${ARCH} \
@@ -159,7 +189,21 @@ for ARCH in $ARCH_FLAGS; do
     # Compile and install FFMPEG
     echo "Building FFMPEG..."
     echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
-    make -j4
+    if [[ "$OSTYPE" == "msys" ]]; then
+      # Git Bash mangles a backslash in FFmpeg's inline dependency awk. Windows paths:
+      # MSYS_NO_PATHCONV stops the automatic conversion node would otherwise get.
+      node "$(cygpath -w "$SCRIPT_DIR/patch-config-mak.js")" "$(cygpath -w "$PWD")"
+      # make's lib.exe archive step fails under Git Bash (argument truncation:
+      # "LNK1181: cannot open input file 'libavforma'"); run those commands directly.
+      make -j4 || echo "make failed; retrying the archive step with lib.exe directly"
+      LIBS="libavformat/libavformat.a libavcodec/libavcodec.a libavutil/libavutil.a libswscale/libswscale.a"
+      rm -f $LIBS
+      make -n $LIBS 2>&1 | sed -nE 's/.*;[[:space:]]*(lib\.exe[[:space:]].*)/\1/p' > ar-cmds.sh
+      bash ar-cmds.sh
+      rm ar-cmds.sh
+    else
+      make -j4
+    fi
 
     echo "Installing FFMPEG..."
     make install

@@ -1,5 +1,7 @@
 #include "FrameProcessor.hpp"
+#include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -51,6 +53,8 @@ FrameProcessor::FrameProcessor(const std::string directory,
   statusInfo.width = 0;
   statusInfo.height = 0;
   statusInfo.fps = 0;
+  statusInfo.measuredFps = 0;
+  statusInfo.clockOffsetMs = 0;
   statusInfo.frameBacklog = 0;
   statusInfo.lastTsMilli = 0;
   tzOffset = getTimezoneOffset();
@@ -207,6 +211,13 @@ void FrameProcessor::processFrames()
   lastFPS = 0;
   frameCount = 0;
   int64_t keyFrameInterval = videoRecorder->getKeyFrameInterval();
+  // Actual frame rate from the camera timestamps of processed frames, over ~1 s windows
+  constexpr uint64_t rateWindow100ns = 10000000;
+  uint64_t rateWindowStart = 0;
+  uint32_t rateWindowFrames = 0;
+  // Delay only lowers (camera time - arrival time), so the window's largest value is
+  // the least-delayed frame: the best estimate of the camera clock offset.
+  int64_t windowBestOffset100ns = INT64_MIN;
 
   while (running)
   {
@@ -235,9 +246,12 @@ void FrameProcessor::processFrames()
         }
         frameCount = 0;
         count = 0;
+        rateWindowStart = 0;
         {
           std::lock_guard<std::mutex> s(statusMutex);
           statusInfo.filename.clear();
+          statusInfo.measuredFps = 0;
+          statusInfo.clockOffsetMs = 0;
         }
         lock.lock();
         continue;
@@ -278,9 +292,47 @@ void FrameProcessor::processFrames()
       lastRotation = video_frame->rotation;
       lastFPS = fps;
 
+      float measuredFps = -1;
+      int64_t clockOffset100ns = INT64_MIN;
+      if (video_frame->receivedTs100ns)
+      {
+        windowBestOffset100ns = std::max(
+            windowBestOffset100ns,
+            int64_t(video_frame->timestamp) - int64_t(video_frame->receivedTs100ns));
+      }
+      // A timestamp going backwards (camera clock reset) restarts the window
+      if (rateWindowStart == 0 || video_frame->timestamp < rateWindowStart)
+      {
+        rateWindowStart = video_frame->timestamp;
+        rateWindowFrames = 0;
+        windowBestOffset100ns = INT64_MIN;
+      }
+      else
+      {
+        rateWindowFrames++;
+        const uint64_t span = video_frame->timestamp - rateWindowStart;
+        if (span >= rateWindow100ns)
+        {
+          measuredFps = float(rateWindowFrames * 1e7 / double(span));
+          clockOffset100ns = windowBestOffset100ns;
+          rateWindowStart = video_frame->timestamp;
+          rateWindowFrames = 0;
+          windowBestOffset100ns = INT64_MIN;
+        }
+      }
+
       {
         std::lock_guard<std::mutex> s(statusMutex);
         statusInfo.lastTsMilli = video_frame->timestamp / 10000;
+        statusInfo.sliceEndMilli = nextStartTime / 10000;
+        if (measuredFps >= 0)
+        {
+          statusInfo.measuredFps = measuredFps;
+          if (clockOffset100ns != INT64_MIN)
+          {
+            statusInfo.clockOffsetMs = float(clockOffset100ns / 1e4);
+          }
+        }
       }
 
       // The video review app may have trouble reading the last video frame when there is not a multiple of gop_size frames
@@ -306,15 +358,11 @@ void FrameProcessor::processFrames()
         const auto ts100ns = video_frame->timestamp;
         startTs = ts100ns;
         const uint64_t sliceDuration100ns = durationSecs * 10000000;
-        if (splitRequested)
+        if (splitRequested || count == 1)
         {
-          // A requested split starts a full slice from the new file's first frame.
+          // Starting a recording (or after the source reconnects) and a requested split both
+          // start a full slice from the new file's first frame.
           nextStartTime = ts100ns + sliceDuration100ns;
-        }
-        else if (count == 1)
-        {
-          const uint64_t completePeriods = ts100ns / sliceDuration100ns;
-          nextStartTime = (1 + completePeriods) * sliceDuration100ns;
         }
         else if (ts100ns >= nextStartTime)
         {

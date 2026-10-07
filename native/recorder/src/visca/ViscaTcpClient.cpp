@@ -460,9 +460,29 @@ private:
     connected_ = false;
   }
 
+  // Replies carry no request id, so a late or extra reply left on the socket would be read as
+  // the answer to the next request and shift every answer after it by one.
+  void drainStaleReplies()
+  {
+    setBlockingMode(sock_, false);
+    uint8_t temp[256];
+#ifdef _WIN32
+    while (::recv(sock_, reinterpret_cast<char *>(temp), sizeof(temp), 0) > 0)
+#else
+    while (::recv(sock_, temp, sizeof(temp), 0) > 0)
+#endif
+    {
+    }
+    setBlockingMode(sock_, true);
+  }
+
   ViscaResult sendAndReceive(const std::vector<uint8_t> &cmd)
   {
     ViscaResult result;
+    // An inquiry is answered with data (y0 50 ... FF), a command with a bare completion
+    // (y0 5z FF); either can instead get an error (y0 6z ... FF).
+    const bool inquiry = cmd.size() > 1 && cmd[1] == 0x09;
+    drainStaleReplies();
 
     // Send command
 #ifdef _WIN32
@@ -557,18 +577,19 @@ private:
         std::vector<uint8_t> msg(readBuf.begin(), it + 1);
         readBuf.erase(readBuf.begin(), it + 1);
 
-        // If second byte in [0x50..0x7F], treat as final completion/error
-        if (msg.size() >= 2)
+        if (msg.size() >= 3)
         {
-          uint8_t statusByte = msg[1];
-          if (statusByte >= 0x50 && statusByte <= 0x7F)
+          const uint8_t kind = msg[1] & 0xF0;
+          const bool error = kind == 0x60;
+          const bool answer = kind == 0x50 && (inquiry ? msg.size() > 3 : msg.size() == 3);
+          if (error || answer)
           {
             result.response = msg;
             result.status = ViscaResult::Status::OK;
             return result;
           }
         }
-        // else ignore (likely ACK)
+        // else ignore: an ACK, or a reply that belongs to an earlier request
       }
     }
 

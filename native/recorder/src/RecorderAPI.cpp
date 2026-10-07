@@ -457,8 +457,13 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
               "height", Napi::Number::New(env, status.frameProcessor.height));
           frameProcessor.Set("fps",
                              Napi::Number::New(env, status.frameProcessor.fps));
+          frameProcessor.Set("measuredFps",
+                             Napi::Number::New(env, status.frameProcessor.measuredFps));
+          frameProcessor.Set("clockOffsetMs",
+                             Napi::Number::New(env, status.frameProcessor.clockOffsetMs));
           frameProcessor.Set("frameBacklog", Napi::Number::New(env, status.frameProcessor.frameBacklog));
           frameProcessor.Set("lastTsMilli", Napi::Number::New(env, status.frameProcessor.lastTsMilli));
+          frameProcessor.Set("sliceEndMilli", Napi::Number::New(env, status.frameProcessor.sliceEndMilli));
         }
       }
       else

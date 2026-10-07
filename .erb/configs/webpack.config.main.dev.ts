@@ -23,6 +23,9 @@ const configuration: webpack.Configuration = {
 
   target: 'electron-main',
 
+  // Load externals (the native recorder) in import order, not hoisted above main.ts imports
+  externalsType: 'commonjs',
+
   entry: {
     main: path.join(webpackPaths.srcMainPath, 'main.ts'),
     preload: path.join(webpackPaths.srcMainPath, 'preload.ts'),

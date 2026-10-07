@@ -1,6 +1,13 @@
 import React, { ReactNode, useState } from 'react';
-import { IconButton, Popover, Typography, Box } from '@mui/material';
-import InfoIcon from '@mui/icons-material/Info';
+import {
+  IconButton,
+  Popover,
+  Typography,
+  Box,
+  SxProps,
+  Theme,
+} from '@mui/material';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 
 /**
  * InfoPopupProps interface for defining the props accepted by the InfoPopup component.
@@ -14,6 +21,8 @@ interface InfoPopupProps {
    * Optional React node to be displayed inside the popover instead of text.
    */
   body?: ReactNode;
+  /** Optional styling for the icon button, e.g. to match surrounding overlay icons. */
+  sx?: SxProps<Theme>;
 }
 
 /**
@@ -25,7 +34,7 @@ interface InfoPopupProps {
  * @param {InfoPopupProps} props - The props for the InfoPopup component.
  * @returns {JSX.Element} The rendered InfoPopup component.
  */
-const InfoPopup: React.FC<InfoPopupProps> = ({ text, body }) => {
+const InfoPopup: React.FC<InfoPopupProps> = ({ text, body, sx }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
   /**
@@ -49,8 +58,13 @@ const InfoPopup: React.FC<InfoPopupProps> = ({ text, body }) => {
 
   return (
     <div>
-      <IconButton onClick={handleClick} aria-describedby={id}>
-        <InfoIcon />
+      <IconButton
+        onClick={handleClick}
+        aria-describedby={id}
+        aria-label="Help"
+        sx={sx}
+      >
+        <HelpOutlineIcon />
       </IconButton>
       <Popover
         id={id}

@@ -56,8 +56,9 @@ export const shutterLabels = [
 
 export type ViscaCommand =
   | { type: 'AUTO_FOCUS'; value: boolean }
-  | { type: 'FOCUS_IN' }
-  | { type: 'FOCUS_OUT' }
+  | { type: 'FOCUS_FAR' }
+  | { type: 'FOCUS_NEAR' }
+  | { type: 'FOCUS_DRIVE'; near: boolean; speed: number }
   | { type: 'FOCUS_ONCE' }
   | { type: 'FOCUS_RESET' }
   | { type: 'ZOOM_IN' }
@@ -105,9 +106,18 @@ function buildViscaPacket(cmd: ViscaCommand): Uint8Array {
         ? new Uint8Array([0x81, 0x01, 0x04, 0x38, 0x02, 0xff]) // AF on
         : new Uint8Array([0x81, 0x01, 0x04, 0x38, 0x03, 0xff]); // AF off
 
-    case 'FOCUS_IN':
+    case 'FOCUS_FAR':
       return new Uint8Array([0x81, 0x01, 0x04, 0x08, 0x22, 0xff]);
-    case 'FOCUS_OUT':
+    case 'FOCUS_DRIVE':
+      return new Uint8Array([
+        0x81,
+        0x01,
+        0x04,
+        0x08,
+        (cmd.near ? 0x30 : 0x20) | cmd.speed,
+        0xff,
+      ]);
+    case 'FOCUS_NEAR':
       return new Uint8Array([0x81, 0x01, 0x04, 0x08, 0x32, 0xff]);
     case 'FOCUS_RESET':
       return new Uint8Array([0x81, 0x01, 0x04, 0x08, 0x00, 0xff]);
@@ -289,6 +299,65 @@ const extractViscaValue = (
     default:
       return defaultValue;
   }
+};
+
+/** Reads the zoom or focus position, throwing if the camera doesn't answer with one. */
+export const getLensPosition = async (
+  axis: 'zoom' | 'focus',
+): Promise<number> => {
+  const reply = await sendViscaCommand({
+    type: axis === 'zoom' ? 'ZOOM_VALUE' : 'FOCUS_VALUE',
+  });
+  if (reply.data?.[1] !== 0x50) {
+    throw new Error(
+      `No ${axis} position from camera (${reply.msg ?? reply.status})`,
+    );
+  }
+  return extractViscaValue(reply, 4, 0);
+};
+
+/** Waits for the position to stop changing: at the commanded target or at the end of travel. */
+export const settleLens = async (axis: 'zoom' | 'focus') => {
+  // A full zoom or focus run at the default speed takes about a minute.
+  const deadline = Date.now() + 120000;
+  let last = -1;
+  for (;;) {
+    await snooze(500);
+    const pos = await getLensPosition(axis);
+    if (pos === last) return pos;
+    if (Date.now() > deadline) throw new Error(`${axis} never stopped moving`);
+    last = pos;
+  }
+};
+
+/**
+ * Drives focus to a position and returns where it ends up: at the position, or short of it
+ * where the lens stops (the limit at this zoom). Continuous moves are used because the X30
+ * refuses direct focus positions at some zooms, reporting completion without moving.
+ */
+export const driveFocus = async (target: number): Promise<number> => {
+  let pos = await getLensPosition('focus');
+  const near = target > pos;
+  const remaining = () => (near ? target - pos : pos - target);
+  // Top speed, then the button speed for the last stretch so the stop lands close.
+  let speed = remaining() > 300 ? 7 : 2;
+  await sendViscaCommand({ type: 'FOCUS_DRIVE', near, speed });
+  let still = 0;
+  try {
+    while (remaining() > 0 && still < 3) {
+      await snooze(100);
+      const next = await getLensPosition('focus');
+      still = next === pos ? still + 1 : 0;
+      pos = next;
+      if (speed === 7 && remaining() <= 300) {
+        speed = 2;
+        await sendViscaCommand({ type: 'FOCUS_DRIVE', near, speed });
+      }
+    }
+  } finally {
+    await sendViscaCommand({ type: 'FOCUS_RESET' });
+  }
+  return getLensPosition('focus');
 };
 
 export const getCameraState = async (): Promise<CameraState> => {

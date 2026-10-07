@@ -1,6 +1,6 @@
 import React from 'react';
-import { Tooltip, Button } from '@mui/material';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import { Button, Typography } from '@mui/material';
+import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import StopIcon from '@mui/icons-material/Stop';
 import {
   getCameraTimeSample,
@@ -18,10 +18,7 @@ import {
   showCameraFallbackDialog,
 } from '../recorder/CameraFallbackDialog';
 
-interface StartButtonProps {
-  hideStopButton?: boolean;
-}
-export const StartButton: React.FC<StartButtonProps> = ({ hideStopButton }) => {
+export const StartButton: React.FC = () => {
   const [isRecording] = useIsRecording();
 
   const [recordingProps] = useRecordingProps();
@@ -33,76 +30,61 @@ export const StartButton: React.FC<StartButtonProps> = ({ hideStopButton }) => {
   const handleToggleRecording = () => {
     if (isRecording) {
       stopRecording().catch(showErrorDialog);
-    } else {
-      const record = () => {
-        startRecording().catch(showErrorDialog);
-      };
-      const checkCameraTime = () => {
-        const sample = getCameraTimeSample();
-        const currentRecordingProps = getRecordingProps();
-        if (
-          sample?.camera === currentRecordingProps.networkCamera &&
-          sample?.protocol === currentRecordingProps.protocol &&
-          hasCameraTimeMismatch(sample.cameraTime, sample.systemTime)
-        ) {
-          showCameraTimeDialog(record);
-        } else {
-          record();
-        }
-      };
-      const camera = cameraList.find(
-        (c) => c.name === recordingProps.networkCamera,
-      );
-      if (camera?.address === CAMERA_FALLBACK_IP) {
-        showCameraFallbackDialog(checkCameraTime);
+      return;
+    }
+    const record = () => {
+      startRecording().catch(showErrorDialog);
+    };
+    const checkCameraTime = () => {
+      const sample = getCameraTimeSample();
+      const currentRecordingProps = getRecordingProps();
+      if (
+        sample?.camera === currentRecordingProps.networkCamera &&
+        sample?.protocol === currentRecordingProps.protocol &&
+        hasCameraTimeMismatch(sample.cameraTime, sample.systemTime)
+      ) {
+        showCameraTimeDialog(record);
       } else {
-        checkCameraTime();
+        record();
       }
+    };
+    const camera = cameraList.find(
+      (c) => c.name === recordingProps.networkCamera,
+    );
+    if (camera?.address === CAMERA_FALLBACK_IP) {
+      showCameraFallbackDialog(checkCameraTime);
+    } else {
+      checkCameraTime();
     }
   };
 
-  const canToggleRecording = camFound;
+  const blockedReason =
+    !isRecording && !camFound
+      ? `Can't start: ${recordingProps.networkCamera ? 'camera not found' : 'no camera selected'}`
+      : '';
 
-  return !isRecording || !hideStopButton ? (
-    <Tooltip title={isRecording ? 'Stop Recording' : 'Start Recording'}>
-      {/* span provides child when button disabled */}
-      <span
-        role="button"
-        tabIndex={canToggleRecording ? 0 : -1}
-        onClick={canToggleRecording ? handleToggleRecording : undefined}
-        onKeyDown={(event) => {
-          if (
-            canToggleRecording &&
-            (event.key === 'Enter' || event.key === ' ')
-          ) {
-            event.preventDefault();
-            handleToggleRecording();
-          }
-        }}
-        style={{
-          display: 'inline-flex',
-          cursor: canToggleRecording ? 'pointer' : 'default',
-        }}
-      >
-        <Button
-          variant="contained"
-          disabled={!canToggleRecording}
-          tabIndex={-1}
-          startIcon={isRecording ? <StopIcon /> : <PlayArrowIcon />}
-          sx={{
-            backgroundColor: isRecording ? 'red' : 'green',
-            pointerEvents: 'none',
-            '&:hover': {
-              backgroundColor: isRecording ? 'darkred' : 'darkgreen',
-            },
-          }}
+  return (
+    <>
+      {blockedReason && (
+        <Typography
+          id="start-blocked-reason"
+          color="warning.main"
+          sx={{ fontSize: 13, whiteSpace: 'nowrap' }}
         >
-          {isRecording ? 'Stop' : 'Start'}
-        </Button>
-      </span>
-    </Tooltip>
-  ) : (
-    // eslint-disable-next-line react/jsx-no-useless-fragment
-    <></>
+          {blockedReason}
+        </Typography>
+      )}
+      <Button
+        variant="contained"
+        color={isRecording ? 'error' : 'success'}
+        disabled={!!blockedReason}
+        aria-describedby={blockedReason ? 'start-blocked-reason' : undefined}
+        onClick={handleToggleRecording}
+        startIcon={isRecording ? <StopIcon /> : <FiberManualRecordIcon />}
+        sx={{ height: 44, px: 2.5, whiteSpace: 'nowrap', flexShrink: 0 }}
+      >
+        {isRecording ? 'Stop recording' : 'Start recording'}
+      </Button>
+    </>
   );
 };

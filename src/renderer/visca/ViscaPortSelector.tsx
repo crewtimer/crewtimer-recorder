@@ -46,11 +46,11 @@ export const ViscaPortSelector: React.FC = () => {
   };
 
   return (
-    <FormControl size="small" margin="normal">
+    <FormControl size="small">
       <div style={{ display: 'flex', alignItems: 'center', minWidth: '9em' }}>
         <Tooltip title="Select Visca control port to control camera exposure, zoom, and focus. Click the menu button for common presets.">
           <TextField
-            label="Visca Port"
+            label="VISCA port"
             type="number"
             value={viscaPort}
             onChange={handleChangePort}
@@ -58,7 +58,11 @@ export const ViscaPortSelector: React.FC = () => {
             sx={{ width: '8rem' }} // Make the text field narrower
           />
         </Tooltip>
-        <IconButton onClick={handleOpenMenu} style={{ marginLeft: 8 }}>
+        <IconButton
+          aria-label="Common VISCA ports"
+          onClick={handleOpenMenu}
+          style={{ marginLeft: 4 }}
+        >
           <MoreVertIcon />
         </IconButton>
       </div>

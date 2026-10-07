@@ -41,6 +41,8 @@ import {
 import { GrabFrameResponse, Rect } from '../recorder/RecorderTypes';
 import { showErrorDialog } from './ErrorDialog';
 import CanvasIcon from './CanvasIcon';
+import InfoPopup from './InfoPopup';
+import RecorderTips from '../recorder/RecorderTips';
 import useRetriggerableOneShot from './RetriggerableOneshot';
 import { hasCameraTimeMismatch } from '../recorder/CameraTime';
 import { showCameraTimeDialog } from '../recorder/CameraTimeDialog';
@@ -49,8 +51,6 @@ import {
   useCameraState,
   useViscaState,
 } from '../visca/ViscaState';
-
-const VIDEO_STOPPED_MESSAGE = 'Recording stopped. Press START to resume.';
 
 type ExpAvgResult = {
   expAvg: number;
@@ -943,15 +943,14 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     return () => clearInterval(timer);
   }, []);
 
-  let alertMessage = VIDEO_STOPPED_MESSAGE;
+  // Recording state is shown in the header; only flag problems over the video
+  let alertMessage = '';
   if (isRecording) {
     if (timeoutMessage) {
       alertMessage = timeoutMessage;
     } else if (recordingPropsPending) {
       alertMessage =
         'Recording props have changes. Stop and Start recording to apply.';
-    } else {
-      alertMessage = '';
     }
   }
 
@@ -1248,6 +1247,13 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     timeMismatch,
   ]);
 
+  // The help button is a real element (it anchors a popover), placed in the next free
+  // slot of the canvas-drawn icon column (see the drawSvgIcon calls above)
+  const helpSlot = showExposureWarning ? 4 : 3;
+  const helpIconX =
+    videoScaling.drawableRect.x + videoScaling.drawableRect.width - 34;
+  const helpIconY = 10 * (helpSlot + 1) + 24 * helpSlot;
+
   return (
     <Box
       sx={{
@@ -1330,6 +1336,24 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
             </IconButton>
           </Tooltip>
         )}
+        <Box
+          onMouseDown={(event) => event.stopPropagation()}
+          onDoubleClick={(event) => event.stopPropagation()}
+          sx={{ position: 'absolute', left: helpIconX, top: helpIconY }}
+        >
+          <InfoPopup
+            body={<RecorderTips />}
+            sx={{
+              p: 0,
+              width: 24,
+              height: 24,
+              borderRadius: 0,
+              color: 'white',
+              bgcolor: 'rgba(50, 50, 50, 0.7)',
+              '&:hover': { bgcolor: 'rgba(50, 50, 50, 0.9)' },
+            }}
+          />
+        </Box>
       </Box>
     </Box>
   );

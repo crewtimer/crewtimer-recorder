@@ -1,5 +1,5 @@
 import React from 'react';
-import { MenuItem, TextField } from '@mui/material';
+import { MenuItem, Select, SelectChangeEvent } from '@mui/material';
 import {
   useGuide,
   useRecordingProps,
@@ -11,7 +11,7 @@ const RotationSelector: React.FC = () => {
   const [, setGuide] = useGuide();
   const [, setRecordingPropsPending] = useRecordingPropsPending();
 
-  const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (event: SelectChangeEvent<number>) => {
     setRecordingPropsPending(true);
     setRecordingProps({
       ...recordingProps,
@@ -22,20 +22,18 @@ const RotationSelector: React.FC = () => {
   };
 
   return (
-    <TextField
-      select
-      margin="dense"
-      label="Rotation"
+    <Select
       size="small"
       value={recordingProps.rotation || 0}
       onChange={handleChange}
-      sx={{ minWidth: 100 }}
+      inputProps={{ 'aria-label': 'Rotation' }}
+      sx={{ height: 36, minWidth: 100 }}
     >
       <MenuItem value={0}>0°</MenuItem>
       <MenuItem value={-90}>-90°</MenuItem>
       <MenuItem value={-180}>-180°</MenuItem>
       <MenuItem value={90}>+90°</MenuItem>
-    </TextField>
+    </Select>
   );
 };
 

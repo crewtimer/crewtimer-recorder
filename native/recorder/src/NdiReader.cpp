@@ -4,6 +4,8 @@
 #include <algorithm> // For std::min and std::max
 #include <atomic>
 #include <chrono>
+#include <cstdint>
+#include <cstdlib>
 #include <cstring> // For memcpy, strerror
 #include <iomanip>
 #include <iostream>
@@ -22,6 +24,99 @@
 #endif // _WIN32
 
 using namespace std::chrono;
+
+static int64_t systemNow100ns()
+{
+  return duration_cast<microseconds>(system_clock::now().time_since_epoch()).count() * 10;
+}
+
+/**
+ * Detects a clock being stepped (e.g. by NTP) from (camera timestamp - PC arrival time).
+ * Network delay only lowers that value, so the largest value per 1 s window is the
+ * least-delayed frame. A shift of more than 15 ms that then holds steady for 3 windows
+ * is reported as a step; slower drift just moves the baseline.
+ */
+class ClockStepDetector
+{
+  static constexpr int64_t window100ns = 10000000;       // 1 s
+  static constexpr int64_t stepThreshold100ns = 150000;   // 15 ms
+  static constexpr int64_t settleTolerance100ns = 50000;  // 5 ms
+  static constexpr int confirmWindows = 3;
+
+  int64_t windowStart = 0;
+  int64_t windowBest = INT64_MIN;
+  bool haveBaseline = false;
+  int64_t baseline = 0;
+  int64_t baselinePc = 0;
+  int64_t candidate = 0;
+  int64_t candidatePc = 0;
+  int candidateCount = 0;
+
+  // The PC's wall clock minus its monotonic clock only changes when the PC clock is stepped
+  static int64_t pcWallMinusMonotonic100ns()
+  {
+    return systemNow100ns() - duration_cast<microseconds>(steady_clock::now().time_since_epoch()).count() * 10;
+  }
+
+  static std::string formatMs(int64_t value100ns)
+  {
+    std::ostringstream os;
+    os << (value100ns >= 0 ? "+" : "") << value100ns / 10000 << " ms";
+    return os.str();
+  }
+
+public:
+  /** Returns a warning when a step has just been confirmed, otherwise an empty string. */
+  std::string addFrame(int64_t cameraTs100ns, int64_t arrival100ns)
+  {
+    if (windowStart == 0)
+    {
+      windowStart = arrival100ns;
+    }
+    windowBest = std::max(windowBest, cameraTs100ns - arrival100ns);
+    if (arrival100ns - windowStart < window100ns)
+    {
+      return "";
+    }
+    const int64_t best = windowBest;
+    const int64_t pc = pcWallMinusMonotonic100ns();
+    windowStart = arrival100ns;
+    windowBest = INT64_MIN;
+
+    if (!haveBaseline || std::llabs(best - baseline) < stepThreshold100ns)
+    {
+      haveBaseline = true;
+      baseline = best;
+      baselinePc = pc;
+      candidateCount = 0;
+      return "";
+    }
+    if (candidateCount == 0 || std::llabs(best - candidate) > settleTolerance100ns)
+    {
+      candidate = best;
+      candidatePc = pc;
+      candidateCount = 1;
+      return "";
+    }
+    if (++candidateCount < confirmWindows)
+    {
+      return "";
+    }
+
+    // A PC clock step moves (camera - PC) the opposite way to the PC's own wall clock
+    const int64_t pcStep = candidatePc - baselinePc;
+    const bool pcStepped = std::llabs(pcStep) >= stepThreshold100ns / 2;
+    std::ostringstream message;
+    message << "Warning: " << (pcStepped ? "PC" : "Camera") << " clock stepped "
+            << formatMs(pcStepped ? pcStep : candidate - baseline)
+            << " (camera vs PC offset " << formatMs(baseline) << " -> "
+            << formatMs(candidate) << ")";
+    baseline = candidate;
+    baselinePc = candidatePc;
+    candidateCount = 0;
+    return message.str();
+  }
+};
 
 class NdiReader : public VideoReader
 {
@@ -211,7 +306,9 @@ class NdiReader : public VideoReader
   void run()
   {
     int64_t lastTS = 0;
+    int64_t lastArrival100ns = 0;
     int64_t frameCount = 0;
+    ClockStepDetector clockSteps;
     connect();
     while (keepRunning)
     {
@@ -237,6 +334,7 @@ class NdiReader : public VideoReader
       case NDIlib_frame_type_none:
         SystemEventQueue::push("NDI", "Disconnected: " + srcName);
         ndiRecv = nullptr;
+        clockSteps = ClockStepDetector();
         break;
 
         // Video data
@@ -280,6 +378,8 @@ class NdiReader : public VideoReader
             // Ignore the first two seconds as there are often missing or badly timestamped frames
             break;
           }
+          const int64_t now100ns = systemNow100ns();
+          const int64_t arrivalDeltaMs = (now100ns - lastArrival100ns) / 10000;
           if (deltaMs == 0 || (lastTS != 0 && deltaMs >= 2 * msPerFrame))
           {
             std::stringstream timestring;
@@ -295,7 +395,12 @@ class NdiReader : public VideoReader
             else
             {
               int framesMissing = std::round(double(deltaMs) / msPerFrame - 1);
-              message << "Gap=" << deltaMs << "ms (" << framesMissing << "frames missing) prior to " << timestring.str();
+              message << "Gap=" << deltaMs << "ms (" << framesMissing << " frames missing) prior to " << timestring.str();
+              if (lastArrival100ns != 0 && arrivalDeltaMs < deltaMs / 2)
+              {
+                message << " - frames arrived " << arrivalDeltaMs
+                        << "ms apart: likely a clock step, not lost frames";
+              }
             }
             std::cerr << message.str() << std::endl;
 
@@ -306,12 +411,21 @@ class NdiReader : public VideoReader
             }
           }
 
+          const auto step = clockSteps.addFrame(video_frame.timestamp, now100ns);
+          if (!step.empty())
+          {
+            std::cerr << step << std::endl;
+            SystemEventQueue::push("NDI", step);
+          }
+
           lastTS = video_frame.timestamp;
+          lastArrival100ns = now100ns;
           auto txframe = std::make_shared<NdiFrame>(ndiRecv, video_frame);
           txframe->xres = video_frame.xres & ~1; // force even
           txframe->yres = video_frame.yres & ~1;
           txframe->stride = video_frame.line_stride_in_bytes;
           txframe->timestamp = video_frame.timestamp;
+          txframe->receivedTs100ns = now100ns;
           txframe->data = video_frame.p_data;
           txframe->frame_rate_N = video_frame.frame_rate_N;
           txframe->frame_rate_D = video_frame.frame_rate_D;
