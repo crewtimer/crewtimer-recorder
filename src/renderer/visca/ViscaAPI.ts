@@ -88,7 +88,8 @@ export type ViscaCommand =
   | { type: 'IRIS_VALUE' }
   | { type: 'SHUTTER_VALUE' }
   | { type: 'GAIN_VALUE' }
-  | { type: 'BRIGHTNESS_VALUE' };
+  | { type: 'BRIGHTNESS_VALUE' }
+  | { type: 'VERSION_VALUE' };
 
 export interface ViscaMessageProps {
   data: ViscaCommand;
@@ -243,6 +244,8 @@ function buildViscaPacket(cmd: ViscaCommand): Uint8Array {
       return new Uint8Array([0x81, 0x09, 0x04, 0x4c, 0xff]);
     case 'BRIGHTNESS_VALUE':
       return new Uint8Array([0x81, 0x09, 0x04, 0x4d, 0xff]);
+    case 'VERSION_VALUE':
+      return new Uint8Array([0x81, 0x09, 0x00, 0x02, 0xff]);
 
     default:
       throw new Error(

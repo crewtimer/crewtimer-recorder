@@ -27,6 +27,9 @@ import {
 } from './ViscaAPI';
 import { setToast } from '../components/Toast';
 import {
+  getCameraModel,
+  setCameraModel,
+  setCameraPresets,
   getLensRange,
   setLensRange,
   useLensRange,
@@ -352,6 +355,22 @@ const ViscaControlPanel: React.FC = () => {
   useEffect(() => {
     const fetchCameraState = async () => {
       try {
+        const version = await sendViscaCommand({ type: 'VERSION_VALUE' });
+        if (version.data?.[1] === 0x50) {
+          const model = Array.from(version.data.slice(2, 6), (b) =>
+            b.toString(16).padStart(2, '0'),
+          ).join('');
+          const stored = getCameraModel();
+          if (model !== stored) {
+            // Lens data learned before models were stored is assumed to be from this camera.
+            if (stored !== undefined) {
+              setLensRange(undefined);
+              setFocusReach({});
+              setCameraPresets([]);
+            }
+            setCameraModel(model);
+          }
+        }
         const result = await getCameraState();
         if (result) {
           console.log(JSON.stringify(result));

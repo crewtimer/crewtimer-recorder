@@ -31,6 +31,11 @@ export const [useViscaPort, , getViscaPort] = UseStoredDatum(
 );
 export const [useViscaState, setViscaState, getViscastate] = UseDatum('Idle');
 
+/** Vendor and model ID from the VISCA version inquiry; the learned lens data belongs to this model. */
+export const [, setCameraModel, getCameraModel] = UseStoredDatum<
+  string | undefined
+>('cameraModel', undefined);
+
 export interface LensRange {
   zoom: { min: number; max: number };
   focus: { min: number; max: number };
