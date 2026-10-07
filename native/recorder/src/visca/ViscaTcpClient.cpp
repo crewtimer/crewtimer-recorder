@@ -75,7 +75,7 @@ public:
 
   void start(const std::string &ip, uint16_t port) override
   {
-    // No lock here: stop() joins the worker, which may need queueMutex_ to finish.
+    // Never hold queueMutex_ while joining: the worker needs it to exit.
     if (workerThread_.joinable())
     {
       // If already running with the same config, do nothing
@@ -85,8 +85,8 @@ public:
       }
       // Otherwise stop old thread before starting new
       stop();
-      exitFlag_ = false;
     }
+    exitFlag_ = false;
     ipAddress_ = ip;
     port_ = port;
     workerThread_ = std::thread(&ViscaTcpClientImpl::runThread, this);
@@ -148,6 +148,7 @@ private:
         if (!attemptConnection())
         {
           // Flush the queue with NotConnected status
+          logState("Disconnected");
           flushQueue();
 
           // Wait a bit before retry
@@ -311,13 +312,13 @@ private:
     // Set timeouts
     setSendTimeout(sock_, sendTimeoutSec_);
 #ifdef _WIN32
-    DWORD rcvTimeoutMs = 2000;
+    DWORD rcvTimeoutMs = 100;
     setsockopt(sock_, SOL_SOCKET, SO_RCVTIMEO,
                (const char *)&rcvTimeoutMs, sizeof(rcvTimeoutMs));
 #else
     struct timeval tv;
-    tv.tv_sec = 2;
-    tv.tv_usec = 0;
+    tv.tv_sec = 0;
+    tv.tv_usec = 100000;
     setsockopt(sock_, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 #endif
 
@@ -325,75 +326,68 @@ private:
     return true;
   }
 
-  bool waitForConnect(int sockFd, int seconds)
-  {
 #ifdef _WIN32
-    fd_set writeSet, errorSet;
-    FD_ZERO(&writeSet);
-    FD_ZERO(&errorSet);
-    FD_SET(sockFd, &writeSet);
-    FD_SET(sockFd, &errorSet);
-
-    TIMEVAL timeout;
-    timeout.tv_sec = seconds;
-    timeout.tv_usec = 0;
-
-    int selRet = select(0, nullptr, &writeSet, &errorSet, &timeout);
-    if (selRet < 0)
-    {
-      int err = WSAGetLastError();
-      logStatus("[ViscaTcpClient] select() error: " + std::to_string(err));
-      return false;
-    }
-    if (selRet == 0)
-    {
-      // timed out
-      return false;
-    }
-    if (FD_ISSET(sockFd, &errorSet))
-    {
-      int soErr = 0;
-      int len = sizeof(soErr);
-      getsockopt(sockFd, SOL_SOCKET, SO_ERROR, (char *)&soErr, &len);
-      logStatus("[ViscaTcpClient] connect() error: " + std::to_string(soErr));
-      return false;
-    }
-    return true;
+  using SocketHandle = SOCKET;
 #else
-    fd_set writeSet, errorSet;
-    FD_ZERO(&writeSet);
-    FD_ZERO(&errorSet);
-    FD_SET(sockFd, &writeSet);
-    FD_SET(sockFd, &errorSet);
-
-    struct timeval timeout;
-    timeout.tv_sec = seconds;
-    timeout.tv_usec = 0;
-
-    int selRet = select(sockFd + 1, nullptr, &writeSet, &errorSet, &timeout);
-    if (selRet < 0)
-    {
-      logStatus(std::string("[ViscaTcpClient] select() error: ") + std::strerror(errno));
-      return false;
-    }
-    if (selRet == 0)
-    {
-      // timed out
-      return false;
-    }
-    if (FD_ISSET(sockFd, &errorSet))
-    {
-      int soErr = 0;
-      socklen_t soLen = sizeof(soErr);
-      getsockopt(sockFd, SOL_SOCKET, SO_ERROR, &soErr, &soLen);
-      logStatus("[ViscaTcpClient] connect() error: " + std::to_string(soErr));
-      return false;
-    }
-    return true;
+  using SocketHandle = int;
 #endif
+
+  bool waitForConnect(SocketHandle sockFd, int seconds)
+  {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(seconds);
+    while (!exitFlag_ && std::chrono::steady_clock::now() < deadline)
+    {
+      fd_set writeSet, errorSet;
+      FD_ZERO(&writeSet);
+      FD_ZERO(&errorSet);
+      FD_SET(sockFd, &writeSet);
+      FD_SET(sockFd, &errorSet);
+      timeval timeout;
+      timeout.tv_sec = 0;
+      timeout.tv_usec = 100000;
+#ifdef _WIN32
+      const int ready = select(0, nullptr, &writeSet, &errorSet, &timeout);
+#else
+      const int ready = select(sockFd + 1, nullptr, &writeSet, &errorSet, &timeout);
+#endif
+      if (ready < 0)
+      {
+#ifdef _WIN32
+        logStatus("[ViscaTcpClient] select() error: " + std::to_string(WSAGetLastError()));
+#else
+        logStatus(std::string("[ViscaTcpClient] select() error: ") + std::strerror(errno));
+#endif
+        return false;
+      }
+      if (ready == 0)
+        continue;
+      // Writability also signals a refused connection; always check SO_ERROR.
+      int error = 0;
+#ifdef _WIN32
+      int length = sizeof(error);
+      const int result = getsockopt(sockFd, SOL_SOCKET, SO_ERROR,
+                                    reinterpret_cast<char *>(&error), &length);
+#else
+      socklen_t length = sizeof(error);
+      const int result = getsockopt(sockFd, SOL_SOCKET, SO_ERROR, &error, &length);
+#endif
+      if (result != 0 || error != 0)
+      {
+#ifdef _WIN32
+        const int code = result != 0 ? WSAGetLastError() : error;
+        logStatus("[ViscaTcpClient] connect() error: " + std::to_string(code));
+#else
+        const int code = result != 0 ? errno : error;
+        logStatus(std::string("[ViscaTcpClient] connect() error: ") + std::strerror(code));
+#endif
+        return false;
+      }
+      return !exitFlag_;
+    }
+    return false;
   }
 
-  bool setBlockingMode(int sockFd, bool blocking)
+  bool setBlockingMode(SocketHandle sockFd, bool blocking)
   {
 #ifdef _WIN32
     u_long mode = (blocking ? 0 : 1);
@@ -427,7 +421,7 @@ private:
     return true;
   }
 
-  void setSendTimeout(int sockFd, int seconds)
+  void setSendTimeout(SocketHandle sockFd, int seconds)
   {
 #ifdef _WIN32
     DWORD ms = seconds * 1000;
@@ -443,26 +437,26 @@ private:
 
   void waitForRetry(int seconds)
   {
-    for (int i = 0; i < seconds; i++)
-    {
-      if (exitFlag_)
-      {
-        break;
-      }
-      std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
+    std::unique_lock<std::recursive_mutex> lock(queueMutex_);
+    queueCondVar_.wait_for(lock, std::chrono::seconds(seconds),
+                           [this] { return exitFlag_.load(); });
   }
 
   void closeSocket()
   {
-    if (connected_)
-    {
 #ifdef _WIN32
+    if (sock_ != INVALID_SOCKET)
+    {
       closesocket(sock_);
-#else
-      close(sock_);
-#endif
+      sock_ = INVALID_SOCKET;
     }
+#else
+    if (sock_ >= 0)
+    {
+      close(sock_);
+      sock_ = -1;
+    }
+#endif
     connected_ = false;
   }
 
@@ -519,6 +513,12 @@ private:
 
     while (true)
     {
+      if (exitFlag_)
+      {
+        result.status = ViscaResult::Status::NotConnected;
+        result.message = "VISCA client stopped.";
+        return result;
+      }
       if (std::chrono::steady_clock::now() > deadline)
       {
         result.status = ViscaResult::Status::Timeout;
