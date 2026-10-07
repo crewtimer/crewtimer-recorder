@@ -112,6 +112,7 @@ FramePtr rotateUyvyToI420(const FramePtr &frame, int rotation)
   auto rotated = std::make_shared<Frame>(destinationWidth, destinationHeight,
                                          Frame::YUV420P);
   rotated->timestamp = frame->timestamp;
+  rotated->receivedTs100ns = frame->receivedTs100ns;
   rotated->frame_rate_N = frame->frame_rate_N;
   rotated->frame_rate_D = frame->frame_rate_D;
   rotated->sensorXres = frame->sensorXres ? frame->sensorXres : width;
