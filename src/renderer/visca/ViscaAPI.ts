@@ -58,6 +58,7 @@ export type ViscaCommand =
   | { type: 'AUTO_FOCUS'; value: boolean }
   | { type: 'FOCUS_FAR' }
   | { type: 'FOCUS_NEAR' }
+  | { type: 'FOCUS_DRIVE'; near: boolean; speed: number }
   | { type: 'FOCUS_ONCE' }
   | { type: 'FOCUS_RESET' }
   | { type: 'ZOOM_IN' }
@@ -107,6 +108,15 @@ function buildViscaPacket(cmd: ViscaCommand): Uint8Array {
 
     case 'FOCUS_FAR':
       return new Uint8Array([0x81, 0x01, 0x04, 0x08, 0x22, 0xff]);
+    case 'FOCUS_DRIVE':
+      return new Uint8Array([
+        0x81,
+        0x01,
+        0x04,
+        0x08,
+        (cmd.near ? 0x30 : 0x20) | cmd.speed,
+        0xff,
+      ]);
     case 'FOCUS_NEAR':
       return new Uint8Array([0x81, 0x01, 0x04, 0x08, 0x32, 0xff]);
     case 'FOCUS_RESET':
@@ -321,31 +331,33 @@ export const settleLens = async (axis: 'zoom' | 'focus') => {
 };
 
 /**
- * Sends focus toward a position and returns where it ends up. The X30 ignores a focus position
- * out of reach at the current zoom (it reports completion without moving) instead of going as
- * far as it can, so an ignored target is halved toward the lens until the furthest reachable
- * position is found. A focus move reports completion only once the lens has stopped.
+ * Drives focus to a position and returns where it ends up: at the position, or short of it
+ * where the lens stops (the limit at this zoom). Continuous moves are used because the X30
+ * refuses direct focus positions at some zooms, reporting completion without moving.
  */
-export const approachFocus = async (target: number): Promise<number> => {
-  let reached = await getLensPosition('focus');
-  let goal = target;
-  let ignored: number | undefined;
-  for (;;) {
-    await sendViscaCommand({ type: 'SET_FOCUS', value: goal });
-    const pos = await getLensPosition('focus');
-    if (pos === reached) {
-      ignored = goal;
-    } else if (Math.abs(pos - goal) > 8) {
-      return pos; // Stopped short of the goal: the lens limit.
-    } else if (ignored === undefined) {
-      return pos;
-    } else {
-      reached = pos;
+export const driveFocus = async (target: number): Promise<number> => {
+  let pos = await getLensPosition('focus');
+  const near = target > pos;
+  const remaining = () => (near ? target - pos : pos - target);
+  // Top speed, then the button speed for the last stretch so the stop lands close.
+  let speed = remaining() > 300 ? 7 : 2;
+  await sendViscaCommand({ type: 'FOCUS_DRIVE', near, speed });
+  let still = 0;
+  try {
+    while (remaining() > 0 && still < 3) {
+      await snooze(100);
+      const next = await getLensPosition('focus');
+      still = next === pos ? still + 1 : 0;
+      pos = next;
+      if (speed === 7 && remaining() <= 300) {
+        speed = 2;
+        await sendViscaCommand({ type: 'FOCUS_DRIVE', near, speed });
+      }
     }
-    if (ignored === undefined || Math.abs(ignored - reached) <= 8)
-      return reached;
-    goal = Math.round((reached + ignored) / 2);
+  } finally {
+    await sendViscaCommand({ type: 'FOCUS_RESET' });
   }
+  return getLensPosition('focus');
 };
 
 export const getCameraState = async (): Promise<CameraState> => {

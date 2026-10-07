@@ -61,8 +61,14 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
   };
 
   // Decrement press/release handlers
+  // The camera stays in autofocus through a step, and autofocus would undo it.
+  const leaveAuto = () => {
+    if (isAuto) handleCommand(autoOff);
+    setIsAuto(false);
+  };
+
   const handleDecrementPress = () => {
-    setIsAuto(false); // Turn off auto
+    leaveAuto();
     onPress?.('down');
 
     // Send a quick decrement and then stop
@@ -88,7 +94,7 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
 
   // Increment press/release handlers
   const handleIncrementPress = () => {
-    setIsAuto(false);
+    leaveAuto();
     onPress?.('up');
 
     // Send a quick increment and then stop

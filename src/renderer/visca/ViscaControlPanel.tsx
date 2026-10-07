@@ -18,7 +18,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import {
   sendViscaCommand,
   getCameraState,
-  approachFocus,
+  driveFocus,
   getLensPosition,
   settleLens,
   shutterLabels,
@@ -27,16 +27,17 @@ import {
 } from './ViscaAPI';
 import { setToast } from '../components/Toast';
 import {
-  defaultLensRange,
+  getLensRange,
+  setLensRange,
+  useLensRange,
+  viscaScale,
   ExposureMode,
   FocusReach,
+  LensRange,
   getFocusReach,
-  getLensRange,
   setFocusReach,
-  setLensRange,
   useCameraState,
   useFocusReach,
-  useLensRange,
   useViscaIP,
   useViscaPort,
   useViscaState,
@@ -45,7 +46,6 @@ import {
 import ViscaValueButton from './ViscaValueButton';
 import RangeStepper from './RangeStepper';
 import ViscaPresets from './ViscaPresets';
-import ViscaQualification from './ViscaQualification';
 import { useFocusArea } from '../recorder/RecorderData';
 import RotationSelector from '../recorder/RotationSelector';
 
@@ -287,10 +287,10 @@ const LensSlider: React.FC<{
 
 /** Whether a focus end learned at one zoom applies at another; ends shift across a band. */
 const nearZoom = (zoom: number, learned?: number) => {
-  const range = getLensRange() ?? defaultLensRange;
   return (
     learned !== undefined &&
-    Math.abs(zoom - learned) <= (range.zoom.max - range.zoom.min) * 0.01
+    Math.abs(zoom - learned) <=
+      (viscaScale.zoom.max - viscaScale.zoom.min) * 0.01
   );
 };
 
@@ -299,8 +299,7 @@ const updateReach = (
   zoom: number,
   change: (reach: FocusReach) => FocusReach,
 ) => {
-  const range = getLensRange() ?? defaultLensRange;
-  const band = zoomBand(zoom, range.zoom);
+  const band = zoomBand(zoom, viscaScale.zoom);
   const reach = getFocusReach();
   const current = reach[band] ?? {};
   const next = change(current);
@@ -314,8 +313,12 @@ const ViscaControlPanel: React.FC = () => {
   const [focusAreaProps, setFocusAreaProps] = useFocusArea();
   const [viscaIP] = useViscaIP();
   const [viscaPort] = useViscaPort();
-  const [savedRange] = useLensRange();
-  const lensRange = savedRange ?? defaultLensRange;
+  const [seenRange] = useLensRange();
+  // The range seen so far, or the VISCA scale for an axis that hasn't moved yet.
+  const shown = (axis: keyof LensRange) => {
+    const seen = seenRange?.[axis];
+    return seen && seen.max > seen.min ? seen : viscaScale[axis];
+  };
   const [focusReach] = useFocusReach();
   // The focus position at the last +/- press; unchanged a second later means a limit.
   const focusPress = useRef<{
@@ -323,7 +326,7 @@ const ViscaControlPanel: React.FC = () => {
     from: number;
     at: number;
   }>();
-  const bandReach = focusReach[zoomBand(cameraState.zoom, lensRange.zoom)];
+  const bandReach = focusReach[zoomBand(cameraState.zoom, viscaScale.zoom)];
   // Only an end found at (nearly) this zoom applies; elsewhere in the band it may differ.
   const atZoom = (learned?: number) => nearZoom(cameraState.zoom, learned);
   const focusReachView = bandReach && {
@@ -379,28 +382,33 @@ const ViscaControlPanel: React.FC = () => {
       try {
         const zoom = await getLensPosition('zoom');
         const focus = await getLensPosition('focus');
-        setCameraState((prev) => ({ ...prev, zoom, focus }));
-        // A position past a saved end means the sweep stopped short; widen the range to it.
-        const range = getLensRange();
+        // Autofocus too, so the Auto/Manual toggle shows what the camera is doing.
+        const af = await sendViscaCommand({ type: 'AUTO_FOCUS_VALUE' });
+        setCameraState((prev) => ({
+          ...prev,
+          zoom,
+          focus,
+          ...(af.data?.[1] === 0x50 && { autoFocus: af.data[2] === 2 }),
+        }));
+        const seen = getLensRange();
         if (
-          range &&
-          (zoom < range.zoom.min ||
-            zoom > range.zoom.max ||
-            focus < range.focus.min ||
-            focus > range.focus.max)
+          !seen ||
+          zoom < seen.zoom.min ||
+          zoom > seen.zoom.max ||
+          focus < seen.focus.min ||
+          focus > seen.focus.max
         ) {
           setLensRange({
             zoom: {
-              min: Math.min(range.zoom.min, zoom),
-              max: Math.max(range.zoom.max, zoom),
+              min: Math.min(seen?.zoom.min ?? zoom, zoom),
+              max: Math.max(seen?.zoom.max ?? zoom, zoom),
             },
             focus: {
-              min: Math.min(range.focus.min, focus),
-              max: Math.max(range.focus.max, focus),
+              min: Math.min(seen?.focus.min ?? focus, focus),
+              max: Math.max(seen?.focus.max ?? focus, focus),
             },
           });
         }
-        // Focus seen past a learned limit means that limit came from elsewhere in the band.
         const press = focusPress.current;
         if (press && Date.now() - press.at > 1000) {
           focusPress.current = undefined;
@@ -480,7 +488,7 @@ const ViscaControlPanel: React.FC = () => {
     }
   };
 
-  // A manual focus position is only good for one zoom, so zooming hands focus back to the camera.
+  // A big zoom change (the slider) hands focus back to the camera; a small tweak keeps it.
   const autoFocus = () => {
     setCameraState((prev) => ({ ...prev, autoFocus: true }));
     return sendViscaCommand({ type: 'AUTO_FOCUS', value: true });
@@ -533,7 +541,7 @@ const ViscaControlPanel: React.FC = () => {
               <LensSlider
                 label="Focus position"
                 value={cameraState.focus}
-                range={lensRange.focus}
+                range={shown('focus')}
                 reach={focusReachView}
                 onLimit={(value, end) =>
                   updateReach(cameraState.zoom, (reach) => {
@@ -559,7 +567,7 @@ const ViscaControlPanel: React.FC = () => {
                   // The camera ignores a focus position while autofocus is on.
                   setCameraState((prev) => ({ ...prev, autoFocus: false }));
                   await sendViscaCommand({ type: 'AUTO_FOCUS', value: false });
-                  return approachFocus(value);
+                  return driveFocus(value);
                 }}
               />
             </Group>
@@ -569,12 +577,11 @@ const ViscaControlPanel: React.FC = () => {
                 decrement={{ type: 'ZOOM_OUT' }}
                 increment={{ type: 'ZOOM_IN' }}
                 reset={{ type: 'ZOOM_RESET' }}
-                onPress={autoFocus}
               />
               <LensSlider
                 label="Zoom position"
                 value={cameraState.zoom}
-                range={lensRange.zoom}
+                range={shown('zoom')}
                 onSet={async (value) => {
                   await autoFocus();
                   // A zoom move reports completion at once, so wait for the lens to stop.
@@ -700,11 +707,6 @@ const ViscaControlPanel: React.FC = () => {
             >
               Camera web page
             </Button>
-          </Group>
-        )}
-        {viscaEnabled && (
-          <Group label="Camera Qualification" disabled={disconnected}>
-            <ViscaQualification />
           </Group>
         )}
       </Box>

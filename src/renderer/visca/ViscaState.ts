@@ -31,17 +31,18 @@ export const [useViscaPort, , getViscaPort] = UseStoredDatum(
 );
 export const [useViscaState, setViscaState, getViscastate] = UseDatum('Idle');
 
-/** End-of-travel positions found by sweeping the lens. Focus is measured at max zoom. */
 export interface LensRange {
   zoom: { min: number; max: number };
   focus: { min: number; max: number };
 }
+
+/** The lowest and highest zoom and focus positions seen so far; it widens as the lens is used. */
 export const [useLensRange, setLensRange, getLensRange] = UseStoredDatum<
   LensRange | undefined
 >('lensRange', undefined);
 
-/** Sony VISCA position scales, used until a lens is qualified (zoom includes digital zoom). */
-export const defaultLensRange: LensRange = {
+/** Sony VISCA position scales (zoom includes digital zoom); the X30 uses the zoom scale exactly. */
+export const viscaScale: LensRange = {
   zoom: { min: 0, max: 0x7ac0 },
   focus: { min: 0x1000, max: 0xf000 },
 };
