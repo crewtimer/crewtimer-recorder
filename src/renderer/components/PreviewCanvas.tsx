@@ -12,6 +12,7 @@ import {
   getRecordingProps,
   useFocusArea,
   useFrameGrab,
+  useHorizon,
   useCameraTimeSample,
   useGuide,
   useIsRecording,
@@ -361,6 +362,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
 
   // Focus area vertical position normalized value
   const [focusArea, setFocusArea] = useFocusArea();
+  const [horizon, setHorizon] = useHorizon();
   const [draggingFocusArea, setDraggingFocusArea] = useState<
     Point | undefined
   >();
@@ -378,6 +380,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   const [draggingCorner, setDraggingCorner] = useState<string | null>(null);
   const [isAdjustingCrop, setIsAdjustingCrop] = useState(false);
   const ignoreClick = useRef(false);
+  const horizonClick = useRef<Point>();
   const srcCenter = useRef<Point>({ x: divwidth / 2, y: divheight / 2 });
   const [cropImage, setEditImage] = useState<HTMLImageElement | null>(null);
   const [recordingPropsPending] = useRecordingPropsPending();
@@ -712,14 +715,19 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         ignoreClick.current = true;
         e.stopPropagation();
         setDraggingCorner(corner.name);
-      } else if (e.button === 0 && videoScaling.zoomMode !== ZoomMode.Fit) {
-        e.preventDefault();
-        e.stopPropagation();
-        setDraggingZoom({
-          mouse: { x: offsetX, y: offsetY },
-          destX: videoScaling.destX,
-          destY: videoScaling.destY,
-        });
+      } else if (e.button === 0) {
+        if (horizon.enabled) {
+          horizonClick.current = { x: e.clientX, y: e.clientY };
+        }
+        if (videoScaling.zoomMode !== ZoomMode.Fit) {
+          e.preventDefault();
+          e.stopPropagation();
+          setDraggingZoom({
+            mouse: { x: offsetX, y: offsetY },
+            destX: videoScaling.destX,
+            destY: videoScaling.destY,
+          });
+        }
       }
     }
   };
@@ -888,11 +896,32 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     [clip, setGuide, videoScaling, applyChanges],
   );
 
-  const handleMouseUp = () => {
-    setDraggingCorner(null);
-    setDraggingFocusArea(undefined);
-    setDraggingZoom(undefined);
-  };
+  const handleMouseUp = useCallback(
+    (e: { clientX: number; clientY: number }) => {
+      const click = horizonClick.current;
+      horizonClick.current = undefined;
+      // A press that didn't move places the horizon; one that moved was a pan
+      if (
+        click &&
+        canvasRef.current &&
+        Math.hypot(e.clientX - click.x, e.clientY - click.y) < 4
+      ) {
+        const rect = canvasRef.current.getBoundingClientRect();
+        const { y } = translateDestCanvas2SrcCanvas({
+          x: e.clientX - rect.left,
+          y: e.clientY - rect.top,
+        });
+        setHorizon((prior) => ({
+          ...prior,
+          yPct: Math.min(1, Math.max(0, y / getVideoScaling().srcHeight)),
+        }));
+      }
+      setDraggingCorner(null);
+      setDraggingFocusArea(undefined);
+      setDraggingZoom(undefined);
+    },
+    [setHorizon],
+  );
 
   useEffect(() => {
     if (draggingCorner) {
@@ -907,7 +936,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       };
     }
     return () => {};
-  }, [draggingCorner, handleMouseMove]);
+  }, [draggingCorner, handleMouseMove, handleMouseUp]);
 
   useEffect(() => {
     if (draggingFocusArea) {
@@ -919,7 +948,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       };
     }
     return () => {};
-  }, [draggingFocusArea, handleFocusAreaMouseMove]);
+  }, [draggingFocusArea, handleFocusAreaMouseMove, handleMouseUp]);
 
   useEffect(() => {
     if (draggingZoom) {
@@ -931,7 +960,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       };
     }
     return () => {};
-  }, [draggingZoom, handleZoomMouseMove]);
+  }, [draggingZoom, handleZoomMouseMove, handleMouseUp]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -1073,6 +1102,21 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
             );
             ctx.restore();
           }
+        }
+
+        if (horizon.enabled) {
+          const { y: horizonY } = translateSrcCanvas2DestCanvas({
+            x: 0,
+            y: videoScaling.srcHeight * horizon.yPct,
+          });
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(videoScaling.destX, horizonY);
+          ctx.lineTo(videoScaling.destX + videoScaling.scaledWidth, horizonY);
+          ctx.strokeStyle = 'orange';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.restore();
         }
 
         const x = Math.max(videoScaling.destX, 0) + 8;
@@ -1243,6 +1287,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     iconTooltip,
     videoScaling,
     focusArea,
+    horizon,
     alertMessage,
     timeMismatch,
   ]);

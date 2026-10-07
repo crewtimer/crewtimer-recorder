@@ -28,6 +28,10 @@ const RecorderTips = () => {
           Shift to drag only top or bottom finish position
         </Typography>
       </Box>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <MouseIcon />
+        <Typography>Left click to place the horizon line</Typography>
+      </Box>
     </Box>
   );
 };

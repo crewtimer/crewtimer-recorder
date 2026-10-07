@@ -85,3 +85,9 @@ export const [useFocusArea] = UseStoredDatum<FocusProps>('focusArea', {
   yPct: 0.5,
   sizePct: 0.2,
 });
+
+/** Horizontal reference line on the preview, as a fraction of the frame height. */
+export const [useHorizon] = UseStoredDatum('horizon', {
+  enabled: false,
+  yPct: 0.5,
+});

@@ -49,7 +49,7 @@ import {
 import ViscaValueButton from './ViscaValueButton';
 import RangeStepper from './RangeStepper';
 import ViscaPresets from './ViscaPresets';
-import { useFocusArea } from '../recorder/RecorderData';
+import { useFocusArea, useHorizon } from '../recorder/RecorderData';
 import RotationSelector from '../recorder/RotationSelector';
 
 /** A labelled cluster of controls in the camera control toolbar. */
@@ -314,6 +314,7 @@ const ViscaControlPanel: React.FC = () => {
   const [cameraState, setCameraState] = useCameraState();
   const [viscaState] = useViscaState();
   const [focusAreaProps, setFocusAreaProps] = useFocusArea();
+  const [horizon, setHorizon] = useHorizon();
   const [viscaIP] = useViscaIP();
   const [viscaPort] = useViscaPort();
   const [seenRange] = useLensRange();
@@ -696,25 +697,47 @@ const ViscaControlPanel: React.FC = () => {
           </>
         )}
         <Group label="Preview">
-          <RotationSelector />
-          <Tooltip title="Show a sharpness metric on the preview to help with manual focus">
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={focusAreaProps.enabled}
-                  onChange={() =>
-                    setFocusAreaProps((prior) => ({
-                      ...prior,
-                      enabled: !prior.enabled,
-                    }))
+          <Stack direction="row" alignItems="flex-start" gap={1}>
+            <RotationSelector />
+            <Stack>
+              <Tooltip title="Show a sharpness metric on the preview to help with manual focus">
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={focusAreaProps.enabled}
+                      onChange={() =>
+                        setFocusAreaProps((prior) => ({
+                          ...prior,
+                          enabled: !prior.enabled,
+                        }))
+                      }
+                      size="small"
+                    />
                   }
-                  size="small"
+                  label="Focus assist"
+                  sx={{ m: 0 }}
                 />
-              }
-              label="Focus assist"
-              sx={{ m: 0 }}
-            />
-          </Tooltip>
+              </Tooltip>
+              <Tooltip title="Show an orange horizontal line on the preview to level the camera; left click the preview to move it">
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={horizon.enabled}
+                      onChange={() =>
+                        setHorizon((prior) => ({
+                          ...prior,
+                          enabled: !prior.enabled,
+                        }))
+                      }
+                      size="small"
+                    />
+                  }
+                  label="Show horizon"
+                  sx={{ m: 0 }}
+                />
+              </Tooltip>
+            </Stack>
+          </Stack>
         </Group>
         {viscaEnabled && (
           <Group label="Presets" disabled={disconnected}>
