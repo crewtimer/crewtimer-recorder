@@ -118,7 +118,6 @@ export const useSignalStats = () => {
     offsetAtArrival,
     clockOff,
     gapCount: total(gaps),
-    lastGap: gaps[gaps.length - 1],
     errorCount: total(log.filter((e) => eventLevel(e) === 'Error')),
   };
 };
@@ -129,13 +128,13 @@ export const SignalHealth = ({ connected }: { connected: boolean }) => {
     fps,
     measuredFps,
     fpsOff,
+    width,
+    height,
     frameBacklog,
     backlogTone,
     offset,
     offsetAtArrival,
     clockOff,
-    gapCount,
-    lastGap,
   } = useSignalStats();
 
   if (!connected) {
@@ -149,12 +148,9 @@ export const SignalHealth = ({ connected }: { connected: boolean }) => {
     );
   }
 
-  const warnings = [
-    gapCount > 0,
-    clockOff,
-    fpsOff,
-    backlogTone !== 'success',
-  ].filter(Boolean).length;
+  const warnings = [clockOff, fpsOff, backlogTone !== 'success'].filter(
+    Boolean,
+  ).length;
 
   return (
     <Panel
@@ -196,14 +192,13 @@ export const SignalHealth = ({ connected }: { connected: boolean }) => {
           tone={clockOff ? 'error' : undefined}
         />
         <Metric
-          label="Frame gaps"
-          value={String(gapCount)}
-          note={
-            lastGap
-              ? `last at ${new Date(lastGap.tsMilli).toLocaleTimeString()}`
-              : 'none this session'
+          label="Pixel rate"
+          value={
+            recording && measuredFps
+              ? `${Math.round((width * height * measuredFps) / 1e6)} Mpx/s`
+              : '—'
           }
-          tone={gapCount > 0 ? 'warning' : 'success'}
+          note={recording ? `${width}×${height}` : 'while recording'}
         />
         <Metric
           label="Encoder backlog"

@@ -24,6 +24,7 @@ import {
   useWaypointList,
   useIsRecording,
   getIsRecording,
+  useNerdMode,
 } from './RecorderData';
 import { FullSizeWindow } from '../components/FullSizeWindow';
 import PreviewCanvas from '../components/PreviewCanvas';
@@ -132,6 +133,7 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
   const [cameraList] = useCameraList();
   const [isRecording] = useIsRecording();
   const [viscaIP] = useViscaIP();
+  const [nerdMode] = useNerdMode();
   const [wpList] = useWaypointList();
   const { waypoint } = recordingProps;
   const waypointList = [...wpList];
@@ -281,7 +283,7 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
             gap: 2,
           }}
         >
-          <SignalHealth connected={camFound} />
+          {nerdMode && <SignalHealth connected={camFound} />}
 
           <Panel title="Source" aside={restartNote}>
             <TextField

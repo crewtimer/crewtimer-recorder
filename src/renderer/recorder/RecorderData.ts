@@ -67,6 +67,9 @@ export const [useReportAllGaps, , getReportAllGaps] = UseStoredDatum(
   false,
 );
 
+/** Shows the signal health panel on the Recorder tab. */
+export const [useNerdMode] = UseStoredDatum('nerdMode', false);
+
 export const [useWaypointList, setWaypointList, getWaypointList] = UseDatum<
   string[]
 >([]);

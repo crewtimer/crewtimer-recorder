@@ -10,6 +10,7 @@ import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import SettingsBrightnessIcon from '@mui/icons-material/SettingsBrightness';
+import QueryStatsIcon from '@mui/icons-material/QueryStats';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
 import { Divider, IconButton, ListItemIcon, ListItemText } from '@mui/material';
@@ -17,6 +18,7 @@ import { useSelectedPage } from '../pages/SelectedPage';
 import { setToast } from './Toast';
 import { useViscaIP } from '../visca/ViscaState';
 import {
+  useNerdMode,
   useRecordingPropsPending,
   useReportAllGaps,
 } from '../recorder/RecorderData';
@@ -46,6 +48,7 @@ const HamburgerMenu = () => {
   const [, setRecordingPropsPending] = useRecordingPropsPending();
   const [viscaIP] = useViscaIP();
   const [themeMode, setThemeMode] = useThemeMode();
+  const [nerdMode, setNerdMode] = useNerdMode();
   const [shiftMenu, setShiftMenu] = useState(false);
   const open = Boolean(anchorEl);
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -118,6 +121,17 @@ const HamburgerMenu = () => {
           <ListItemText
             primary={`Theme: ${themeMode[0].toUpperCase()}${themeMode.slice(1)}`}
           />
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            handleClose();
+            setNerdMode(!nerdMode);
+          }}
+        >
+          <ListItemIcon>
+            <QueryStatsIcon />
+          </ListItemIcon>
+          <ListItemText primary={`Nerd mode: ${nerdMode ? 'On' : 'Off'}`} />
         </MenuItem>
         <MenuItem onClick={closeAndGo('/privacy')}>
           <ListItemIcon>
