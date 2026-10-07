@@ -324,6 +324,7 @@ void FrameProcessor::processFrames()
       {
         std::lock_guard<std::mutex> s(statusMutex);
         statusInfo.lastTsMilli = video_frame->timestamp / 10000;
+        statusInfo.sliceEndMilli = nextStartTime / 10000;
         if (measuredFps >= 0)
         {
           statusInfo.measuredFps = measuredFps;
@@ -357,15 +358,11 @@ void FrameProcessor::processFrames()
         const auto ts100ns = video_frame->timestamp;
         startTs = ts100ns;
         const uint64_t sliceDuration100ns = durationSecs * 10000000;
-        if (splitRequested)
+        if (splitRequested || count == 1)
         {
-          // A requested split starts a full slice from the new file's first frame.
+          // Starting a recording (or after the source reconnects) and a requested split both
+          // start a full slice from the new file's first frame.
           nextStartTime = ts100ns + sliceDuration100ns;
-        }
-        else if (count == 1)
-        {
-          const uint64_t completePeriods = ts100ns / sliceDuration100ns;
-          nextStartTime = (1 + completePeriods) * sliceDuration100ns;
         }
         else if (ts100ns >= nextStartTime)
         {

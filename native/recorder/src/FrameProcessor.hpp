@@ -27,6 +27,8 @@ public:
     std::uint32_t width = 0;
     std::uint32_t height = 0;
     std::uint64_t lastTsMilli = 0;
+    // Camera time at which the current file ends and the next slice starts
+    std::uint64_t sliceEndMilli = 0;
     float fps = 60;
     float measuredFps = 0;
     // Camera timestamp minus PC arrival time (least-delayed frame per window); valid when measuredFps > 0
@@ -41,6 +43,7 @@ public:
          << "', width=" << info.width
          << ", height=" << info.height
          << ", lastTsMilli=" << info.lastTsMilli
+         << ", sliceEndMilli=" << info.sliceEndMilli
          << ", fps=" << info.fps
          << ", measuredFps=" << info.measuredFps
          << ", clockOffsetMs=" << info.clockOffsetMs

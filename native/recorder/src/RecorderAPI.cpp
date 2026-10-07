@@ -463,6 +463,7 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
                              Napi::Number::New(env, status.frameProcessor.clockOffsetMs));
           frameProcessor.Set("frameBacklog", Napi::Number::New(env, status.frameProcessor.frameBacklog));
           frameProcessor.Set("lastTsMilli", Napi::Number::New(env, status.frameProcessor.lastTsMilli));
+          frameProcessor.Set("sliceEndMilli", Napi::Number::New(env, status.frameProcessor.sliceEndMilli));
         }
       }
       else

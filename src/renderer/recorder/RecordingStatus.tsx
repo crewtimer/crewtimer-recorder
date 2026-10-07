@@ -73,9 +73,16 @@ const RecordingStatus: React.FC = () => {
     );
   }
 
-  const { filename, lastTsMilli } = recordingStatus.frameProcessor;
-  // Files split on wall-clock multiples of the slice length (see FrameProcessor)
-  const sliceSecs = Math.floor(lastTsMilli / 1000) % recordingDuration;
+  const { filename, lastTsMilli, sliceEndMilli } =
+    recordingStatus.frameProcessor;
+  // Clamped: the slice end can lag the first frame of a new file by a frame.
+  const sliceSecs = Math.min(
+    recordingDuration,
+    Math.max(
+      0,
+      recordingDuration - Math.ceil((sliceEndMilli - lastTsMilli) / 1000),
+    ),
+  );
 
   return (
     <Stack direction="row" alignItems="center" spacing={2}>

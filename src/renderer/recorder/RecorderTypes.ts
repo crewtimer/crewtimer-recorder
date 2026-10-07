@@ -90,6 +90,8 @@ export interface RecordingStatus extends HandlerResponse {
     clockOffsetMs: number;
     frameBacklog: number;
     lastTsMilli: number;
+    /** Camera time at which the current file ends; 0 before the first file. */
+    sliceEndMilli: number;
   };
 }
 
@@ -109,6 +111,7 @@ export const DefaultRecordingStatus: RecordingStatus = {
     clockOffsetMs: 0,
     frameBacklog: 0,
     lastTsMilli: 0,
+    sliceEndMilli: 0,
   },
 };
 
