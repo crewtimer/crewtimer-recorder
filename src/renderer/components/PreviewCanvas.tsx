@@ -574,7 +574,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
             },
           ]
         : []),
-      { text: 'Center finish line', y: iconPadding * 2 + 24 },
+      { text: 'Center timing line', y: iconPadding * 2 + 24 },
       {
         text:
           videoScaling.zoomMode === ZoomMode.Maximize

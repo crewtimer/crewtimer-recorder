@@ -21,11 +21,11 @@ const RecorderTips = () => {
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <VerticalAlignCenterIcon sx={{ transform: 'rotate(90deg)' }} />
-        <Typography>Set finish line to center</Typography>
+        <Typography>Set timing line to center</Typography>
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <Typography>
-          Shift to drag only top or bottom finish position
+          Shift to drag only top or bottom of the timing line
         </Typography>
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

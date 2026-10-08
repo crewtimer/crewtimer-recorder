@@ -719,7 +719,7 @@ const ViscaControlPanel: React.FC = () => {
                   size="small"
                 />
               }
-              label="Show finish line"
+              label="Show timing line"
               sx={{ m: 0 }}
             />
             <Tooltip title="Show a sharpness metric on the preview to help with manual focus">
