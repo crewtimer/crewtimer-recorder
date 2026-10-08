@@ -9,6 +9,7 @@
  * `./src/main.js` using webpack. This gives us some performance wins.
  */
 import './dll-path';
+import os from 'os';
 import path from 'path';
 import { app, BrowserWindow, nativeTheme, screen, shell } from 'electron';
 import electronDebug from 'electron-debug';
@@ -48,6 +49,11 @@ const isDebug =
 
 if (isDebug) {
   electronDebug();
+}
+
+if (process.platform === 'win32') {
+  // The recorder runs in this process; keep capture and encoding ahead of other apps on a busy PC
+  os.setPriority(os.constants.priority.PRIORITY_ABOVE_NORMAL);
 }
 
 // Create a write stream (in append mode)
