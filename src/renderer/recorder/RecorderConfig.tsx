@@ -23,6 +23,7 @@ import {
   useIsRecording,
   getIsRecording,
   useNerdMode,
+  useFrameGrab,
 } from './RecorderData';
 import { FullSizeWindow } from '../components/FullSizeWindow';
 import PreviewCanvas from '../components/PreviewCanvas';
@@ -58,7 +59,9 @@ const NoCamera: React.FC<{
   selectedCamera: string;
   cameras: Camera[];
   onSelect: (name: string) => void;
-}> = ({ selectedCamera, cameras, onSelect }) => {
+  /** The camera is on the network but its video stopped. */
+  noVideo?: boolean;
+}> = ({ selectedCamera, cameras, onSelect, noVideo }) => {
   // Discovery is slow on first launch; avoid flashing the macOS permission hint
   const [hintReady, setHintReady] = useState(false);
   useEffect(() => {
@@ -84,15 +87,19 @@ const NoCamera: React.FC<{
     >
       <VideocamOffOutlinedIcon sx={{ fontSize: 56, color: 'text.secondary' }} />
       <Typography variant="h6" component="h2">
-        {selectedCamera
-          ? `${selectedCamera} isn't on the network`
-          : 'No camera selected'}
+        {noVideo && `No video from ${selectedCamera}`}
+        {!noVideo &&
+          (selectedCamera
+            ? `${selectedCamera} isn't on the network`
+            : 'No camera selected')}
       </Typography>
       <Typography color="text.secondary" sx={{ maxWidth: 540 }}>
         {isMac
           ? 'Check that the camera is powered and on the same network as this Mac, and that Local Network access is allowed for this app.'
           : 'Check that the camera is powered and on the same network as this PC, and that Windows Firewall allows NDI and SRT.'}{' '}
-        Cameras are searched for every 5 seconds.
+        {noVideo
+          ? 'The recorder reconnects automatically when video returns.'
+          : 'Cameras are searched for every 5 seconds.'}
       </Typography>
       <Stack direction="row" gap={1} flexWrap="wrap" justifyContent="center">
         <Button variant="contained" onClick={refreshCameraList}>
@@ -202,6 +209,16 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
   const selectedCamera = recordingProps.networkCamera;
   const camFound = cameraList.some((c) => c.name === selectedCamera);
 
+  // After the stream drops the native side keeps returning its last frame, so a camera
+  // timestamp that stops advancing is what shows the video is gone.
+  const [frame] = useFrameGrab();
+  const [noVideo, setNoVideo] = useState(false);
+  useEffect(() => {
+    setNoVideo(false);
+    const timer = setTimeout(() => setNoVideo(true), 3000);
+    return () => clearTimeout(timer);
+  }, [frame?.tsMilli, selectedCamera, recordingProps.protocol]);
+
   useEffect(() => {
     if (isRecording) {
       return () => {};
@@ -268,6 +285,23 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
               cameras={cameraList}
               onSelect={selectCamera}
             />
+          )}
+          {/* Covers the preview rather than replacing it: the preview is what polls for frames */}
+          {camFound && noVideo && (
+            <Box
+              sx={{
+                position: 'absolute',
+                inset: 0,
+                bgcolor: 'background.default',
+              }}
+            >
+              <NoCamera
+                selectedCamera={selectedCamera}
+                cameras={cameraList}
+                onSelect={selectCamera}
+                noVideo
+              />
+            </Box>
           )}
         </Box>
 

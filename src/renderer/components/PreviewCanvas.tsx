@@ -400,7 +400,6 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     { text: string; y: number } | undefined
   >();
 
-  const [timeoutMessage, setTimeoutMessage] = useState('');
   const [timeWarningPosition, setTimeWarningPosition] = useState<Point>();
   const [cameraTimeSample] = useCameraTimeSample();
   const timeMismatch =
@@ -492,19 +491,6 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     });
     // drawContentDebounced();
   }, [frame.width, frame.height, previewWidth, previewHeight, clip]);
-
-  useEffect(() => {
-    if (!isRecording) {
-      return () => {};
-    }
-    const timeout = setTimeout(() => {
-      setTimeoutMessage('No Data Received!!');
-    }, 3000);
-    return () => {
-      setTimeoutMessage('');
-      clearTimeout(timeout);
-    };
-  }, [frame, isRecording]);
 
   // Check if the point is within a rectangle corner
   const isInCorner = (x: number, y: number) => {
@@ -970,15 +956,10 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   }, []);
 
   // Recording state is shown in the header; only flag problems over the video
-  let alertMessage = '';
-  if (isRecording) {
-    if (timeoutMessage) {
-      alertMessage = timeoutMessage;
-    } else if (recordingPropsPending) {
-      alertMessage =
-        'Recording props have changes. Stop and Start recording to apply.';
-    }
-  }
+  const alertMessage =
+    isRecording && recordingPropsPending
+      ? 'Recording props have changes. Stop and Start recording to apply.'
+      : '';
 
   useEffect(() => {
     if (
