@@ -1058,28 +1058,26 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
           ctx.restore();
           drawBox(ctx, from.x, from.y, 12, 't');
           drawBox(ctx, to.x, to.y, 12, 'b');
-          if (focusArea.enabled) {
-            // Draw focus area box
-            const center = translateSrcCanvas2DestCanvas({
-              x: videoScaling.srcWidth * focusArea.xPct,
-              y: videoScaling.srcHeight * focusArea.yPct,
-            });
-            const focusSize =
-              videoScaling.srcHeight *
-              focusArea.sizePct *
-              videoScaling.pixScale;
+        }
+        if (focusArea.enabled) {
+          // Draw focus area box
+          const center = translateSrcCanvas2DestCanvas({
+            x: videoScaling.srcWidth * focusArea.xPct,
+            y: videoScaling.srcHeight * focusArea.yPct,
+          });
+          const focusSize =
+            videoScaling.srcHeight * focusArea.sizePct * videoScaling.pixScale;
 
-            ctx.save();
-            ctx.strokeStyle = 'yellow';
-            ctx.lineWidth = 2;
-            ctx.strokeRect(
-              center.x - focusSize / 2,
-              center.y - focusSize / 2,
-              focusSize,
-              focusSize,
-            );
-            ctx.restore();
-          }
+          ctx.save();
+          ctx.strokeStyle = 'yellow';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(
+            center.x - focusSize / 2,
+            center.y - focusSize / 2,
+            focusSize,
+            focusSize,
+          );
+          ctx.restore();
         }
 
         if (horizon.enabled) {
