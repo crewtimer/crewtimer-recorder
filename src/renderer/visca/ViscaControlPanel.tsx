@@ -49,7 +49,11 @@ import {
 import ViscaValueButton from './ViscaValueButton';
 import RangeStepper from './RangeStepper';
 import ViscaPresets from './ViscaPresets';
-import { useFocusArea, useHorizon } from '../recorder/RecorderData';
+import {
+  useFocusArea,
+  useHorizon,
+  useRecordingProps,
+} from '../recorder/RecorderData';
 import RotationSelector from '../recorder/RotationSelector';
 
 /** A labelled cluster of controls in the camera control toolbar. */
@@ -315,6 +319,7 @@ const ViscaControlPanel: React.FC = () => {
   const [viscaState] = useViscaState();
   const [focusAreaProps, setFocusAreaProps] = useFocusArea();
   const [horizon, setHorizon] = useHorizon();
+  const [recordingProps, setRecordingProps] = useRecordingProps();
   const [viscaIP] = useViscaIP();
   const [viscaPort] = useViscaPort();
   const [seenRange] = useLensRange();
@@ -521,12 +526,12 @@ const ViscaControlPanel: React.FC = () => {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       {disconnected && (
         <Alert severity="warning">
-          {`Camera control (VISCA) is disconnected from ${viscaIP}:${viscaPort}. Check the camera and the VISCA port on the Recorder tab.`}
+          {`Camera control (VISCA) is disconnected from ${viscaIP}:${viscaPort}. Check the camera and the VISCA port on the Source tab.`}
         </Alert>
       )}
       {!viscaEnabled && (
         <Typography variant="body2" color="text.secondary">
-          Camera control is off. Set a VISCA port on the Recorder tab to control
+          Camera control is off. Set a VISCA port on the Source tab to control
           focus, zoom and exposure.
         </Typography>
       )}
@@ -540,76 +545,6 @@ const ViscaControlPanel: React.FC = () => {
       >
         {viscaEnabled && (
           <>
-            <Group label="Focus" disabled={disconnected}>
-              <ViscaValueButton
-                name="Focus"
-                decrement={{ type: 'FOCUS_FAR' }}
-                increment={{ type: 'FOCUS_NEAR' }}
-                reset={{ type: 'FOCUS_RESET' }}
-                value={cameraState.autoFocus}
-                autoOn={{ type: 'AUTO_FOCUS', value: true }}
-                autoOff={{ type: 'AUTO_FOCUS', value: false }}
-                autoOnce={{ type: 'FOCUS_ONCE' }}
-                onPress={(direction) => {
-                  focusPress.current = {
-                    end: direction === 'up' ? 'high' : 'low',
-                    from: cameraState.focus,
-                    at: Date.now(),
-                  };
-                }}
-              />
-              <LensSlider
-                label="Focus position"
-                value={cameraState.focus}
-                range={shown('focus')}
-                reach={focusReachView}
-                onLimit={(value, end) =>
-                  updateReach(cameraState.zoom, (reach) => {
-                    // A direct move stops short of where continuous moves already got.
-                    const known = reach[end];
-                    const further =
-                      known !== undefined &&
-                      (end === 'high' ? known > value : known < value);
-                    if (
-                      further &&
-                      nearZoom(cameraState.zoom, reach[`${end}Zoom`])
-                    ) {
-                      return reach;
-                    }
-                    return {
-                      ...reach,
-                      [end]: value,
-                      [`${end}Zoom`]: cameraState.zoom,
-                    };
-                  })
-                }
-                onSet={async (value) => {
-                  // The camera ignores a focus position while autofocus is on.
-                  setCameraState((prev) => ({ ...prev, autoFocus: false }));
-                  await sendViscaCommand({ type: 'AUTO_FOCUS', value: false });
-                  return driveFocus(value);
-                }}
-              />
-            </Group>
-            <Group label="Zoom" disabled={disconnected}>
-              <ViscaValueButton
-                name="Zoom"
-                decrement={{ type: 'ZOOM_OUT' }}
-                increment={{ type: 'ZOOM_IN' }}
-                reset={{ type: 'ZOOM_RESET' }}
-              />
-              <LensSlider
-                label="Zoom position"
-                value={cameraState.zoom}
-                range={shown('zoom')}
-                onSet={async (value) => {
-                  await autoFocus();
-                  // A zoom move reports completion at once, so wait for the lens to stop.
-                  await sendViscaCommand({ type: 'SET_ZOOM', value });
-                  return settleLens('zoom');
-                }}
-              />
-            </Group>
             <Group label="Exposure" disabled={disconnected}>
               <Stack spacing={1}>
                 <Select
@@ -694,49 +629,135 @@ const ViscaControlPanel: React.FC = () => {
                 )}
               </Stack>
             </Group>
+            <Group label="Focus" disabled={disconnected}>
+              <ViscaValueButton
+                name="Focus"
+                decrement={{ type: 'FOCUS_FAR' }}
+                increment={{ type: 'FOCUS_NEAR' }}
+                reset={{ type: 'FOCUS_RESET' }}
+                value={cameraState.autoFocus}
+                autoOn={{ type: 'AUTO_FOCUS', value: true }}
+                autoOff={{ type: 'AUTO_FOCUS', value: false }}
+                autoOnce={{ type: 'FOCUS_ONCE' }}
+                onPress={(direction) => {
+                  focusPress.current = {
+                    end: direction === 'up' ? 'high' : 'low',
+                    from: cameraState.focus,
+                    at: Date.now(),
+                  };
+                }}
+              />
+              <LensSlider
+                label="Focus position"
+                value={cameraState.focus}
+                range={shown('focus')}
+                reach={focusReachView}
+                onLimit={(value, end) =>
+                  updateReach(cameraState.zoom, (reach) => {
+                    // A direct move stops short of where continuous moves already got.
+                    const known = reach[end];
+                    const further =
+                      known !== undefined &&
+                      (end === 'high' ? known > value : known < value);
+                    if (
+                      further &&
+                      nearZoom(cameraState.zoom, reach[`${end}Zoom`])
+                    ) {
+                      return reach;
+                    }
+                    return {
+                      ...reach,
+                      [end]: value,
+                      [`${end}Zoom`]: cameraState.zoom,
+                    };
+                  })
+                }
+                onSet={async (value) => {
+                  // The camera ignores a focus position while autofocus is on.
+                  setCameraState((prev) => ({ ...prev, autoFocus: false }));
+                  await sendViscaCommand({ type: 'AUTO_FOCUS', value: false });
+                  return driveFocus(value);
+                }}
+              />
+            </Group>
+            <Group label="Zoom" disabled={disconnected}>
+              <ViscaValueButton
+                name="Zoom"
+                decrement={{ type: 'ZOOM_OUT' }}
+                increment={{ type: 'ZOOM_IN' }}
+                reset={{ type: 'ZOOM_RESET' }}
+              />
+              <LensSlider
+                label="Zoom position"
+                value={cameraState.zoom}
+                range={shown('zoom')}
+                onSet={async (value) => {
+                  await autoFocus();
+                  // A zoom move reports completion at once, so wait for the lens to stop.
+                  await sendViscaCommand({ type: 'SET_ZOOM', value });
+                  return settleLens('zoom');
+                }}
+              />
+            </Group>
           </>
         )}
-        <Group label="Preview">
-          <Stack direction="row" alignItems="flex-start" gap={1}>
-            <RotationSelector />
-            <Stack>
-              <Tooltip title="Show a sharpness metric on the preview to help with manual focus">
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={focusAreaProps.enabled}
-                      onChange={() =>
-                        setFocusAreaProps((prior) => ({
-                          ...prior,
-                          enabled: !prior.enabled,
-                        }))
-                      }
-                      size="small"
-                    />
+        <Group label="Rotation">
+          <RotationSelector />
+        </Group>
+        <Group label="Alignment">
+          <Stack>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={!!recordingProps.showFinishGuide}
+                  onChange={() =>
+                    setRecordingProps({
+                      ...recordingProps,
+                      showFinishGuide: !recordingProps.showFinishGuide,
+                    })
                   }
-                  label="Focus assist"
-                  sx={{ m: 0 }}
+                  size="small"
                 />
-              </Tooltip>
-              <Tooltip title="Show an orange horizontal line on the preview to level the camera; left click the preview to move it">
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={horizon.enabled}
-                      onChange={() =>
-                        setHorizon((prior) => ({
-                          ...prior,
-                          enabled: !prior.enabled,
-                        }))
-                      }
-                      size="small"
-                    />
-                  }
-                  label="Show horizon"
-                  sx={{ m: 0 }}
-                />
-              </Tooltip>
-            </Stack>
+              }
+              label="Show finish line"
+              sx={{ m: 0 }}
+            />
+            <Tooltip title="Show a sharpness metric on the preview to help with manual focus">
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={focusAreaProps.enabled}
+                    onChange={() =>
+                      setFocusAreaProps((prior) => ({
+                        ...prior,
+                        enabled: !prior.enabled,
+                      }))
+                    }
+                    size="small"
+                  />
+                }
+                label="Focus assist"
+                sx={{ m: 0 }}
+              />
+            </Tooltip>
+            <Tooltip title="Show an orange horizontal line on the preview to level the camera; left click the preview to move it">
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={horizon.enabled}
+                    onChange={() =>
+                      setHorizon((prior) => ({
+                        ...prior,
+                        enabled: !prior.enabled,
+                      }))
+                    }
+                    size="small"
+                  />
+                }
+                label="Show horizon"
+                sx={{ m: 0 }}
+              />
+            </Tooltip>
           </Stack>
         </Group>
         {viscaEnabled && (

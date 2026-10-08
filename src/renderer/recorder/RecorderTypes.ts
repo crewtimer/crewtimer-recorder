@@ -16,7 +16,6 @@ export interface RecordingProps {
   networkCamera: string;
   networkIP: string;
   showFinishGuide: boolean;
-  livePreview: boolean;
   cropArea: Rect;
   waypoint: string;
   protocol: string;
@@ -123,7 +122,6 @@ export const DefaultRecordingProps: RecordingProps = {
   networkCamera: '',
   networkIP: '',
   showFinishGuide: true,
-  livePreview: true,
   cropArea: { x: 0, y: 0, width: 1, height: 1 },
   waypoint: '',
   protocol: 'SRT',

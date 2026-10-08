@@ -40,9 +40,9 @@ export function TopBar() {
     versionAsNumber(window.platform.appVersion);
 
   // Help and Privacy are reached from the menu and select no tab
-  const tab = SETTINGS_PAGES.includes(page)
-    ? '/'
-    : (['/video', '/log'].find((p) => p === page) ?? false);
+  let tab: string | false = false;
+  if (['/recording', '/source', '/log'].includes(page)) tab = page;
+  else if (SETTINGS_PAGES.includes(page)) tab = '/';
 
   return (
     <Box
@@ -135,8 +135,9 @@ export function TopBar() {
         onChange={(_, value: string) => setSelectedPage(value)}
         sx={{ px: 1.5 }}
       >
-        <Tab value="/" label="Recorder" />
-        <Tab value="/video" label="Camera control" />
+        <Tab value="/" label="Camera" />
+        <Tab value="/recording" label="Recording" />
+        <Tab value="/source" label="Source" />
         <Tab value="/log" label="Event log" />
       </Tabs>
     </Box>

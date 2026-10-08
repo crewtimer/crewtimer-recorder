@@ -6,8 +6,6 @@ import {
   TextField,
   Typography,
   MenuItem,
-  Checkbox,
-  FormControlLabel,
   Tooltip,
   IconButton,
   Stack,
@@ -31,6 +29,8 @@ import PreviewCanvas from '../components/PreviewCanvas';
 import { showErrorDialog } from '../components/ErrorDialog';
 import { Panel } from '../components/Panel';
 import { SignalHealth } from './SignalHealth';
+import ViscaControlPanel from '../visca/ViscaControlPanel';
+import { useSelectedPage } from '../pages/SelectedPage';
 import { useViscaIP } from '../visca/ViscaState';
 import { refreshCameraList, useCameraList } from './CameraMonitor';
 import { ViscaPortSelector } from '../visca/ViscaPortSelector';
@@ -134,6 +134,7 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
   const [isRecording] = useIsRecording();
   const [viscaIP] = useViscaIP();
   const [nerdMode] = useNerdMode();
+  const [page] = useSelectedPage();
   const [wpList] = useWaypointList();
   const { waypoint } = recordingProps;
   const waypointList = [...wpList];
@@ -206,7 +207,7 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
       return () => {};
     }
 
-    if (recordingProps.livePreview && camFound && selectedCamera) {
+    if (camFound && selectedCamera) {
       startPreview().catch(showErrorDialog);
     } else {
       stopPreview().catch(showErrorDialog);
@@ -219,7 +220,6 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
     };
   }, [
     isRecording,
-    recordingProps.livePreview,
     recordingProps.protocol,
     recordingProps.rotation,
     selectedCamera,
@@ -285,72 +285,76 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
         >
           {nerdMode && <SignalHealth connected={camFound} />}
 
-          <Panel title="Source" aside={restartNote}>
-            <TextField
-              select
-              label="Camera"
-              size="small"
-              value={selectedCamera}
-              onChange={(e) => selectCamera(e.target.value)}
-              error={!camFound && !!selectedCamera}
-              helperText={
-                !camFound && selectedCamera
-                  ? 'Not found on the network. Searching every 5 s.'
-                  : undefined
-              }
-              fullWidth
-            >
-              {cameraList.map((c) => (
-                <MenuItem key={c.name} value={c.name}>
-                  {cameraLabel(c)}
-                </MenuItem>
-              ))}
-              {!camFound && selectedCamera && (
-                <MenuItem value={selectedCamera}>
-                  {`${selectedCamera} — not found`}
-                </MenuItem>
-              )}
-            </TextField>
-            <Stack direction="row" alignItems="flex-end" gap={1.5}>
-              <Box sx={{ flex: 1 }}>
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  component="div"
-                  id="protocol-label"
-                >
-                  Protocol
-                </Typography>
-                <ToggleButtonGroup
-                  exclusive
-                  fullWidth
-                  size="small"
-                  color="primary"
-                  aria-labelledby="protocol-label"
-                  value={recordingProps.protocol}
-                  onChange={(_, value) => selectProtocol(value)}
-                  sx={{ height: 40 }}
-                >
-                  <ToggleButton value="NDI">NDI</ToggleButton>
-                  <ToggleButton value="SRT">SRT</ToggleButton>
-                </ToggleButtonGroup>
-              </Box>
-              <ViscaPortSelector />
-            </Stack>
-            {camFound && (
-              <Button
-                size="small"
-                endIcon={<OpenInNewIcon fontSize="small" />}
-                onClick={() => window.open(`http://${viscaIP}`)}
-                sx={{ alignSelf: 'flex-start' }}
-              >
-                {`Open camera web page (${viscaIP})`}
-              </Button>
-            )}
-          </Panel>
+          {!['/recording', '/source'].includes(page) && <ViscaControlPanel />}
 
-          <Panel title="Recording" aside={restartNote}>
-            <Stack direction="row" spacing={0.75} alignItems="center">
+          {page === '/source' && (
+            <Panel title="Source" aside={restartNote}>
+              <TextField
+                select
+                label="Camera"
+                size="small"
+                value={selectedCamera}
+                onChange={(e) => selectCamera(e.target.value)}
+                error={!camFound && !!selectedCamera}
+                helperText={
+                  !camFound && selectedCamera
+                    ? 'Not found on the network. Searching every 5 s.'
+                    : undefined
+                }
+                fullWidth
+              >
+                {cameraList.map((c) => (
+                  <MenuItem key={c.name} value={c.name}>
+                    {cameraLabel(c)}
+                  </MenuItem>
+                ))}
+                {!camFound && selectedCamera && (
+                  <MenuItem value={selectedCamera}>
+                    {`${selectedCamera} — not found`}
+                  </MenuItem>
+                )}
+              </TextField>
+              <Stack direction="row" alignItems="flex-end" gap={1.5}>
+                <Box sx={{ flex: 1 }}>
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    component="div"
+                    id="protocol-label"
+                  >
+                    Protocol
+                  </Typography>
+                  <ToggleButtonGroup
+                    exclusive
+                    fullWidth
+                    size="small"
+                    color="primary"
+                    aria-labelledby="protocol-label"
+                    value={recordingProps.protocol}
+                    onChange={(_, value) => selectProtocol(value)}
+                    sx={{ height: 40 }}
+                  >
+                    <ToggleButton value="NDI">NDI</ToggleButton>
+                    <ToggleButton value="SRT">SRT</ToggleButton>
+                  </ToggleButtonGroup>
+                </Box>
+                <ViscaPortSelector />
+              </Stack>
+              {camFound && (
+                <Button
+                  size="small"
+                  endIcon={<OpenInNewIcon fontSize="small" />}
+                  onClick={() => window.open(`http://${viscaIP}`)}
+                  sx={{ alignSelf: 'flex-start' }}
+                >
+                  {`Open camera web page (${viscaIP})`}
+                </Button>
+              )}
+            </Panel>
+          )}
+
+          {page === '/recording' && (
+            <Panel title="Recording" aside={restartNote}>
               <TextField
                 label="Folder"
                 size="small"
@@ -359,112 +363,93 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
                 onClick={chooseDir}
                 InputProps={{ readOnly: true }}
               />
-              <Button
-                variant="outlined"
-                onClick={chooseDir}
-                sx={{ flexShrink: 0 }}
-              >
-                Change…
-              </Button>
-              <Tooltip title="Open folder">
-                <IconButton
-                  aria-label="Open recording folder"
-                  onClick={() =>
-                    openFileExplorer(recordingProps.recordingFolder)
-                  }
+              <Stack direction="row" spacing={0.75} alignItems="center">
+                <Button
+                  variant="outlined"
+                  onClick={chooseDir}
+                  sx={{ flexShrink: 0 }}
                 >
-                  <FolderOpenIcon />
-                </IconButton>
-              </Tooltip>
-            </Stack>
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-                gap: 1.5,
-              }}
-            >
-              <TextField
-                size="small"
-                label="File prefix"
-                name="recordingPrefix"
-                value={recordingProps.recordingPrefix}
-                onChange={handleChange}
-              />
-              <TextField
-                size="small"
-                label="Slice length (s)"
-                name="recordingDuration"
-                type="number"
-                value={String(recordingProps.recordingDuration)}
-                onChange={handleChange}
-              />
-              <Tooltip
-                placement="top"
-                title="Higher quality uses more disk space. Applies on next start."
+                  Change…
+                </Button>
+                <Tooltip title="Open folder">
+                  <IconButton
+                    aria-label="Open recording folder"
+                    onClick={() =>
+                      openFileExplorer(recordingProps.recordingFolder)
+                    }
+                  >
+                    <FolderOpenIcon />
+                  </IconButton>
+                </Tooltip>
+              </Stack>
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+                  gap: 1.5,
+                }}
               >
                 <TextField
-                  select
                   size="small"
-                  label="Quality"
-                  name="recordingQuality"
-                  value={recordingProps.recordingQuality ?? 80}
+                  label="File prefix"
+                  name="recordingPrefix"
+                  value={recordingProps.recordingPrefix}
                   onChange={handleChange}
-                >
-                  <MenuItem value={60}>Standard</MenuItem>
-                  <MenuItem value={70}>Medium</MenuItem>
-                  <MenuItem value={80}>High</MenuItem>
-                  <MenuItem value={90}>Very High</MenuItem>
-                </TextField>
-              </Tooltip>
-              <Tooltip
-                placement="top"
-                title="Bind this recorder to a Video Review waypoint"
-              >
+                />
                 <TextField
-                  select
                   size="small"
-                  label="Waypoint"
-                  value={waypoint || 'Any'}
-                  onChange={(e) =>
-                    setRecordingProps({
-                      ...recordingProps,
-                      waypoint: e.target.value === 'Any' ? '' : e.target.value,
-                    })
-                  }
+                  label="Slice length (s)"
+                  name="recordingDuration"
+                  type="number"
+                  value={String(recordingProps.recordingDuration)}
+                  onChange={handleChange}
+                />
+                <Tooltip
+                  placement="top"
+                  title="Higher quality uses more disk space. Applies on next start."
                 >
-                  <MenuItem value="Any">Any</MenuItem>
-                  {waypointList.map((wp) => (
-                    <MenuItem key={wp} value={wp}>
-                      {wp}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Tooltip>
-            </Box>
-            <Stack direction="row" flexWrap="wrap" columnGap={2}>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    name="showFinishGuide"
-                    checked={!!recordingProps.showFinishGuide}
+                  <TextField
+                    select
+                    size="small"
+                    label="Quality"
+                    name="recordingQuality"
+                    value={recordingProps.recordingQuality ?? 80}
                     onChange={handleChange}
-                  />
-                }
-                label="Show finish line"
-              />
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    name="livePreview"
-                    checked={!!recordingProps.livePreview}
-                    onChange={handleChange}
-                  />
-                }
-                label="Live preview"
-              />
-            </Stack>
-          </Panel>
+                  >
+                    <MenuItem value={60}>Standard</MenuItem>
+                    <MenuItem value={70}>Medium</MenuItem>
+                    <MenuItem value={80}>High</MenuItem>
+                    <MenuItem value={90}>Very High</MenuItem>
+                  </TextField>
+                </Tooltip>
+                <Tooltip
+                  placement="top"
+                  title="Bind this recorder to a Video Review waypoint"
+                >
+                  <TextField
+                    select
+                    size="small"
+                    label="Waypoint"
+                    value={waypoint || 'Any'}
+                    onChange={(e) =>
+                      setRecordingProps({
+                        ...recordingProps,
+                        waypoint:
+                          e.target.value === 'Any' ? '' : e.target.value,
+                      })
+                    }
+                  >
+                    <MenuItem value="Any">Any</MenuItem>
+                    {waypointList.map((wp) => (
+                      <MenuItem key={wp} value={wp}>
+                        {wp}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                </Tooltip>
+              </Box>
+            </Panel>
+          )}
         </Box>
       </Box>
     </Box>

@@ -964,10 +964,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
 
   useEffect(() => {
     const timer = setInterval(() => {
-      const currentRecordingProps = getRecordingProps();
-      if (getIsRecording() || currentRecordingProps.livePreview) {
-        requestVideoFrame().catch(showErrorDialog);
-      }
+      requestVideoFrame().catch(showErrorDialog);
     }, 100);
     return () => clearInterval(timer);
   }, []);
