@@ -3,11 +3,9 @@ import path from 'path';
 import webpackPaths from '../configs/webpack.paths';
 
 function deleteJsSourceMaps(dir) {
-  for (const entry of fs.readdirSync(dir)) {
-    if (entry.endsWith('.js.map')) {
-      fs.rmSync(path.join(dir, entry), { force: true });
-    }
-  }
+  fs.readdirSync(dir)
+    .filter((entry) => entry.endsWith('.js.map'))
+    .forEach((entry) => fs.rmSync(path.join(dir, entry), { force: true }));
 }
 
 export default function deleteSourceMaps() {
