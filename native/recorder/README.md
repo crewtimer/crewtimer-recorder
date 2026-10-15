@@ -82,6 +82,22 @@ node_modules/.bin/electron-builder --win --x64 --config.npmRebuild=false
 `yarn build:win` is not used here because its `install:native:win` step downloads the
 prebuild over the local module.
 
+When the Mac and Windows machines share this checkout, the Windows module can be built
+on Windows and packaged from the Mac without going through GitHub:
+
+```bash
+# Windows, in native/recorder: build the prebuild tarball but never upload it
+yarn install --ignore-scripts
+yarn build:win:local   # -> prebuilds/crewtimer_video_recorder-v<version>-napi-v6-win32-x64.tar.gz
+
+# Mac, at the repo root: package Windows using that tarball
+yarn build:win:local
+```
+
+The Mac step uses the tarball in `native/recorder/prebuilds` when one matches the module
+version and otherwise downloads the GitHub prebuild; its log says which (`found local
+prebuild`). Delete the tarball when you want the published prebuild again.
+
 ## Building the prebuilt binary
 
 Set up nvm/node:

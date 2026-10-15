@@ -17,6 +17,7 @@
     "build:mac-arm": "prebuild --prerelease --napi --napi-version 6 --runtime napi --arch arm64 --platform darwin",
     "build:mac": "yarn build:mac-arm",
     "build:win": "prebuild --napi --napi-version 6 --runtime napi --arch=x64 --platform win32",
+    "build:win:local": "prebuild --napi --napi-version 6 --runtime napi --arch=x64 --platform win32 --no-upload --no-upload-all",
     "build:ffmpeg": "bash ./scripts/build-ffmpeg.sh",
     "rebuild:ffmpeg": "find lib-build -name libswscale.a -exec rm {} \\; && yarn build:ffmpeg",
     "clean": "rm -rf node_modules yarn.lock prebuilds build",
