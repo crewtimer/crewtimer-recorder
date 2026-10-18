@@ -60,7 +60,7 @@ const Metric = ({
   </Box>
 );
 
-export const formatOffset = (ms: number) =>
+export const formatLag = (ms: number) =>
   Math.abs(ms) < 10000
     ? `${ms >= 0 ? '+' : ''}${Math.round(ms)} ms`
     : `${ms >= 0 ? '+' : ''}${(ms / 1000).toFixed(1)} s`;
@@ -114,7 +114,9 @@ export const useSignalStats = () => {
     height,
     frameBacklog,
     backlogTone,
-    offset,
+    // PC arrival time minus camera frame time: the network/pipeline delay when
+    // the clocks agree, so it reads as a small positive number.
+    arrivalLag: offset === undefined ? undefined : -offset,
     offsetAtArrival,
     clockOff,
     gapCount: total(gaps),
@@ -132,7 +134,7 @@ export const SignalHealth = ({ connected }: { connected: boolean }) => {
     height,
     frameBacklog,
     backlogTone,
-    offset,
+    arrivalLag,
     offsetAtArrival,
     clockOff,
   } = useSignalStats();
@@ -182,12 +184,12 @@ export const SignalHealth = ({ connected }: { connected: boolean }) => {
           tone={fpsOff ? 'warning' : undefined}
         />
         <Metric
-          label="Camera clock vs PC"
-          value={offset === undefined ? '—' : formatOffset(offset)}
+          label="Arrival lag"
+          value={arrivalLag === undefined ? '—' : formatLag(arrivalLag)}
           note={
             clockOff
               ? 'check camera time'
-              : `${offsetAtArrival ? 'at arrival' : 'preview'}, incl. network delay`
+              : `${offsetAtArrival ? '' : 'preview, '}network delay + clock offset`
           }
           tone={clockOff ? 'error' : undefined}
         />

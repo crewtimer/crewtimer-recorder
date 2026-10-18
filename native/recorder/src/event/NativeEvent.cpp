@@ -1,6 +1,6 @@
 #include <napi.h>
 #include <node.h>
-#include <uv.h>
+#include <mutex>
 #include <iostream>
 #include "NativeEvent.hpp"
 
@@ -98,40 +98,30 @@ Napi::Object ConvertJsonToNapiObject(Napi::Env env, const json &j)
 }
 
 Napi::ThreadSafeFunction tsfn;
+// Guards tsfn itself: messages are sent from many threads while the main thread
+// may be initializing or tearing it down.
+std::mutex tsfnMutex;
 
-// Function to send message to Electron main process
+// Sends a message to the Electron main process. Safe to call from any thread: the
+// ThreadSafeFunction queues the call onto the JS thread. (libuv handles must not be
+// created off the loop thread, which an earlier uv_async-based version did.)
 void sendMessageToRenderer(const std::string &sender,
                            std::shared_ptr<json> content)
 {
+  std::lock_guard<std::mutex> lock(tsfnMutex);
   if (!tsfn)
   {
     return;
   }
-  uv_async_t *async = new uv_async_t;
-  uv_loop_t *loop = uv_default_loop();
-  auto *data =
-      new std::pair<std::string, std::shared_ptr<json>>(sender, content);
-  async->data = data;
-
-  uv_async_init(loop, async, [](uv_async_t *handle)
-                {
-    auto *data = static_cast<std::pair<std::string, std::shared_ptr<json>> *>(
-        handle->data);
-    std::string sender = data->first;
-    std::shared_ptr<json> content = data->second;
-
-    tsfn.BlockingCall(
-        [sender, content](Napi::Env env, Napi::Function jsCallback) {
-          Napi::Object message = Napi::Object::New(env);
-          message.Set("sender", Napi::String::New(env, sender));
-          message.Set("content", ConvertJsonToNapiObject(env, *content));
-          jsCallback.Call({message});
-        });
-    delete data;
-    uv_close(reinterpret_cast<uv_handle_t *>(handle),
-             [](uv_handle_t *handle) { delete handle; }); });
-
-  uv_async_send(async);
+  // The queue is unbounded, so this never blocks; it fails only while closing.
+  tsfn.NonBlockingCall(
+      [sender, content](Napi::Env env, Napi::Function jsCallback)
+      {
+        Napi::Object message = Napi::Object::New(env);
+        message.Set("sender", Napi::String::New(env, sender));
+        message.Set("content", ConvertJsonToNapiObject(env, *content));
+        jsCallback.Call({message});
+      });
 }
 
 // Initialize the ThreadSafeFunction
@@ -139,12 +129,14 @@ Napi::Value initThreadSafeFunction(const Napi::CallbackInfo &info)
 {
   Napi::Env env = info.Env();
   Napi::Function callback = info[0].As<Napi::Function>();
+  std::lock_guard<std::mutex> lock(tsfnMutex);
   tsfn = Napi::ThreadSafeFunction::New(env, callback, "NativeEmitter", 0, 1);
   return env.Undefined();
 }
 
 void deInitThreadSafeFunction()
 {
+  std::lock_guard<std::mutex> lock(tsfnMutex);
   if (tsfn)
   {
     tsfn.Abort(); // or tsfn.Release();

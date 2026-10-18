@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Alert,
   Box,
   Button,
+  CircularProgress,
   TextField,
   Typography,
   MenuItem,
@@ -33,8 +34,13 @@ import { SignalHealth } from './SignalHealth';
 import ViscaControlPanel from '../visca/ViscaControlPanel';
 import { useSelectedPage } from '../pages/SelectedPage';
 import { useViscaIP } from '../visca/ViscaState';
-import { refreshCameraList, useCameraList } from './CameraMonitor';
+import {
+  refreshCameraList,
+  useCameraList,
+  useInitialCameraSearchComplete,
+} from './CameraMonitor';
 import { ViscaPortSelector } from '../visca/ViscaPortSelector';
+import RotationSelector from './RotationSelector';
 import { startPreview, stopPreview, updateSettings } from './RecorderApi';
 import {
   CAMERA_FALLBACK_IP,
@@ -55,6 +61,58 @@ const RecordingError = () => {
   ) : null;
 };
 
+/** Quick-pick buttons for cameras that were found instead of the selected one. */
+const CameraChoices: React.FC<{
+  cameras: Camera[];
+  onSelect: (name: string) => void;
+}> = ({ cameras, onSelect }) => (
+  <>
+    {cameras.slice(0, 4).map((camera) => (
+      <Button
+        key={camera.name}
+        variant="outlined"
+        onClick={() => onSelect(camera.name)}
+      >
+        {`Use ${cameraLabel(camera)}`}
+      </Button>
+    ))}
+  </>
+);
+
+/** Spinner and headline filling the preview area while something is in progress. */
+const BusyMessage: React.FC<{ title: string; children?: React.ReactNode }> = ({
+  title,
+  children,
+}) => (
+  <Box
+    role="status"
+    sx={{
+      height: '100%',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 2,
+      p: 4,
+      textAlign: 'center',
+    }}
+  >
+    <CircularProgress />
+    <Typography variant="h6" component="h2">
+      {title}
+    </Typography>
+    {children}
+  </Box>
+);
+
+/** How long a newly started preview may take to deliver its first frame. */
+const FIRST_FRAME_TIMEOUT_MS = 10000;
+/** A running stream with no new frame for this long has stopped. */
+const FRAME_STALL_TIMEOUT_MS = 3000;
+
+/** Give up waiting on a requested rescan after this long. */
+const RESCAN_TIMEOUT_MS = 10000;
+
 const NoCamera: React.FC<{
   selectedCamera: string;
   cameras: Camera[];
@@ -64,6 +122,30 @@ const NoCamera: React.FC<{
 }> = ({ selectedCamera, cameras, onSelect, noVideo }) => {
   // Discovery is slow on first launch; avoid flashing the macOS permission hint
   const [hintReady, setHintReady] = useState(false);
+  const [searching, setSearching] = useState(false);
+  useEffect(() => {
+    if (!searching) return undefined;
+    // Poll until the native side reports the requested scan has finished.
+    const started = Date.now();
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = () => {
+      timer = setTimeout(async () => {
+        const pending = await refreshCameraList();
+        if (cancelled) return;
+        if (pending && Date.now() - started < RESCAN_TIMEOUT_MS) {
+          poll();
+        } else {
+          setSearching(false);
+        }
+      }, 1000);
+    };
+    poll();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [searching]);
   useEffect(() => {
     const timer = setTimeout(() => setHintReady(true), 6000);
     return () => clearTimeout(timer);
@@ -102,8 +184,15 @@ const NoCamera: React.FC<{
           : 'Cameras are searched for every 5 seconds.'}
       </Typography>
       <Stack direction="row" gap={1} flexWrap="wrap" justifyContent="center">
-        <Button variant="contained" onClick={refreshCameraList}>
-          Search again
+        <Button
+          variant="contained"
+          disabled={searching}
+          onClick={() => {
+            setSearching(true);
+            refreshCameraList(true);
+          }}
+        >
+          {searching ? 'Searching…' : 'Search again'}
         </Button>
         {isMac && hintReady && cameras.length === 0 && (
           <Button
@@ -118,15 +207,7 @@ const NoCamera: React.FC<{
             Open Local Network settings
           </Button>
         )}
-        {cameras.slice(0, 4).map((camera) => (
-          <Button
-            key={camera.name}
-            variant="outlined"
-            onClick={() => onSelect(camera.name)}
-          >
-            {`Use ${cameraLabel(camera)}`}
-          </Button>
-        ))}
+        <CameraChoices cameras={cameras} onSelect={onSelect} />
       </Stack>
     </Box>
   );
@@ -138,6 +219,7 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
   const [recordingProps, setRecordingProps] = useRecordingProps();
   const [, setRecordingPropsPending] = useRecordingPropsPending();
   const [cameraList] = useCameraList();
+  const [initialSearchComplete] = useInitialCameraSearchComplete();
   const [isRecording] = useIsRecording();
   const [viscaIP] = useViscaIP();
   const [nerdMode] = useNerdMode();
@@ -213,11 +295,31 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
   // timestamp that stops advancing is what shows the video is gone.
   const [frame] = useFrameGrab();
   const [noVideo, setNoVideo] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  // The preview restarts whenever one of these changes; give each new connection
+  // longer to deliver its first frame than a running stream gets between frames.
+  const connectionKey = `${camFound}|${selectedCamera}|${recordingProps.protocol}`;
+  const connection = useRef({
+    key: '',
+    startTs: undefined as number | undefined,
+  });
   useEffect(() => {
     setNoVideo(false);
-    const timer = setTimeout(() => setNoVideo(true), 3000);
+    if (!camFound) {
+      setConnecting(false);
+      return undefined;
+    }
+    if (connection.current.key !== connectionKey) {
+      connection.current = { key: connectionKey, startTs: frame?.tsMilli };
+    }
+    const awaitingFirstFrame = frame?.tsMilli === connection.current.startTs;
+    setConnecting(awaitingFirstFrame);
+    const timer = setTimeout(
+      () => setNoVideo(true),
+      awaitingFirstFrame ? FIRST_FRAME_TIMEOUT_MS : FRAME_STALL_TIMEOUT_MS,
+    );
     return () => clearTimeout(timer);
-  }, [frame?.tsMilli, selectedCamera, recordingProps.protocol]);
+  }, [frame?.tsMilli, connectionKey, camFound]);
 
   useEffect(() => {
     if (isRecording) {
@@ -235,13 +337,18 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
         stopPreview().catch(showErrorDialog);
       }
     };
-  }, [
-    isRecording,
-    recordingProps.protocol,
-    recordingProps.rotation,
-    selectedCamera,
-    camFound,
-  ]);
+  }, [isRecording, recordingProps.protocol, selectedCamera, camFound]);
+
+  // Rotation is applied per frame by the native side, so a running preview takes
+  // the new value without reconnecting. While recording it waits for a restart.
+  const lastRotation = useRef(recordingProps.rotation);
+  useEffect(() => {
+    if (lastRotation.current === recordingProps.rotation) return;
+    lastRotation.current = recordingProps.rotation;
+    if (!isRecording && camFound && selectedCamera) {
+      startPreview().catch(showErrorDialog);
+    }
+  }, [recordingProps.rotation, isRecording, camFound, selectedCamera]);
 
   const restartNote = isRecording && (
     <Typography variant="caption" color="text.secondary" noWrap>
@@ -279,6 +386,35 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
         >
           {camFound ? (
             showPreview && <FullSizeWindow component={PreviewCanvas} />
+          ) : !initialSearchComplete ? (
+            <BusyMessage
+              title={
+                selectedCamera
+                  ? `Searching for ${selectedCamera}…`
+                  : 'Searching for cameras…'
+              }
+            >
+              {cameraList.length > 0 && (
+                <>
+                  <Typography color="text.secondary">
+                    {selectedCamera
+                      ? 'Other cameras found so far:'
+                      : 'Cameras found so far:'}
+                  </Typography>
+                  <Stack
+                    direction="row"
+                    gap={1}
+                    flexWrap="wrap"
+                    justifyContent="center"
+                  >
+                    <CameraChoices
+                      cameras={cameraList}
+                      onSelect={selectCamera}
+                    />
+                  </Stack>
+                </>
+              )}
+            </BusyMessage>
           ) : (
             <NoCamera
               selectedCamera={selectedCamera}
@@ -286,7 +422,18 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
               onSelect={selectCamera}
             />
           )}
-          {/* Covers the preview rather than replacing it: the preview is what polls for frames */}
+          {/* These cover the preview rather than replacing it: the preview is what polls for frames */}
+          {camFound && connecting && !noVideo && (
+            <Box
+              sx={{
+                position: 'absolute',
+                inset: 0,
+                bgcolor: 'background.default',
+              }}
+            >
+              <BusyMessage title={`Connecting to ${selectedCamera}…`} />
+            </Box>
+          )}
           {camFound && noVideo && (
             <Box
               sx={{
@@ -329,11 +476,13 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
                 size="small"
                 value={selectedCamera}
                 onChange={(e) => selectCamera(e.target.value)}
-                error={!camFound && !!selectedCamera}
+                error={initialSearchComplete && !camFound && !!selectedCamera}
                 helperText={
-                  !camFound && selectedCamera
-                    ? 'Not found on the network. Searching every 5 s.'
-                    : undefined
+                  !initialSearchComplete
+                    ? 'Searching for cameras…'
+                    : !camFound && selectedCamera
+                      ? 'Not found on the network. Searching every 5 s.'
+                      : undefined
                 }
                 fullWidth
               >
@@ -344,7 +493,7 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
                 ))}
                 {!camFound && selectedCamera && (
                   <MenuItem value={selectedCamera}>
-                    {`${selectedCamera} — not found`}
+                    {`${selectedCamera} — ${initialSearchComplete ? 'not found' : 'searching…'}`}
                   </MenuItem>
                 )}
               </TextField>
@@ -374,6 +523,16 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
                 </Box>
                 <ViscaPortSelector />
               </Stack>
+              <Box>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  component="div"
+                >
+                  Rotation
+                </Typography>
+                <RotationSelector />
+              </Box>
               {camFound && (
                 <Button
                   size="small"

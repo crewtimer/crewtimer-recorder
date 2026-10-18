@@ -55,6 +55,7 @@ import {
   useRecordingProps,
 } from '../recorder/RecorderData';
 import RotationSelector from '../recorder/RotationSelector';
+import { useCameraList } from '../recorder/CameraMonitor';
 
 /** A labelled cluster of controls in the camera control toolbar. */
 const Group: React.FC<{
@@ -322,6 +323,12 @@ const ViscaControlPanel: React.FC = () => {
   const [recordingProps, setRecordingProps] = useRecordingProps();
   const [viscaIP] = useViscaIP();
   const [viscaPort] = useViscaPort();
+  const [cameras] = useCameraList();
+  const selectedCamera = cameras.find(
+    (camera) => camera.name === recordingProps.networkCamera,
+  );
+  // Wait for discovery and for CameraMonitor to synchronize the selected address.
+  const cameraReady = !!selectedCamera && selectedCamera.address === viscaIP;
   const [seenRange] = useLensRange();
   // The range seen so far, or the VISCA scale for an axis that hasn't moved yet.
   const shown = (axis: keyof LensRange) => {
@@ -343,7 +350,7 @@ const ViscaControlPanel: React.FC = () => {
     high: atZoom(bandReach.highZoom) ? bandReach.high : undefined,
   };
   useEffect(() => {
-    if (!viscaIP || viscaPort === 0) {
+    if (!cameraReady || !viscaIP || viscaPort === 0) {
       return;
     }
 
@@ -355,13 +362,15 @@ const ViscaControlPanel: React.FC = () => {
         .catch(() => {});
     };
     monitor();
-  }, [viscaIP, viscaPort]);
+  }, [cameraReady, viscaIP, viscaPort]);
 
   // Query camera state when connected
   useEffect(() => {
+    let cancelled = false;
     const fetchCameraState = async () => {
       try {
         const version = await sendViscaCommand({ type: 'VERSION_VALUE' });
+        if (cancelled) return;
         if (version.data?.[1] === 0x50) {
           const model = Array.from(version.data.slice(2, 6), (b) =>
             b.toString(16).padStart(2, '0'),
@@ -378,11 +387,13 @@ const ViscaControlPanel: React.FC = () => {
           }
         }
         const result = await getCameraState();
+        if (cancelled) return;
         if (result) {
           console.log(JSON.stringify(result));
           setCameraState(result);
         }
       } catch (error) {
+        if (cancelled) return;
         setToast({
           severity: 'error',
           msg: `Error querying camera state: ${error}`,
@@ -390,25 +401,38 @@ const ViscaControlPanel: React.FC = () => {
         console.error('Error querying camera state:', error);
       }
     };
-    if (viscaState === 'Connected') {
+    if (cameraReady && viscaPort !== 0 && viscaState === 'Connected') {
       fetchCameraState();
     }
-  }, [setCameraState, viscaState]);
+    return () => {
+      cancelled = true;
+    };
+  }, [cameraReady, setCameraState, viscaIP, viscaPort, viscaState]);
 
   // Follow zoom and focus as they move, from the buttons, autofocus or a lens sweep. Not gated on
   // 'Connected': the state is only sent on change, so a reloaded window stays 'Idle' on a live link.
   useEffect(() => {
-    if (!viscaIP || viscaPort === 0 || viscaState === 'Disconnected') {
+    if (
+      !cameraReady ||
+      !viscaIP ||
+      viscaPort === 0 ||
+      viscaState === 'Disconnected'
+    ) {
       return undefined;
     }
     let stopped = false;
     // Each read waits for the last one, so slow replies can't pile up in the VISCA queue.
     const poll = async () => {
+      if (stopped) return;
+      let delay = 500;
       try {
         const zoom = await getLensPosition('zoom');
+        if (stopped) return;
         const focus = await getLensPosition('focus');
+        if (stopped) return;
         // Autofocus too, so the Auto/Manual toggle shows what the camera is doing.
         const af = await sendViscaCommand({ type: 'AUTO_FOCUS_VALUE' });
+        if (stopped) return;
         setCameraState((prev) => ({
           ...prev,
           zoom,
@@ -460,15 +484,18 @@ const ViscaControlPanel: React.FC = () => {
           return next;
         });
       } catch (error) {
+        // Usually nothing answers on the VISCA port; back off instead of
+        // hammering the client every half second.
         console.warn(`Lens position poll failed: ${error}`);
+        delay = 5000;
       }
-      if (!stopped) setTimeout(poll, 500);
+      if (!stopped) setTimeout(poll, delay);
     };
     poll();
     return () => {
       stopped = true;
     };
-  }, [setCameraState, viscaIP, viscaPort, viscaState]);
+  }, [cameraReady, setCameraState, viscaIP, viscaPort, viscaState]);
 
   const onExposureModeChange = async (
     event: SelectChangeEvent<ExposureMode>,
@@ -520,7 +547,9 @@ const ViscaControlPanel: React.FC = () => {
   };
 
   const viscaEnabled = viscaPort !== 0;
-  const disconnected = viscaEnabled && viscaState === 'Disconnected';
+  const disconnected =
+    cameraReady && viscaEnabled && viscaState === 'Disconnected';
+  const controlsDisabled = !cameraReady || disconnected;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -545,7 +574,7 @@ const ViscaControlPanel: React.FC = () => {
       >
         {viscaEnabled && (
           <>
-            <Group label="Exposure" disabled={disconnected}>
+            <Group label="Exposure" disabled={controlsDisabled}>
               <Stack spacing={1}>
                 <Select
                   size="small"
@@ -629,7 +658,7 @@ const ViscaControlPanel: React.FC = () => {
                 )}
               </Stack>
             </Group>
-            <Group label="Focus" disabled={disconnected}>
+            <Group label="Focus" disabled={controlsDisabled}>
               <ViscaValueButton
                 name="Focus"
                 decrement={{ type: 'FOCUS_FAR' }}
@@ -680,7 +709,7 @@ const ViscaControlPanel: React.FC = () => {
                 }}
               />
             </Group>
-            <Group label="Zoom" disabled={disconnected}>
+            <Group label="Zoom" disabled={controlsDisabled}>
               <ViscaValueButton
                 name="Zoom"
                 decrement={{ type: 'ZOOM_OUT' }}
@@ -761,7 +790,7 @@ const ViscaControlPanel: React.FC = () => {
           </Stack>
         </Group>
         {viscaEnabled && (
-          <Group label="Presets" disabled={disconnected}>
+          <Group label="Presets" disabled={controlsDisabled}>
             <ViscaPresets />
             <Button
               size="small"

@@ -405,7 +405,15 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
 
       if (videoController)
       {
-        auto cameras = videoController->getCameraList();
+        if (args.Get("rescan").ToBoolean().Value())
+        {
+          videoController->searchCameras();
+        }
+        bool initialScanComplete = false;
+        bool rescanInProgress = false;
+        auto cameras = videoController->getCameraList(initialScanComplete, rescanInProgress);
+        ret.Set("initialScanComplete", Napi::Boolean::New(env, initialScanComplete));
+        ret.Set("rescanInProgress", Napi::Boolean::New(env, rescanInProgress));
 
         Napi::Array arr = Napi::Array::New(env, cameras.size());
         size_t index = 0;

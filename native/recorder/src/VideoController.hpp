@@ -1,5 +1,6 @@
 #pragma once
 #include <chrono>
+#include <condition_variable>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -62,12 +63,23 @@ private:
   std::atomic<int> frameRotation{0};
 
   // mdns
-  std::shared_ptr<ndi_mdns::NdiMdns> mdns;
+  std::condition_variable scanWake;
+  bool scanRequested = false;
+  // True from a searchCameras() request until a scan started after it completes.
+  bool rescanPending = false;
+  bool initialScanComplete = false;
+  int completedScans = 0;
   std::thread mdnsScanThread;
   std::vector<VideoReader::CameraInfo> camList;
   std::mutex scanMutex;
   std::atomic<bool> scanEnabled;
-  std::atomic<bool> scanPaused;
+  std::atomic<bool> scanPaused{false};
+
+  bool isRecording()
+  {
+    std::lock_guard<std::mutex> lock(frameSinkMutex);
+    return frameProcessor != nullptr;
+  }
 
   bool findCamera(const std::string &cameraName, VideoReader::CameraInfo &camera)
   {
@@ -218,9 +230,33 @@ private:
     std::cout << "mDns Scan loop started" << std::endl;
     while (scanEnabled)
     {
-      if (!scanPaused)
+      bool requested;
       {
-        auto ndilist = mdns->discover();
+        std::lock_guard<std::mutex> lock(scanMutex);
+        requested = scanRequested;
+        scanRequested = false;
+      }
+      if (requested && isRecording())
+      {
+        // Never add mDNS traffic while recording; the periodic scan is paused too.
+        std::lock_guard<std::mutex> lock(scanMutex);
+        if (!scanRequested)
+        {
+          rescanPending = false;
+        }
+        requested = false;
+      }
+      if (!scanPaused || requested)
+      {
+        // Reopen sockets on every scan to recover after network/permission changes.
+        // A fresh instance enumerates interfaces itself, so periodic
+        // re-enumeration is not needed.
+        ndi_mdns::DiscoverOptions opt;
+        opt.timeout = std::chrono::seconds(2);
+        opt.debug = false;
+        opt.reenumerate_interval_ms = 0;
+        ndi_mdns::NdiMdns mdns(opt);
+        auto ndilist = mdns.discover();
         std::vector<VideoReader::CameraInfo> list;
         for (auto &s : ndilist)
         {
@@ -243,9 +279,22 @@ private:
         {
           std::unique_lock<std::mutex> lock(scanMutex);
           camList = list;
+          completedScans++;
+          // The first scan on a fresh macOS launch can come back empty while the
+          // Local Network permission prompt is showing, so allow a second pass.
+          if (!list.empty() || completedScans >= 2)
+          {
+            initialScanComplete = true;
+          }
+          if (requested && !scanRequested)
+          {
+            rescanPending = false;
+          }
         }
       }
-      std::this_thread::sleep_for(std::chrono::milliseconds(3000));
+      std::unique_lock<std::mutex> lock(scanMutex);
+      scanWake.wait_for(lock, std::chrono::milliseconds(3000),
+                        [this] { return scanRequested || !scanEnabled; });
     }
 
     std::cout << "mDns Scan loop stopped" << std::endl;
@@ -281,12 +330,6 @@ public:
       SystemEventQueue::push("VID", "Error: Unable to create mcast listener.");
     }
 
-    ndi_mdns::DiscoverOptions opt;
-    opt.timeout = std::chrono::seconds(2);
-    opt.debug = false;
-    opt.debug_level = 2;
-    opt.reenumerate_interval_ms = 5000; // 0 = disabled; e.g. 2000 to re-enumerate every 2s
-    mdns = std::make_shared<ndi_mdns::NdiMdns>(opt);
     mdnsScanThread = std::thread(&VideoController::mdnsScanLoop, this);
   }
   ~VideoController()
@@ -299,7 +342,11 @@ public:
 
     stop();
     stopPreview();
-    scanEnabled = false;
+    {
+      std::lock_guard<std::mutex> lock(scanMutex);
+      scanEnabled = false;
+    }
+    scanWake.notify_all();
     scanPaused = true;
 
     videoReader = nullptr;
@@ -312,8 +359,6 @@ public:
     {
       mdnsScanThread.join();
     }
-
-    mdns = nullptr;
   }
 
   void setWaypoint(std::string &waypoint)
@@ -321,7 +366,18 @@ public:
     this->waypoint = waypoint;
   }
 
-  std::vector<VideoReader::CameraInfo> getCameraList()
+  void searchCameras()
+  {
+    {
+      std::lock_guard<std::mutex> lock(scanMutex);
+      scanRequested = true;
+      rescanPending = true;
+    }
+    scanWake.notify_one();
+  }
+
+  std::vector<VideoReader::CameraInfo> getCameraList(bool &searchComplete,
+                                                     bool &rescanInProgress)
   {
     // std::lock_guard<std::recursive_mutex> lock(controlMutex);
     // if (videoReader)
@@ -329,6 +385,8 @@ public:
     //   return videoReader->getCameraList();
     // }
     std::unique_lock<std::mutex> lock(scanMutex);
+    searchComplete = initialScanComplete;
+    rescanInProgress = rescanPending;
     return camList;
   }
 

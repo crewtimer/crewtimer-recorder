@@ -23,6 +23,7 @@ export interface RecordingProps {
 }
 
 export interface RecorderMessage {
+  rescan?: boolean;
   op:
     | 'start-recording'
     | 'stop-recording'
@@ -139,6 +140,10 @@ export interface RecordingLog extends HandlerResponse {
 }
 
 export interface CameraListResponse extends HandlerResponse {
+  /** Absent from older native modules. */
+  initialScanComplete?: boolean;
+  /** True while a requested rescan has not yet finished. */
+  rescanInProgress?: boolean;
   cameras: {
     name: string;
     address: string;

@@ -104,10 +104,11 @@ export const queryRecordingStatus = () => {
     });
 };
 
-export const queryCameraList = () => {
+export const queryCameraList = (rescan = false) => {
   return window.msgbus
     .sendMessage<RecorderMessage, CameraListResponse>('recorder', {
       op: 'get-camera-list',
+      rescan,
     })
     .catch((e) => {
       console.log('Error requesting camera list');

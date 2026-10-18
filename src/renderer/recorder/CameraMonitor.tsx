@@ -9,13 +9,32 @@ export const [useCameraList, setCameraList] = UseDatum<
   { name: string; address: string }[]
 >([]);
 
-export const refreshCameraList = () =>
-  queryCameraList()
+export const [useInitialCameraSearchComplete, setInitialCameraSearchComplete] =
+  UseDatum(false);
+
+/** Show "not found" after this long even if the native side never reports a completed scan. */
+const MAX_INITIAL_SEARCH_MS = 12000;
+
+/**
+ * Query the native camera list.
+ * @returns true if a requested rescan is still running.
+ */
+export const refreshCameraList = (rescan = false) =>
+  queryCameraList(rescan)
     .then((result) => {
       setCameraList(result?.cameras || []);
-      return null;
+      // Treat errors and older native modules (no field) as complete so the
+      // UI never waits on a search that won't report back.
+      if (result?.status !== 'OK' || result.initialScanComplete !== false) {
+        setInitialCameraSearchComplete(true);
+      }
+      return result?.status === 'OK' && !!result.rescanInProgress;
     })
-    .catch(showErrorDialog);
+    .catch((e) => {
+      setInitialCameraSearchComplete(true);
+      showErrorDialog(e);
+      return false;
+    });
 
 export const CameraMonitor = () => {
   const [isRecording] = useIsRecording();
@@ -23,13 +42,21 @@ export const CameraMonitor = () => {
   const [cameraList] = useCameraList();
   const [, setViscaIP] = useViscaIP();
 
+  useEffect(() => {
+    const timer = setTimeout(
+      () => setInitialCameraSearchComplete(true),
+      MAX_INITIAL_SEARCH_MS,
+    );
+    return () => clearTimeout(timer);
+  }, []);
+
   /** Periodically query for the available NDI cameras */
   useEffect(() => {
     if (isRecording) {
       return () => {};
     }
     refreshCameraList();
-    const timer = setInterval(refreshCameraList, 5000);
+    const timer = setInterval(() => refreshCameraList(), 5000);
     return () => clearInterval(timer);
   }, [isRecording]);
 

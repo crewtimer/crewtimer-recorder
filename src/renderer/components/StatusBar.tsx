@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { Box, ButtonBase, Stack, Tooltip } from '@mui/material';
 import { useRecordingProps } from '../recorder/RecorderData';
 import { useCameraList } from '../recorder/CameraMonitor';
-import { formatOffset, Tone, useSignalStats } from '../recorder/SignalHealth';
+import { formatLag, Tone, useSignalStats } from '../recorder/SignalHealth';
 import { useSelectedPage } from '../pages/SelectedPage';
 
 const toneColor = (tone: Tone) => (tone ? `${tone}.main` : 'text.secondary');
@@ -106,13 +106,13 @@ export const StatusBar = () => {
             </Tooltip>
           </>
         )}
-        {camera && stats.offset !== undefined && (
+        {camera && stats.arrivalLag !== undefined && (
           <Tooltip
-            title={`Camera clock vs this PC, including network delay (${stats.offsetAtArrival ? 'measured at frame arrival' : 'from the preview'})`}
+            title={`PC arrival time minus camera frame time: network delay when the clocks agree; a large value means the camera clock is off (${stats.offsetAtArrival ? 'measured at frame arrival' : 'from the preview'})`}
           >
             <span>
               <Stat tone={stats.clockOff ? 'error' : undefined}>
-                {`clock ${formatOffset(stats.offset)}`}
+                {`lag ${formatLag(stats.arrivalLag)}`}
               </Stat>
             </span>
           </Tooltip>
