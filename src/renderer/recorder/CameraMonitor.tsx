@@ -23,12 +23,12 @@ export const refreshCameraList = (rescan = false) =>
   queryCameraList(rescan)
     .then((result) => {
       setCameraList(result?.cameras || []);
-      // Treat errors and older native modules (no field) as complete so the
-      // UI never waits on a search that won't report back.
-      if (result?.status !== 'OK' || result.initialScanComplete !== false) {
+      // Treat errors as complete so the UI never waits on a search that
+      // won't report back.
+      if (result?.status !== 'OK' || result.initialScanComplete) {
         setInitialCameraSearchComplete(true);
       }
-      return result?.status === 'OK' && !!result.rescanInProgress;
+      return result?.status === 'OK' && result.rescanInProgress;
     })
     .catch((e) => {
       setInitialCameraSearchComplete(true);

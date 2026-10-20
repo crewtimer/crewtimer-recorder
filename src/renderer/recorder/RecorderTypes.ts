@@ -84,7 +84,7 @@ export interface RecordingStatus extends HandlerResponse {
     width: number;
     height: number;
     fps: number;
-    /** Measured from camera timestamps; 0 until the first ~1 s window (or with an older native module). */
+    /** Measured from camera timestamps; 0 until the first ~1 s window. */
     measuredFps: number;
     /** Camera timestamp minus PC arrival time, least-delayed frame per ~1 s; valid when measuredFps > 0. */
     clockOffsetMs: number;
@@ -140,10 +140,10 @@ export interface RecordingLog extends HandlerResponse {
 }
 
 export interface CameraListResponse extends HandlerResponse {
-  /** Absent from older native modules. */
-  initialScanComplete?: boolean;
+  /** False until the first camera search has finished. */
+  initialScanComplete: boolean;
   /** True while a requested rescan has not yet finished. */
-  rescanInProgress?: boolean;
+  rescanInProgress: boolean;
   cameras: {
     name: string;
     address: string;
