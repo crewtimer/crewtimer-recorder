@@ -18,6 +18,9 @@ import { StartButton } from './StartButton';
 import { useRecordingProps, useReportAllGaps } from '../recorder/RecorderData';
 import { SETTINGS_PAGES, useSelectedPage } from '../pages/SelectedPage';
 
+const RELEASES_URL =
+  'https://github.com/crewtimer/crewtimer-recorder/releases/latest';
+
 const versionAsNumber = (version: string) => {
   const parts = version.split('.');
   return Number(parts[0]) * 100 + Number(parts[1]) * 10 + Number(parts[2]);
@@ -105,16 +108,15 @@ export function TopBar() {
                       <Typography>
                         Version: {latestVersion}: {latestText}.
                       </Typography>
-                      <Link
-                        href="https://github.com/crewtimer/crewtimer-recorder/releases/latest"
-                        target="_blank"
-                      >
+                      <Link href={RELEASES_URL} target="_blank">
                         Download from github
                       </Link>
                     </Stack>
                   ),
-                  button: 'OK',
-                  showCancel: false,
+                  button: 'Update',
+                  showCancel: true,
+                  // Opens in the system browser, like the link
+                  handleConfirm: () => window.open(RELEASES_URL, '_blank'),
                 })
               }
             >
