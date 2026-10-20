@@ -436,7 +436,7 @@ void FrameProcessor::processFrames()
 
         {
           SystemEventQueue::instance().push(
-              "info", "Opening file " + filename + " ");
+              "info", "Opening file " + filename + " in " + directory);
         }
 
         const auto err = videoRecorder->openVideoStream(
