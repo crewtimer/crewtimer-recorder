@@ -13,6 +13,7 @@ import {
 } from './RecorderTypes';
 import {
   getGuide,
+  getIsRecording,
   getRecordingProps,
   getReportAllGaps,
   getSystemLog,
@@ -231,6 +232,38 @@ export const addSystemEvent = (entry: RecordingLogEntry) => {
   }
 };
 
+/**
+ * A split request for this recorder's waypoint while stopped starts a
+ * recording; when recording, the native module splits the file itself.
+ */
+const startRecordingOnSplit = (wp: string) => {
+  const { waypoint } = getRecordingProps();
+  if (getIsRecording() || (waypoint && waypoint !== wp)) return;
+  addSystemEvent({
+    tsMilli: Date.now(),
+    subsystem: 'mcast',
+    message: `Split request from ${wp || 'any'} waypoint while stopped; starting recording`,
+  });
+  startRecording()
+    .then((result) => {
+      if (result?.status !== 'OK') {
+        addSystemEvent({
+          tsMilli: Date.now(),
+          subsystem: 'mcast',
+          message: `Error: Could not start recording on split request: ${result?.error || result?.status}`,
+        });
+      }
+      return result;
+    })
+    .catch((err) => {
+      addSystemEvent({
+        tsMilli: Date.now(),
+        subsystem: 'mcast',
+        message: `Error: Could not start recording on split request: ${err}`,
+      });
+    });
+};
+
 interface SysEventMessage {
   sender: 'sysevent';
   content: {
@@ -251,6 +284,9 @@ window.Util.onNativeMessage((nativeMessage: NativeMessage) => {
   // Handle the message based on the sender and content
   switch (sender) {
     case 'mcast': {
+      if (content.cmd === 'split-video') {
+        startRecordingOnSplit(content.wp);
+      }
       if (content.cmd === 'split-video' || content.cmd === 'info') {
         const { wp } = content;
         let waypointList = getWaypointList();
