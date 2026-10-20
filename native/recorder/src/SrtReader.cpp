@@ -540,6 +540,18 @@ class SrtReader : public VideoReader
       {
         readerGeneration = currentGeneration;
         SystemEventQueue::push("SRT", "Reconnecting: " + url);
+        // The reconnect freed the previous AVFormatContext; vStream would
+        // otherwise point into it and timestamps would be converted with a
+        // garbage time base.
+        if (!refreshStreamInfo())
+        {
+          // No video stream on this connection: drop every packet until the
+          // next reconnect rather than touching the freed stream.
+          vStream = nullptr;
+          videoStreamIndex = -1;
+          av_packet_unref(pkt);
+          continue;
+        }
         avcodec_flush_buffers(vdecCtx);
         waitingForKeyframe = true;
         frameCount = 0;
