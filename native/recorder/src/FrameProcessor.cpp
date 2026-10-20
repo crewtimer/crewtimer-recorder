@@ -397,6 +397,17 @@ void FrameProcessor::processFrames()
             filename += "_" + std::to_string(count);
           }
         }
+        // A source whose clock moved backward restarts recording at an earlier
+        // time, which can match an existing recording; never overwrite one.
+        {
+          const std::string base = filename;
+          for (int suffix = 2; std::ifstream(directory + "/" + filename + ".mp4").good() ||
+                               std::ifstream(directory + "/" + filename + ".json").good();
+               ++suffix)
+          {
+            filename = base + "_" + std::to_string(suffix);
+          }
+        }
         jsonFilename = directory + "/" + filename + ".json";
         {
           std::lock_guard<std::mutex> s(statusMutex);

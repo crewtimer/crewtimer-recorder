@@ -118,6 +118,16 @@ public:
   std::string openVideoStream(std::string directory, std::string filename,
                               int width, int height, float fps, uint64_t timestamp)
   {
+    // A bad source frame rate estimate must not reach the encoder, whose rate
+    // control budgets bits per frame from it.
+    constexpr float maxEncodeFps = 120.0f;
+    if (fps > maxEncodeFps)
+    {
+      SystemEventQueue::push("ffmpeg", "Warning: source frame rate " + std::to_string(fps) +
+                                           " fps exceeds encoder limit; encoding at " +
+                                           std::to_string(maxEncodeFps) + " fps");
+      fps = maxEncodeFps;
+    }
     firstTimestamp100ns = timestamp;
     lastFramePts = AV_NOPTS_VALUE;
     outputFile = filename + ".mp4";

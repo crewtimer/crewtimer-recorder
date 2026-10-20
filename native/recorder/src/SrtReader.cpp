@@ -3,10 +3,12 @@
 #include "srt/SrtReconnectingReader.hpp"
 #include "SystemEventQueue.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <deque>
 #include <iomanip>
 #include <iostream>
 #include <memory>
@@ -131,11 +133,69 @@ class SrtReader : public VideoReader
   mutable int64_t lastPtsRaw = AV_NOPTS_VALUE;
 
   // Startup sampling for FPS estimation
-  int64_t init_first_unwrapped = AV_NOPTS_VALUE;
-  int64_t init_last_unwrapped = AV_NOPTS_VALUE;
-  int init_samples = 0;
+  std::vector<int64_t> init_unwrapped; // unwrapped PTS of each startup frame
+  static constexpr size_t maxInitSamples = 600;
 
   std::shared_ptr<SrtReconnectingReader> reader;
+
+  // Recent per-frame timing, logged when the timeline steps backward or jumps
+  // forward so the cause (sender clock, B-frame ordering, packet loss) can be
+  // identified.
+  struct FrameTiming
+  {
+    int64_t pts;
+    int64_t pktDts;
+    int64_t ts100ns;
+    int64_t receivedUs;
+    char pictType;
+    bool key;
+    bool corrupt;
+    bool discarded;
+  };
+  std::deque<FrameTiming> recentFrames;
+  static constexpr size_t recentFrameLimit = 8;
+
+  void rememberFrame(const FrameTiming &timing)
+  {
+    recentFrames.push_back(timing);
+    if (recentFrames.size() > recentFrameLimit)
+      recentFrames.pop_front();
+  }
+
+  static std::string describeFrame(const FrameTiming &f)
+  {
+    std::stringstream ss;
+    ss << "pts=" << f.pts << " pktDts=" << f.pktDts << " type=" << f.pictType
+       << (f.key ? " key" : "") << (f.corrupt ? " corrupt" : "")
+       << (f.discarded ? " discarded" : "")
+       << " ts100ns=" << f.ts100ns
+       << " arrivalMinusTsMs=" << std::fixed << std::setprecision(1)
+       << (f.receivedUs * 10 - f.ts100ns) / 1e4;
+    return ss.str();
+  }
+
+  void logTimestampDiscontinuity(const std::string &what, const FrameTiming &current, int64_t lastTS100ns,
+                                 bool includeHistory)
+  {
+    std::stringstream ss;
+    ss << what << ": step=" << std::fixed << std::setprecision(3)
+       << (current.ts100ns - lastTS100ns) / 1e4 << "ms " << describeFrame(current)
+       << " startPts=" << startPts << " wrapOffset=" << ptsWrapOffset
+       << " encodingDelayMs=" << encodingDelay / 1e4
+       << " timeBase=" << timeBase.num << "/" << timeBase.den;
+    SystemEventQueue::push("SRT", ss.str());
+    if (!includeHistory)
+      return;
+    for (size_t i = 0; i < recentFrames.size(); ++i)
+    {
+      const auto &f = recentFrames[i];
+      const int64_t prevTs = i ? recentFrames[i - 1].ts100ns : f.ts100ns;
+      std::stringstream line;
+      line << "  prior[-" << (recentFrames.size() - i) << "] " << describeFrame(f)
+           << " stepMs=" << std::fixed << std::setprecision(3) << (f.ts100ns - prevTs) / 1e4;
+      SystemEventQueue::push("SRT", line.str());
+    }
+  }
 
   bool openInput()
   {
@@ -312,9 +372,7 @@ class SrtReader : public VideoReader
     encodingDelay = 0;
     startTimeMicroseconds = 0;
     // reset startup sampling
-    init_first_unwrapped = AV_NOPTS_VALUE;
-    init_last_unwrapped = AV_NOPTS_VALUE;
-    init_samples = 0;
+    init_unwrapped.clear();
   }
 
   // Collect startup PTS samples and decide when to finish startup.
@@ -324,41 +382,60 @@ class SrtReader : public VideoReader
     if (pts != AV_NOPTS_VALUE)
     {
       int64_t un = unwrap_pts(pts);
-      if (un != AV_NOPTS_VALUE)
-      {
-        if (init_samples == 0)
-          init_first_unwrapped = un;
-        init_last_unwrapped = un;
-        if (init_samples < 1000000)
-          ++init_samples;
-      }
+      if (un != AV_NOPTS_VALUE && init_unwrapped.size() < maxInitSamples)
+        init_unwrapped.push_back(un);
     }
 
     // looking for when to start: need at least 16 frames and a keyframe
     if (frameCount >= 16 && (frm->flags & AV_FRAME_FLAG_KEY))
     {
       std::cerr << "SRTReader: startup complete at frameCount=" << frameCount << " pts=" << pts << "\n";
-      double fpsEstimate = 0.0;
-      if (init_samples >= 2 && init_first_unwrapped != AV_NOPTS_VALUE && init_last_unwrapped != AV_NOPTS_VALUE)
+
+      // Use the median frame interval: a single timestamp step back or jump
+      // within the startup samples would skew (last - first) / count.
+      std::vector<int64_t> deltas;
+      int backwardSteps = 0;
+      for (size_t i = 1; i < init_unwrapped.size(); ++i)
       {
-        int64_t deltaTicks = init_last_unwrapped - init_first_unwrapped;
-        int64_t intervals = init_samples - 1;
-        if (deltaTicks > 0 && intervals > 0)
-        {
-          double avgDeltaTicks = static_cast<double>(deltaTicks) / static_cast<double>(intervals);
-          double secondsPerTick = av_q2d(vStream->time_base);
-          double avgSec = avgDeltaTicks * secondsPerTick;
-          if (avgSec > 0.0)
-            fpsEstimate = 1.0 / avgSec;
-        }
+        const int64_t d = init_unwrapped[i] - init_unwrapped[i - 1];
+        if (d > 0)
+          deltas.push_back(d);
+        else
+          ++backwardSteps;
+      }
+      double fpsEstimate = 0.0;
+      int64_t minDelta = 0, maxDelta = 0, medianDelta = 0;
+      if (!deltas.empty())
+      {
+        std::sort(deltas.begin(), deltas.end());
+        minDelta = deltas.front();
+        maxDelta = deltas.back();
+        medianDelta = deltas[deltas.size() / 2];
+        fpsEstimate = 1.0 / (static_cast<double>(medianDelta) * av_q2d(vStream->time_base));
       }
 
-      int64_t utcMilli = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
-      auto approxUtc = approxUtcFromDts_lockedToRef(pts, utcMilli);
-      SystemEventQueue::push("SRT", "pts=" + std::to_string(pts) + " Approx UTC: " + std::to_string(approxUtc.utcMs) + " ms delta=" + std::to_string(utcMilli - approxUtc.utcMs));
-      encodingDelay = (utcMilli - approxUtc.utcMs) * 10000;
+      std::stringstream ss;
+      ss << "Startup frame interval: " << init_unwrapped.size() << " samples, median=" << medianDelta
+         << " min=" << minDelta << " max=" << maxDelta << " ticks, " << backwardSteps
+         << " backward steps, stream avg_frame_rate=" << avgFrameRate.num << "/" << avgFrameRate.den
+         << ", estimate=" << std::fixed << std::setprecision(3) << fpsEstimate << " fps";
+      SystemEventQueue::push("SRT", ss.str());
 
-      if (fpsEstimate > 0.5)
+      constexpr double minPlausibleFps = 1.0;
+      // Matches the encoder's limit in FFRecorder
+      constexpr double maxPlausibleFps = 120.0;
+      if (fpsEstimate < minPlausibleFps || fpsEstimate > maxPlausibleFps)
+      {
+        const double streamFps = avgFrameRate.den ? av_q2d(avgFrameRate) : 0.0;
+        const bool useStream = streamFps >= minPlausibleFps && streamFps <= maxPlausibleFps;
+        SystemEventQueue::push("SRT", "Warning: implausible frame rate estimate; using " +
+                                          (useStream ? "stream rate " + std::to_string(streamFps)
+                                                     : "previous rate " + std::to_string(av_q2d(frameRate))) +
+                                          " fps");
+        fpsEstimate = useStream ? streamFps : 0.0;
+      }
+
+      if (fpsEstimate > 0.0)
       {
         int64_t num = static_cast<int64_t>(std::llround(fpsEstimate * 1000.0));
         int64_t den = 1000;
@@ -368,13 +445,24 @@ class SrtReader : public VideoReader
         std::cerr << "SRTReader: estimated FPS from startup samples = " << fpsEstimate << " => " << frameRate.num << "/" << frameRate.den << "\n";
       }
 
-      set_start_pts(pts);
-      startTimeMicroseconds = duration_cast<microseconds>(system_clock::now().time_since_epoch()).count();
+      anchorTiming(pts);
       return true;
     }
 
     // still in startup; caller should skip this frame
     return false;
+  }
+
+  // Anchor the PTS timeline to the current wall clock and camera clock offset.
+  void anchorTiming(int64_t pts)
+  {
+    resetTimingCalibration();
+    int64_t utcMilli = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+    auto approxUtc = approxUtcFromDts_lockedToRef(pts, utcMilli);
+    SystemEventQueue::push("SRT", "pts=" + std::to_string(pts) + " Approx UTC: " + std::to_string(approxUtc.utcMs) + " ms delta=" + std::to_string(utcMilli - approxUtc.utcMs));
+    encodingDelay = (utcMilli - approxUtc.utcMs) * 10000;
+    set_start_pts(pts);
+    startTimeMicroseconds = duration_cast<microseconds>(system_clock::now().time_since_epoch()).count();
   }
 
   bool refreshStreamInfo()
@@ -512,8 +600,23 @@ class SrtReader : public VideoReader
     // large means the sender's timestamp clock changed (for example, after a
     // camera reboot) even if the transport connection itself stayed alive.
     constexpr int64_t maxContinuousTimestampStep100ns = 30LL * 10000000LL;
+    // The recorder and review app require strictly increasing frame times; 1us
+    // is the encoder's time base resolution.
+    constexpr int64_t minTimestampStep100ns = 10;
+    // Frames that do not advance past the last delivered frame are discarded.
+    // If that persists this long, the sender timeline has moved back for good:
+    // close the current file and start a new one on the new timeline.
+    constexpr auto maxDiscardDuration = std::chrono::seconds(1);
+    int64_t discardedFrames = 0;
+    int64_t maxDiscardBehind100ns = 0;
+    int discardEpisodes = 0;
+    // Full frame history is logged for the first few episodes and for every
+    // restart; later short episodes get a one-line summary.
+    constexpr int detailedDiscardEpisodes = 10;
+    steady_clock::time_point discardStart;
+    recentFrames.clear();
 
-    // Startup sampling state is kept in member fields (init_first_unwrapped, init_last_unwrapped, init_samples)
+    // Startup sampling state is kept in member fields (init_unwrapped)
     AVPacket *pkt = av_packet_alloc();
     AVFrame *frm = av_frame_alloc();
     AVFrame *sw_frm = av_frame_alloc(); // reusable staging frame for HW→CPU download
@@ -556,6 +659,9 @@ class SrtReader : public VideoReader
         waitingForKeyframe = true;
         frameCount = 0;
         lastTS100ns = 0;
+        discardedFrames = 0;
+        discardEpisodes = 0;
+        recentFrames.clear();
         resetTimingCalibration();
 
         av_packet_unref(pkt);
@@ -607,6 +713,15 @@ class SrtReader : public VideoReader
                             ? srcFrm->pts
                             : srcFrm->best_effort_timestamp;
 
+          // Without a timestamp a frame cannot be placed on the timeline or
+          // used to anchor it.
+          if (pts == AV_NOPTS_VALUE)
+          {
+            std::cerr << "SRTReader: dropping frame without a timestamp\n";
+            av_frame_unref(frm);
+            continue;
+          }
+
           if (startPts == AV_NOPTS_VALUE)
           {
             bool started = startup_collect_and_maybe_finish(srcFrm, pts, static_cast<int>(frameCount), msPerFrame, frameRate);
@@ -626,25 +741,83 @@ class SrtReader : public VideoReader
             SystemEventQueue::push("SRT", "pts=" + std::to_string(pts) + " Approx UTC: " + std::to_string(approxUtc.utcMs) + " ms delta=" + std::to_string(delay));
           }
 
-          int64_t ts100ns = (pts == AV_NOPTS_VALUE) ? 0 : pts_to_100ns(pts);
+          int64_t ts100ns = pts_to_100ns(pts);
+
+          FrameTiming timing{pts,
+                             frm->pkt_dts,
+                             ts100ns,
+                             duration_cast<microseconds>(system_clock::now().time_since_epoch()).count(),
+                             av_get_picture_type_char(frm->pict_type),
+                             (frm->flags & AV_FRAME_FLAG_KEY) != 0,
+                             (frm->flags & AV_FRAME_FLAG_CORRUPT) != 0 || frm->decode_error_flags != 0,
+                             false};
 
           // A camera can reboot and restart its MPEG timestamp clock without
           // causing SRT to establish a new connection generation.  Continuing
           // to unwrap against the old clock produces enormous gaps and leaves
-          // every subsequent frame incorrectly timestamped.  Re-run the same
-          // timing calibration used at startup and on a transport reconnect.
-          if (lastTS100ns > 0 &&
-              (ts100ns <= 0 || ts100ns < lastTS100ns ||
-               (ts100ns > lastTS100ns &&
-                ts100ns - lastTS100ns > maxContinuousTimestampStep100ns)))
+          // every subsequent frame incorrectly timestamped.  The decoder is
+          // already running, so re-anchor on this frame rather than re-running
+          // the startup sampling, which would drop frames until the next
+          // keyframe.  If the new anchor lands before the last delivered frame,
+          // the backward-step handling below takes over.
+          if (lastTS100ns > 0 && ts100ns - lastTS100ns > maxContinuousTimestampStep100ns)
           {
-            SystemEventQueue::push("SRT", "Timestamp discontinuity detected; recalibrating");
-            frameCount = 0;
-            lastTS100ns = 0;
-            resetTimingCalibration();
-            av_frame_unref(frm);
-            continue;
+            logTimestampDiscontinuity("Timestamp jumped forward; recalibrating", timing, lastTS100ns, true);
+            anchorTiming(pts);
+            ts100ns = timing.ts100ns = pts_to_100ns(pts);
           }
+
+          if (lastTS100ns > 0 && ts100ns < lastTS100ns + minTimestampStep100ns)
+          {
+            const auto now = steady_clock::now();
+            if (discardedFrames == 0)
+            {
+              discardStart = now;
+              maxDiscardBehind100ns = 0;
+              ++discardEpisodes;
+              if (discardEpisodes <= detailedDiscardEpisodes)
+                logTimestampDiscontinuity("Timestamp stepped back; discarding until it passes the last frame",
+                                          timing, lastTS100ns, true);
+            }
+            ++discardedFrames;
+            maxDiscardBehind100ns = std::max(maxDiscardBehind100ns, lastTS100ns - ts100ns);
+
+            if (now - discardStart <= maxDiscardDuration)
+            {
+              timing.discarded = true;
+              rememberFrame(timing);
+              av_frame_unref(frm);
+              continue;
+            }
+
+            std::stringstream ss;
+            ss << "Timestamps behind the last frame for "
+               << duration_cast<milliseconds>(now - discardStart).count() << "ms (" << discardedFrames
+               << " frames discarded, up to " << maxDiscardBehind100ns / 10000
+               << "ms behind); restarting recording on the new timeline";
+            logTimestampDiscontinuity(ss.str(), timing, lastTS100ns, true);
+            if (addFrameFunction)
+            {
+              auto f = std::make_shared<Frame>();
+              f->frameType = Frame::FrameType::SOURCE_DISCONNECTED;
+              addFrameFunction(f);
+            }
+            anchorTiming(pts);
+            ts100ns = timing.ts100ns = pts_to_100ns(pts);
+            lastTS100ns = 0;
+            discardedFrames = 0;
+          }
+          else if (discardedFrames > 0)
+          {
+            std::stringstream ss;
+            ss << "Timestamps passed the last frame after "
+               << duration_cast<milliseconds>(steady_clock::now() - discardStart).count() << "ms ("
+               << discardedFrames << " frames discarded, up to " << std::fixed << std::setprecision(3)
+               << maxDiscardBehind100ns / 1e4 << "ms behind, episode " << discardEpisodes << ")";
+            logTimestampDiscontinuity(ss.str(), timing, lastTS100ns, false);
+            discardedFrames = 0;
+          }
+          rememberFrame(timing);
 
           // Initialize sws lazily for non-YUV420P sources (e.g. NV12 from HW decoders)
           auto srcFmt = static_cast<AVPixelFormat>(srcFrm->format);
