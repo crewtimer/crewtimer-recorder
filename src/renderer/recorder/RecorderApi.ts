@@ -9,6 +9,7 @@ import {
   CameraListResponse,
   DefaultRecordingProps,
   SettingsMessage,
+  RecordingLogEntry,
 } from './RecorderTypes';
 import {
   getGuide,
@@ -21,12 +22,14 @@ import {
   setIsRecording,
   setRecordingPropsPending,
   setRecordingStartTime,
+  setActiveRecordingFolder,
   setSystemLog,
   setWaypointList,
 } from './RecorderData';
 import { showErrorDialog } from '../components/ErrorDialog';
 import { ViscaMessage, ViscaMessageProps, ViscaResponse } from './ViscaTypes';
 import { setViscaState } from '../visca/ViscaState';
+import { eventLevel } from '../pages/RecordingLogTable';
 
 export const startRecording = () => {
   setRecordingStartTime(Date.now());
@@ -35,6 +38,7 @@ export const startRecording = () => {
   // console.log(`recording props: ${JSON.stringify(getRecordingProps())}`);
   const recordingProps = { ...DefaultRecordingProps, ...getRecordingProps() };
   recordingProps.recordingDuration = Number(recordingProps.recordingDuration);
+  setActiveRecordingFolder(recordingProps.recordingFolder);
   const cropArea = { ...recordingProps.cropArea };
   const guide = getGuide();
   return window.msgbus
@@ -190,6 +194,43 @@ export const sendViscaCommandToDevice = async ({
   });
 };
 
+/**
+ * Adds an event to the system log, folding a repeat of the last message into
+ * its count, and multicasts warnings and errors as they occur.
+ */
+export const addSystemEvent = (entry: RecordingLogEntry) => {
+  console.log(entry.message);
+  const log = getSystemLog();
+  const last = log[log.length - 1];
+  if (
+    last &&
+    last.message === entry.message &&
+    last.subsystem === entry.subsystem
+  ) {
+    const updated = [...log];
+    updated[updated.length - 1] = {
+      ...last,
+      count: (last.count ?? 1) + 1,
+      tsMilli: entry.tsMilli,
+    };
+    setSystemLog(updated);
+  } else {
+    setSystemLog([...log, entry]);
+  }
+
+  const level = eventLevel(entry);
+  if (level !== 'Info') {
+    window.Util.multicastSend({
+      cmd: 'recorder-event',
+      wp: getRecordingProps().waypoint,
+      tsMilli: entry.tsMilli,
+      level,
+      subsystem: entry.subsystem,
+      message: entry.message,
+    });
+  }
+};
+
 interface SysEventMessage {
   sender: 'sysevent';
   content: {
@@ -257,27 +298,7 @@ window.Util.onNativeMessage((nativeMessage: NativeMessage) => {
       break;
 
     case 'sysevent':
-      {
-        console.log(content.message);
-        const { message } = content;
-        const log = getSystemLog();
-        const last = log[log.length - 1];
-        if (
-          last &&
-          last.message === message &&
-          last.subsystem === content.subsystem
-        ) {
-          const updated = [...log];
-          updated[updated.length - 1] = {
-            ...last,
-            count: (last.count ?? 1) + 1,
-            tsMilli: content.tsMilli,
-          };
-          setSystemLog(updated);
-        } else {
-          setSystemLog([...log, content]);
-        }
-      }
+      addSystemEvent(content);
       break;
 
     // case 'VID':

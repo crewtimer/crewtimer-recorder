@@ -444,6 +444,9 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
         ret.Set("status", Napi::String::New(env, "OK"));
         ret.Set("error", Napi::String::New(env, status.error));
         ret.Set("recording", Napi::Boolean::New(env, status.recording));
+        ret.Set("readerRunning", Napi::Boolean::New(env, status.readerRunning));
+        ret.Set("lastFrameArrivalMilli",
+                Napi::Number::New(env, static_cast<double>(status.lastFrameArrivalMilli)));
         if (status.recording)
         {
 
@@ -469,6 +472,8 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
                              Napi::Number::New(env, status.frameProcessor.measuredFps));
           frameProcessor.Set("clockOffsetMs",
                              Napi::Number::New(env, status.frameProcessor.clockOffsetMs));
+          frameProcessor.Set("lowFrameRate",
+                             Napi::Boolean::New(env, status.frameProcessor.lowFrameRate));
           frameProcessor.Set("frameBacklog", Napi::Number::New(env, status.frameProcessor.frameBacklog));
           frameProcessor.Set("lastTsMilli", Napi::Number::New(env, status.frameProcessor.lastTsMilli));
           frameProcessor.Set("sliceEndMilli", Napi::Number::New(env, status.frameProcessor.sliceEndMilli));

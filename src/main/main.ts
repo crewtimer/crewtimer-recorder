@@ -25,6 +25,7 @@ import './msgbus/msgbus-main';
 import { stopRecorder, initRecorder } from './recorder/recorder-main';
 import { setMainWindow } from './mainWindow';
 import './util/fileops-handler';
+import { sendRecorderExit } from './util/status-handler';
 import { onPropertyChange } from '../renderer/store/StoreUtil';
 
 // Drives prefers-color-scheme, so MUI, the markdown CSS and scrollbars all follow the in-app choice
@@ -180,6 +181,17 @@ const createWindow = async () => {
 /**
  * Add event listeners...
  */
+
+// will-quit follows every way of quitting, after the windows have closed
+let exitSent = false;
+app.on('will-quit', (event) => {
+  if (exitSent) return;
+  event.preventDefault();
+  exitSent = true;
+  sendRecorderExit()
+    .then(() => app.quit())
+    .catch(() => app.quit());
+});
 
 app.on('window-all-closed', () => {
   // Respect the OSX convention of having the application in memory even

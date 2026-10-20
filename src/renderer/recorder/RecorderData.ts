@@ -1,6 +1,7 @@
 import { UseDatum } from 'react-usedatum';
 
 import { UseStoredDatum } from '../store/UseElectronDatum';
+import type { DiskUsage } from '../../main/util/util-preload';
 import generateTestPattern from '../util/ImageUtils';
 import {
   DefaultRecordingProps,
@@ -69,6 +70,15 @@ export const [useReportAllGaps, , getReportAllGaps] = UseStoredDatum(
 
 /** Shows the signal health panel on the Recorder tab. */
 export const [useNerdMode] = UseStoredDatum('nerdMode', false);
+
+/** Folder the current recording writes to; the setting may change mid-recording. */
+export const [useActiveRecordingFolder, setActiveRecordingFolder] =
+  UseDatum('');
+
+/** Usage of the disk holding the recording folder; undefined until first polled. */
+export const [useRecordingDiskUsage, setRecordingDiskUsage] = UseDatum<
+  DiskUsage | undefined
+>(undefined);
 
 export const [useWaypointList, setWaypointList, getWaypointList] = UseDatum<
   string[]

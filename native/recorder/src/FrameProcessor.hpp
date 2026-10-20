@@ -33,6 +33,8 @@ public:
     float measuredFps = 0;
     // Camera timestamp minus PC arrival time (least-delayed frame per window); valid when measuredFps > 0
     float clockOffsetMs = 0;
+    // measuredFps fell below 90% of fps and has not yet recovered to 95%
+    bool lowFrameRate = false;
     std::uint32_t frameBacklog = 0;
 
     friend std::ostream &operator<<(std::ostream &os, const StatusInfo &info)
@@ -47,6 +49,7 @@ public:
          << ", fps=" << info.fps
          << ", measuredFps=" << info.measuredFps
          << ", clockOffsetMs=" << info.clockOffsetMs
+         << ", lowFrameRate=" << info.lowFrameRate
          << ", frameBacklog=" << info.frameBacklog << "}";
       return os;
     }

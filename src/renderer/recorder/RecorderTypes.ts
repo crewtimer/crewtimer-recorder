@@ -77,6 +77,10 @@ export interface GrabFrameResponse extends HandlerResponse {
 export interface RecordingStatus extends HandlerResponse {
   recording: boolean;
   recordingDuration: number;
+  /** A camera reader is running. */
+  readerRunning: boolean;
+  /** PC time (UTC ms) the reader's last video frame arrived; 0 before the first. */
+  lastFrameArrivalMilli: number;
   frameProcessor: {
     recording: boolean;
     error: string;
@@ -88,6 +92,8 @@ export interface RecordingStatus extends HandlerResponse {
     measuredFps: number;
     /** Camera timestamp minus PC arrival time, least-delayed frame per ~1 s; valid when measuredFps > 0. */
     clockOffsetMs: number;
+    /** Measured rate below 90% of fps, or no frames for 2 s, until it recovers to 95%. */
+    lowFrameRate: boolean;
     frameBacklog: number;
     lastTsMilli: number;
     /** Camera time at which the current file ends; 0 before the first file. */
@@ -100,6 +106,8 @@ export const DefaultRecordingStatus: RecordingStatus = {
   error: '',
   recording: false,
   recordingDuration: 0,
+  readerRunning: false,
+  lastFrameArrivalMilli: 0,
   frameProcessor: {
     recording: false,
     error: '',
@@ -109,6 +117,7 @@ export const DefaultRecordingStatus: RecordingStatus = {
     fps: 0,
     measuredFps: 0,
     clockOffsetMs: 0,
+    lowFrameRate: false,
     frameBacklog: 0,
     lastTsMilli: 0,
     sliceEndMilli: 0,

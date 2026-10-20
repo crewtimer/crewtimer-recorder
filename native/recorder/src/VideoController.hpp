@@ -1,4 +1,5 @@
 #pragma once
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <mutex>
@@ -23,6 +24,11 @@ public:
     bool recording = false;
     std::string error;
     std::uint32_t recordingDuration = 0;
+    // Whether a reader is running, and the PC time (UTC ms) its last video
+    // frame arrived; 0 before the first frame.  Together they tell whether the
+    // camera is actually delivering video, recording or not.
+    bool readerRunning = false;
+    std::int64_t lastFrameArrivalMilli = 0;
     FrameProcessor::StatusInfo frameProcessor;
 
     friend std::ostream &operator<<(std::ostream &os, const StatusInfo &info)
@@ -57,6 +63,7 @@ private:
   StatusInfo statusInfo;
   bool previewRequested = false;
   bool readerRunning = false;
+  std::atomic<std::int64_t> lastFrameArrivalMilli{0};
   std::string activeSourceName;
   FramePtr lastPreviewFrame;
   std::mutex frameSinkMutex;
@@ -172,8 +179,15 @@ private:
     }
 
     videoReader->setProperties(reportAllGaps);
+    lastFrameArrivalMilli = 0;
     err = videoReader->start(camera, [this](FramePtr frame)
                              {
+                               if (frame->frameType == Frame::FrameType::VIDEO)
+                               {
+                                 lastFrameArrivalMilli = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                                             std::chrono::system_clock::now().time_since_epoch())
+                                                             .count();
+                               }
                                if (frame->frameType == Frame::FrameType::VIDEO &&
                                    frameRotation.load() != 0)
                                {
@@ -411,6 +425,8 @@ public:
     }
     statusInfo.recording = recording;
     statusInfo.recordingDuration = recording ? elapsedSecondsUInt : 0;
+    statusInfo.readerRunning = readerRunning;
+    statusInfo.lastFrameArrivalMilli = lastFrameArrivalMilli.load();
     return statusInfo;
   }
 

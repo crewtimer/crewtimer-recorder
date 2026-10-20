@@ -15,6 +15,7 @@ import RecordingStatus from '../recorder/RecordingStatus';
 import { useFirebaseDatum } from '../util/UseFirebase';
 import { setDialogConfig } from './ConfirmDialog';
 import { StartButton } from './StartButton';
+import { DiskStatus } from './DiskStatus';
 import { useRecordingProps, useReportAllGaps } from '../recorder/RecorderData';
 import { SETTINGS_PAGES, useSelectedPage } from '../pages/SelectedPage';
 
@@ -128,6 +129,7 @@ export function TopBar() {
               <Visibility fontSize="small" color="action" />
             </Tooltip>
           )}
+          <DiskStatus />
           <StartButton />
           <HamburgerMenu />
         </Stack>

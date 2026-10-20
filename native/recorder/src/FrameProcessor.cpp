@@ -55,6 +55,7 @@ FrameProcessor::FrameProcessor(const std::string directory,
   statusInfo.fps = 0;
   statusInfo.measuredFps = 0;
   statusInfo.clockOffsetMs = 0;
+  statusInfo.lowFrameRate = false;
   statusInfo.frameBacklog = 0;
   statusInfo.lastTsMilli = 0;
   tzOffset = getTimezoneOffset();
@@ -218,13 +219,36 @@ void FrameProcessor::processFrames()
   // Delay only lowers (camera time - arrival time), so the window's largest value is
   // the least-delayed frame: the best estimate of the camera clock offset.
   int64_t windowBestOffset100ns = INT64_MIN;
+  // measuredFps only updates when a frame completes a window, so a source that
+  // stops entirely is caught by the time since the last video frame instead.
+  constexpr auto stallThreshold = seconds(2);
+  auto lastVideoFrameTime = steady_clock::now();
 
   while (running)
   {
     std::unique_lock<std::mutex> lock(queueMutex);
-    frameAvailable.wait(lock,
-                        [this]
-                        { return !frameQueue.empty() || !running; });
+    frameAvailable.wait_for(lock, milliseconds(500),
+                            [this]
+                            { return !frameQueue.empty() || !running; });
+    const auto sinceLastFrame = steady_clock::now() - lastVideoFrameTime;
+    if (running && frameQueue.empty() && sinceLastFrame > stallThreshold)
+    {
+      std::string stallEvent;
+      {
+        std::lock_guard<std::mutex> s(statusMutex);
+        if (!statusInfo.lowFrameRate)
+        {
+          statusInfo.lowFrameRate = true;
+          statusInfo.measuredFps = 0;
+          stallEvent = "Warning: Low data rate: no frames for " +
+                       std::to_string(duration_cast<seconds>(sinceLastFrame).count()) + " s";
+        }
+      }
+      // Measure afresh once frames resume rather than across the stall
+      rateWindowStart = 0;
+      if (!stallEvent.empty())
+        SystemEventQueue::push("fproc", stallEvent);
+    }
     while (running && !frameQueue.empty())
     {
       auto video_frame = frameQueue.front();
@@ -252,6 +276,7 @@ void FrameProcessor::processFrames()
           statusInfo.filename.clear();
           statusInfo.measuredFps = 0;
           statusInfo.clockOffsetMs = 0;
+          statusInfo.lowFrameRate = false;
         }
         lock.lock();
         continue;
@@ -268,6 +293,8 @@ void FrameProcessor::processFrames()
         lock.lock();
         continue;
       }
+
+      lastVideoFrameTime = steady_clock::now();
 
       // Apply the global capture-time correction once, before deriving file
       // metadata, sidecar timestamps, split boundaries, or encoded output.
@@ -321,12 +348,27 @@ void FrameProcessor::processFrames()
         }
       }
 
+      std::string rateEvent;
       {
         std::lock_guard<std::mutex> s(statusMutex);
         statusInfo.lastTsMilli = video_frame->timestamp / 10000;
         statusInfo.sliceEndMilli = nextStartTime / 10000;
         if (measuredFps >= 0)
         {
+          // Below 90% of the declared rate means frames are being lost.  Recover
+          // at 95% so a rate hovering near the limit does not flood the log.
+          std::stringstream msg;
+          msg << std::fixed << std::setprecision(2) << measuredFps << " fps of expected " << fps << " fps";
+          if (!statusInfo.lowFrameRate && measuredFps < 0.9f * fps)
+          {
+            statusInfo.lowFrameRate = true;
+            rateEvent = "Warning: Low data rate: " + msg.str();
+          }
+          else if (statusInfo.lowFrameRate && measuredFps >= 0.95f * fps)
+          {
+            statusInfo.lowFrameRate = false;
+            rateEvent = "Data rate recovered: " + msg.str();
+          }
           statusInfo.measuredFps = measuredFps;
           if (clockOffset100ns != INT64_MIN)
           {
@@ -334,6 +376,8 @@ void FrameProcessor::processFrames()
           }
         }
       }
+      if (!rateEvent.empty())
+        SystemEventQueue::push("fproc", rateEvent);
 
       // The video review app may have trouble reading the last video frame when there is not a multiple of gop_size frames
       // Exact cause unknown.

@@ -2,7 +2,12 @@ import { ReactNode } from 'react';
 import { Box, ButtonBase, Stack, Tooltip } from '@mui/material';
 import { useRecordingProps } from '../recorder/RecorderData';
 import { useCameraList } from '../recorder/CameraMonitor';
-import { formatLag, Tone, useSignalStats } from '../recorder/SignalHealth';
+import {
+  formatBytes,
+  formatLag,
+  Tone,
+  useSignalStats,
+} from '../recorder/SignalHealth';
 import { useSelectedPage } from '../pages/SelectedPage';
 
 const toneColor = (tone: Tone) => (tone ? `${tone}.main` : 'text.secondary');
@@ -82,9 +87,17 @@ export const StatusBar = () => {
         {stats.recording && stats.width > 0 && (
           <>
             <Stat>{`${stats.width}×${stats.height}${cropText}`}</Stat>
-            <Tooltip title="Actual (from camera timestamps) / target frame rate">
+            <Tooltip
+              title={`Actual (from camera timestamps) / target frame rate${stats.lowFrameRate ? ': low data rate, frames are being lost' : ''}`}
+            >
               <span>
-                <Stat tone={stats.fpsOff ? 'warning' : undefined}>
+                <Stat
+                  tone={
+                    (stats.lowFrameRate && 'error') ||
+                    (stats.fpsOff && 'warning') ||
+                    undefined
+                  }
+                >
                   {stats.measuredFps
                     ? `${stats.measuredFps.toFixed(2)} / ${stats.fps.toFixed(2)} fps`
                     : `${stats.fps.toFixed(2)} fps`}
@@ -113,6 +126,17 @@ export const StatusBar = () => {
             <span>
               <Stat tone={stats.clockOff ? 'error' : undefined}>
                 {`lag ${formatLag(stats.arrivalLag)}`}
+              </Stat>
+            </span>
+          </Tooltip>
+        )}
+        {stats.diskUsage && (
+          <Tooltip
+            title={`Recording disk: ${formatBytes(stats.diskUsage.freeBytes)} free of ${formatBytes(stats.diskUsage.totalBytes)}`}
+          >
+            <span>
+              <Stat tone={stats.diskFull ? 'error' : undefined}>
+                {`disk ${Math.round(stats.diskUsage.usedPercent)}%`}
               </Stat>
             </span>
           </Tooltip>

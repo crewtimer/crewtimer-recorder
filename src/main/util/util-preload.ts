@@ -23,6 +23,13 @@ export interface DirListReturn {
   error: string;
   files: string[];
 }
+
+export interface DiskUsage {
+  error: string;
+  totalBytes: number;
+  freeBytes: number;
+  usedPercent: number;
+}
 // Function to open the file dialog and return the selected file path as a promise
 export function openFileDialog(): Promise<OpenFileReturn> {
   return new Promise((resolve) => {
@@ -72,6 +79,31 @@ export function openLogFolder(): Promise<void> {
   });
 }
 
+export function multicastSend(msg: object): Promise<void> {
+  return new Promise((resolve) => {
+    ipcRenderer
+      .invoke('mcast-send', msg)
+      .then(() => resolve())
+      .catch(() => resolve());
+  });
+}
+
+export function getDiskUsage(folder: string): Promise<DiskUsage> {
+  return new Promise((resolve) => {
+    ipcRenderer
+      .invoke('get-disk-usage', folder)
+      .then((result) => resolve(result))
+      .catch((err) =>
+        resolve({
+          error: String(err),
+          totalBytes: 0,
+          freeBytes: 0,
+          usedPercent: 0,
+        }),
+      );
+  });
+}
+
 // Function to get the files in a directory and return them as a promise
 export function getFilesInDirectory(dirPath: string): Promise<DirListReturn> {
   // console.log('Executing getFiles in dir preload');
@@ -104,6 +136,8 @@ contextBridge.exposeInMainWorld('Util', {
   openDirDialog,
   openFileExplorer,
   openLogFolder,
+  multicastSend,
+  getDiskUsage,
   deleteFile,
   getDocumentsFolder,
   onNativeMessage: (

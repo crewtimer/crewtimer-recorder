@@ -4,6 +4,7 @@ import { alpha } from '@mui/material/styles';
 import { monoFont, Panel } from '../components/Panel';
 import {
   useCameraTimeSample,
+  useRecordingDiskUsage,
   useRecordingStatus,
   useSystemLog,
 } from './RecorderData';
@@ -13,6 +14,15 @@ import { RecordingLogEntry } from './RecorderTypes';
 
 // FrameProcessor discards its queue beyond this many frames
 const MAX_BACKLOG = 500;
+// Recording disk usage at which to warn; matches CrewTimer Video Review
+export const DISK_WARN_PERCENT = 85;
+// A running reader with no video frame for this long is not connected
+const FRAME_ARRIVAL_TIMEOUT_MS = 3000;
+
+export const formatBytes = (bytes: number) =>
+  bytes >= 1e12
+    ? `${(bytes / 1e12).toFixed(1)} TB`
+    : `${Math.round(bytes / 1e9)} GB`;
 
 export type Tone = 'success' | 'warning' | 'error' | undefined;
 
@@ -73,6 +83,7 @@ export const useSignalStats = () => {
   const [status] = useRecordingStatus();
   const [timeSample] = useCameraTimeSample();
   const [log] = useSystemLog();
+  const [disk] = useRecordingDiskUsage();
 
   const {
     fps,
@@ -82,6 +93,8 @@ export const useSignalStats = () => {
     frameBacklog,
     width,
     height,
+    filename,
+    lowFrameRate,
   } = status.frameProcessor;
   // More than 1% off the camera's declared rate means frames are missing or extra
   const fpsOff = measuredFps > 0 && Math.abs(measuredFps - fps) > 0.01 * fps;
@@ -104,12 +117,26 @@ export const useSignalStats = () => {
   let backlogTone: Tone = 'success';
   if (frameBacklog > 200) backlogTone = 'error';
   else if (frameBacklog > 100) backlogTone = 'warning';
+  const diskUsage = disk && !disk.error ? disk : undefined;
+  // Whether video is actually arriving; discovery stops while recording, so
+  // the camera list alone would miss a camera that drops mid-recording
+  const connected =
+    status.readerRunning &&
+    Date.now() - status.lastFrameArrivalMilli < FRAME_ARRIVAL_TIMEOUT_MS;
+  // Compare the rounded value so the percentage shown and its colour agree
+  const diskFull =
+    !!diskUsage && Math.round(diskUsage.usedPercent) >= DISK_WARN_PERCENT;
 
   return {
     recording: status.recording,
+    connected,
+    filename,
     fps,
     measuredFps,
     fpsOff,
+    lowFrameRate,
+    diskUsage,
+    diskFull,
     width,
     height,
     frameBacklog,
@@ -137,6 +164,7 @@ export const SignalHealth = ({ connected }: { connected: boolean }) => {
     arrivalLag,
     offsetAtArrival,
     clockOff,
+    lowFrameRate,
   } = useSignalStats();
 
   if (!connected) {
@@ -179,9 +207,11 @@ export const SignalHealth = ({ connected }: { connected: boolean }) => {
           label="Frame rate (actual)"
           value={recording && measuredFps ? measuredFps.toFixed(2) : '—'}
           note={
-            recording && fps ? `target ${fps.toFixed(2)}` : 'while recording'
+            recording && fps
+              ? `${lowFrameRate ? 'low data rate, ' : ''}target ${fps.toFixed(2)}`
+              : 'while recording'
           }
-          tone={fpsOff ? 'warning' : undefined}
+          tone={(lowFrameRate && 'error') || (fpsOff && 'warning') || undefined}
         />
         <Metric
           label="Arrival lag"

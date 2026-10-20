@@ -2,6 +2,7 @@ import { IpcRendererEvent } from 'electron';
 import {
   CloseFileReturn,
   DirListReturn,
+  DiskUsage,
   OpenDirReturn,
   OpenFileReturn,
 } from '../../main/util/util-preload';
@@ -16,6 +17,8 @@ declare global {
       openDirDialog(title: string, defaultPath: string): Promise<OpenDirReturn>;
       openFileExplorer(path: string): Promise<void>;
       openLogFolder(): Promise<void>;
+      multicastSend(msg: object): Promise<void>;
+      getDiskUsage(folder: string): Promise<DiskUsage>;
       getFilesInDirectory(dirPath: string): Promise<DirListReturn>;
       deleteFile(filename: string): Promise<CloseFileReturn>;
       getDocumentsFolder(): Promise<string>;
