@@ -56,10 +56,20 @@ if (process.platform === 'win32') {
   os.setPriority(os.constants.priority.PRIORITY_ABOVE_NORMAL);
 }
 
-// Create a write stream (in append mode)
+// Keep the previous session's log, then start a fresh one.  The native
+// recorder writes to the same file, so both writers must append; a plain
+// write stream overwrites the native output at its own file offset.
 const logFilePath = path.join(app.getPath('userData'), 'applog.txt');
+const prevLogFilePath = path.join(app.getPath('userData'), 'applog.prev.txt');
+try {
+  require('fs').renameSync(logFilePath, prevLogFilePath);
+} catch {
+  // No log from a previous session
+}
 console.log(`Logging to ${logFilePath}`);
-const logStream = require('fs').createWriteStream(logFilePath);
+const logStream = require('fs').createWriteStream(logFilePath, {
+  flags: 'a',
+});
 
 // Redirect console.log to the log file
 console.log = (...args) => {

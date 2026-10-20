@@ -165,6 +165,12 @@ const RecordingLogTable: React.FC = () => {
           <Button variant="outlined" onClick={handleCopy}>
             Copy for support
           </Button>
+          <Button
+            variant="outlined"
+            onClick={() => window.Util.openLogFolder()}
+          >
+            Open log folder
+          </Button>
           <Button variant="outlined" color="inherit" onClick={handleClearLogs}>
             Clear
           </Button>

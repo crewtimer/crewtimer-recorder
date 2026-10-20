@@ -102,3 +102,8 @@ function openFileExplorer(folderPath: string) {
 ipcMain.handle('open-file-explorer', (_event, dirPath) => {
   openFileExplorer(dirPath);
 });
+
+// applog.txt and applog.prev.txt are written to the user data folder
+ipcMain.handle('open-log-folder', () => {
+  openFileExplorer(app.getPath('userData'));
+});

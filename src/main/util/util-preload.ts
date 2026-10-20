@@ -63,6 +63,15 @@ export function openFileExplorer(path: string): Promise<void> {
   });
 }
 
+export function openLogFolder(): Promise<void> {
+  return new Promise((resolve) => {
+    ipcRenderer
+      .invoke('open-log-folder')
+      .then((result) => resolve(result))
+      .catch(() => resolve());
+  });
+}
+
 // Function to get the files in a directory and return them as a promise
 export function getFilesInDirectory(dirPath: string): Promise<DirListReturn> {
   // console.log('Executing getFiles in dir preload');
@@ -94,6 +103,7 @@ contextBridge.exposeInMainWorld('Util', {
   openFileDialog,
   openDirDialog,
   openFileExplorer,
+  openLogFolder,
   deleteFile,
   getDocumentsFolder,
   onNativeMessage: (
