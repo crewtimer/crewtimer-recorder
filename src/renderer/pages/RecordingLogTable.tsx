@@ -31,7 +31,7 @@ const levelColor: Record<Level, string> = {
 
 /** Frame gaps and timestamp problems reported by the NDI/SRT readers and encoder. */
 export const isGapEvent = (entry: RecordingLogEntry) =>
-  /Gap=|Duplicate frame timestamp|Timestamp discontinuity|timestamps must increase/.test(
+  /Gap=|Duplicate frame timestamp|Timestamp discontinuity|Timestamp stepped back|Timestamp jumped forward|Timestamps behind|timestamps must increase/.test(
     entry.message,
   );
 

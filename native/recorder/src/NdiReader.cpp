@@ -332,7 +332,7 @@ class NdiReader : public VideoReader
         break;
       // No data
       case NDIlib_frame_type_none:
-        SystemEventQueue::push("NDI", "Disconnected: " + srcName);
+        SystemEventQueue::push("NDI", "Warning: Disconnected: " + srcName);
         ndiRecv = nullptr;
         clockSteps = ClockStepDetector();
         break;

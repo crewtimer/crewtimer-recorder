@@ -18,7 +18,7 @@ void initialize_sockets()
   WSADATA wsaData;
   if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0)
   {
-    SystemEventQueue::push("mcast", "WSAStartup failed.");
+    SystemEventQueue::push("mcast", "Error: WSAStartup failed.");
   }
 }
 

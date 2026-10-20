@@ -498,7 +498,7 @@ void FrameProcessor::processFrames()
       if (frameQueue.size() > 500)
       {
         SystemEventQueue::instance().push(
-            "fproc", "Frame queue overflow, discarding frames");
+            "fproc", "Error: Frame queue overflow, discarding frames");
         frameQueue = std::queue<FramePtr>();
       }
     }

@@ -62,7 +62,7 @@ public:
           return false;
         if (cfg_.max_retries >= 0 && attempt >= cfg_.max_retries)
         {
-          SystemEventQueue::push("SRT", "[SRT] Reconnect: reached max attempts");
+          SystemEventQueue::push("SRT", "Error: [SRT] Reconnect: reached max attempts");
           return false;
         }
         // Backoff before retry
@@ -132,7 +132,7 @@ public:
       }
 
       // EOF or I/O errors -> attempt reconnect
-      SystemEventQueue::push("SRT", std::string("[SRT] read error ") + std::to_string(ret) + " (" + av_err2str2(ret) + "), reconnecting...");
+      SystemEventQueue::push("SRT", std::string("Error: [SRT] read error ") + std::to_string(ret) + " (" + av_err2str2(ret) + "), reconnecting...");
 
       // Notify once immediately that we've detected a disconnect and are attempting reconnect.
       if (onDisconnect_ && !disconnectNotified_.exchange(true))

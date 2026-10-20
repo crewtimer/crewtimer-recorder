@@ -211,7 +211,7 @@ class SrtReader : public VideoReader
     // Register disconnect callback so higher layers can react (emit a SOURCE_DISCONNECTED frame)
     reader->setDisconnectCallback([this]()
                                   {
-      SystemEventQueue::push("SRT", "Disconnected: " + url);
+      SystemEventQueue::push("SRT", "Warning: Disconnected: " + url);
       if (addFrameFunction)
       {
         auto f = std::make_shared<Frame>();

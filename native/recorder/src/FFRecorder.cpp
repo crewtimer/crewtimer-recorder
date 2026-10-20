@@ -142,7 +142,7 @@ public:
     avformat_alloc_output_context2(&pFormatCtx, NULL, NULL, tmpFile.c_str());
     if (!pFormatCtx)
     {
-      const auto msg = "Could not deduce output format from file extension: "
+      const auto msg = "Warning: Could not deduce output format from file extension: "
                        "using MPEG.";
       SystemEventQueue::push("ffmpeg", msg);
       avformat_alloc_output_context2(&pFormatCtx, NULL, "mpeg",
@@ -150,7 +150,7 @@ public:
     }
     if (!pFormatCtx)
     {
-      auto msg = "Could not allocate format context";
+      auto msg = "Error: Could not allocate format context";
       SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
@@ -310,7 +310,7 @@ public:
     if (openResult < 0 && codecName == "h264_mf")
     {
       // No usable hardware MFT; fall back to Microsoft's software encoder.
-      SystemEventQueue::push("ffmpeg", "Hardware h264_mf unavailable, using software encoder");
+      SystemEventQueue::push("ffmpeg", "Warning: Hardware h264_mf unavailable, using software encoder");
       av_dict_free(&codec_options);
       avcodec_free_context(&pCodecCtx);
       pCodecCtx = allocCodecContext();
