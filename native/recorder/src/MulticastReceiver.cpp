@@ -146,6 +146,17 @@ void MulticastReceiver::listen()
       sleepBeforeRetry();
       continue;
     }
+#ifdef SO_REUSEPORT
+    // On macOS and BSD a second listener on this port (e.g. CrewTimer Video
+    // Review on the same PC, whose Node socket sets SO_REUSEPORT) can bind only
+    // if every socket on the port sets SO_REUSEPORT.
+    if (setsockopt(newSock, SOL_SOCKET, SO_REUSEPORT, (char *)&reuse,
+                   sizeof(reuse)) < 0)
+    {
+      pushStatus(std::string("Warning: Setting SO_REUSEPORT error: ") +
+                 strerror(errno));
+    }
+#endif
 
     struct sockaddr_in localSock;
     memset(&localSock, 0, sizeof(localSock));
