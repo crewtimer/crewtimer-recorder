@@ -404,11 +404,7 @@ class NdiReader : public VideoReader
             }
             std::cerr << message.str() << std::endl;
 
-            if ((lastTS != 0 && deltaMs >= 110) || reportAllGaps)
-            {
-              const auto errmsg = std::string("Error: ") + message.str();
-              SystemEventQueue::push("NDI", errmsg);
-            }
+            SystemEventQueue::push("NDI", std::string("Error: ") + message.str());
           }
 
           const auto step = clockSteps.addFrame(video_frame.timestamp, now100ns);

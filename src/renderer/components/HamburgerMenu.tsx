@@ -5,23 +5,17 @@ import InfoIcon from '@mui/icons-material/Info';
 import HelpIcon from '@mui/icons-material/Help';
 import CameraIcon from '@mui/icons-material/Camera';
 import SecurityIcon from '@mui/icons-material/Security';
-import Visibility from '@mui/icons-material/Visibility';
-import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import SettingsBrightnessIcon from '@mui/icons-material/SettingsBrightness';
 import QueryStatsIcon from '@mui/icons-material/QueryStats';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
-import { Divider, IconButton, ListItemIcon, ListItemText } from '@mui/material';
+import { IconButton, ListItemIcon, ListItemText } from '@mui/material';
 import { useSelectedPage } from '../pages/SelectedPage';
 import { setToast } from './Toast';
 import { useViscaIP } from '../visca/ViscaState';
-import {
-  useNerdMode,
-  useRecordingPropsPending,
-  useReportAllGaps,
-} from '../recorder/RecorderData';
+import { useNerdMode } from '../recorder/RecorderData';
 import { openNagScreen } from './NagScreen';
 import { UseStoredDatum } from '../store/UseElectronDatum';
 
@@ -44,16 +38,12 @@ const themeModeIcon = {
 const HamburgerMenu = () => {
   const [, setSelectedPage] = useSelectedPage();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [reportAllGaps, setReportAllGaps] = useReportAllGaps();
-  const [, setRecordingPropsPending] = useRecordingPropsPending();
   const [viscaIP] = useViscaIP();
   const [themeMode, setThemeMode] = useThemeMode();
   const [nerdMode, setNerdMode] = useNerdMode();
-  const [shiftMenu, setShiftMenu] = useState(false);
   const open = Boolean(anchorEl);
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);
-    setShiftMenu(event.shiftKey);
   };
   const handleClose = () => {
     setAnchorEl(null);
@@ -150,27 +140,6 @@ const HamburgerMenu = () => {
           </ListItemIcon>
           <ListItemText primary="About" />
         </MenuItem>
-        {shiftMenu && <Divider />}
-        {shiftMenu && (
-          <MenuItem
-            onClick={() =>
-              setReportAllGaps((prior) => {
-                setRecordingPropsPending(true);
-                handleClose();
-                return !prior;
-              })
-            }
-          >
-            <ListItemIcon>
-              {reportAllGaps ? (
-                <Visibility fontSize="small" />
-              ) : (
-                <VisibilityOff fontSize="small" />
-              )}
-            </ListItemIcon>
-            <ListItemText primary="Report All Gaps" />
-          </MenuItem>
-        )}
       </Menu>
     </div>
   );

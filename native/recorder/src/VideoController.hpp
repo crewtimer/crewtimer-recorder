@@ -145,15 +145,10 @@ private:
   }
 
   std::string startReader(const VideoReader::CameraInfo &camera,
-                          const std::string &protocol,
-                          const bool reportAllGaps)
+                          const std::string &protocol)
   {
     if (readerRunning && activeProtocol == protocol && activeSourceName == camera.name)
     {
-      if (videoReader)
-      {
-        videoReader->setProperties(reportAllGaps);
-      }
       return "";
     }
 
@@ -178,7 +173,6 @@ private:
       lastPreviewFrame = nullptr;
     }
 
-    videoReader->setProperties(reportAllGaps);
     lastFrameArrivalMilli = 0;
     err = videoReader->start(camera, [this](FramePtr frame)
                              {
@@ -437,7 +431,6 @@ public:
                     const FrameProcessor::FRectangle cropArea,
                     const FrameProcessor::Guide guide,
                     const int rotation,
-                    const bool reportAllGaps,
                     const int recordingQuality = 80)
   {
     std::lock_guard<std::recursive_mutex> lock(controlMutex);
@@ -506,7 +499,7 @@ public:
       frameProcessor = processor;
     }
 
-    retval = startReader(camera, protocol, reportAllGaps);
+    retval = startReader(camera, protocol);
     if (!retval.empty())
     {
       {
@@ -583,7 +576,7 @@ public:
     }
 
     previewRequested = true;
-    return startReader(camera, protocol, false);
+    return startReader(camera, protocol);
   }
 
   std::string stopPreview()

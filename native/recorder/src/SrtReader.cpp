@@ -898,8 +898,7 @@ class SrtReader : public VideoReader
                 msg << "Gap=" << deltaMs << "ms (" << framesMissing << " frames missing)" << " assuming " << msPerFrame << "ms/frame";
               }
               std::cerr << msg.str() << std::endl;
-              if ((deltaMs >= 110) || reportAllGaps)
-                SystemEventQueue::push("SRT", std::string("Warning: ") + msg.str());
+              SystemEventQueue::push("SRT", std::string("Warning: ") + msg.str());
             }
           }
 

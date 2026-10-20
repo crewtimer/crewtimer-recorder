@@ -63,11 +63,6 @@ export const [useSystemLog, setSystemLog, getSystemLog] = UseDatum<
   RecordingLogEntry[]
 >([]);
 
-export const [useReportAllGaps, , getReportAllGaps] = UseStoredDatum(
-  'reportAllGaps',
-  false,
-);
-
 /** Shows the signal health panel on the Recorder tab. */
 export const [useNerdMode] = UseStoredDatum('nerdMode', false);
 

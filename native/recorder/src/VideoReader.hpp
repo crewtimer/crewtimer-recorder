@@ -7,9 +7,6 @@
 
 class VideoReader
 {
-protected:
-  bool reportAllGaps = false;
-
 public:
   using AddFrameFunction = std::function<void(FramePtr)>;
   typedef struct CameraInfo
@@ -36,10 +33,6 @@ public:
   virtual std::string start(const CameraInfo &camera,
                             AddFrameFunction addFrameFunction) = 0;
   virtual std::string stop() = 0;
-  virtual void setProperties(bool reportAllGaps)
-  {
-    this->reportAllGaps = reportAllGaps;
-  }
   virtual std::vector<CameraInfo> getCameraList()
   {
     return std::vector<CameraInfo>();

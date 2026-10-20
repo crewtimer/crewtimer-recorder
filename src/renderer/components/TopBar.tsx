@@ -1,14 +1,4 @@
-import {
-  Typography,
-  Box,
-  Button,
-  Stack,
-  Link,
-  Tooltip,
-  Tabs,
-  Tab,
-} from '@mui/material';
-import Visibility from '@mui/icons-material/Visibility';
+import { Typography, Box, Button, Stack, Link, Tabs, Tab } from '@mui/material';
 import logo from '../../../assets/icons/64x64.png';
 import HamburgerMenu from './HamburgerMenu';
 import RecordingStatus from '../recorder/RecordingStatus';
@@ -16,7 +6,7 @@ import { useFirebaseDatum } from '../util/UseFirebase';
 import { setDialogConfig } from './ConfirmDialog';
 import { StartButton } from './StartButton';
 import { DiskStatus } from './DiskStatus';
-import { useRecordingProps, useReportAllGaps } from '../recorder/RecorderData';
+import { useRecordingProps } from '../recorder/RecorderData';
 import { SETTINGS_PAGES, useSelectedPage } from '../pages/SelectedPage';
 
 const RELEASES_URL =
@@ -29,7 +19,6 @@ const versionAsNumber = (version: string) => {
 
 export function TopBar() {
   const [page, setSelectedPage] = useSelectedPage();
-  const [reportAllGaps] = useReportAllGaps();
   const [{ waypoint }] = useRecordingProps();
   const latestVersion =
     useFirebaseDatum<string, string>(
@@ -123,11 +112,6 @@ export function TopBar() {
             >
               Update available
             </Button>
-          )}
-          {reportAllGaps && (
-            <Tooltip title="All recording gaps reported as errors">
-              <Visibility fontSize="small" color="action" />
-            </Tooltip>
           )}
           <DiskStatus />
           <StartButton />

@@ -15,7 +15,6 @@ import {
   getGuide,
   getIsRecording,
   getRecordingProps,
-  getReportAllGaps,
   getSystemLog,
   getWaypointList,
   setFrameGrab,
@@ -49,7 +48,6 @@ export const startRecording = () => {
         ...recordingProps,
         cropArea,
         guide,
-        reportAllGaps: getReportAllGaps(),
       },
     })
     .catch((e) => {

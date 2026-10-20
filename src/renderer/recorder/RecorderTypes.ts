@@ -52,7 +52,6 @@ export interface StartRecorderMessage extends RecorderMessage {
     networkCamera: string;
     cropArea: Rect;
     guide: { pt1: number; pt2: number };
-    reportAllGaps?: boolean;
     rotation: -180 | -90 | 0 | 90;
   };
 }

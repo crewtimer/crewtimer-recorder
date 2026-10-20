@@ -282,11 +282,6 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
           return ret;
         }
       }
-      bool reportAllGaps = false;
-      if (props.Has("reportAllGaps"))
-      {
-        reportAllGaps = props.Get("reportAllGaps").As<Napi::Boolean>();
-      }
       auto protocol = getNapiStringField(props, "protocol", "SRT");
       const int rotation = props.Has("rotation")
                                ? props.Get("rotation").As<Napi::Number>().Int32Value()
@@ -335,7 +330,7 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
       guide.pt2 = guideObj.Get("pt2").As<Napi::Number>().FloatValue();
 
       auto result = videoController->start(networkCamera, protocol, "ffmpeg", folder, prefix,
-                                           interval, cropRect, guide, rotation, reportAllGaps, recordingQuality);
+                                           interval, cropRect, guide, rotation, recordingQuality);
       if (!result.empty())
       {
         std::cerr << "Error: " << result << std::endl;
