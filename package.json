@@ -50,10 +50,8 @@
     "start:preload": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack --config ./.erb/configs/webpack.config.preload.dev.ts",
     "start:renderer": "cross-env NODE_ENV=development TS_NODE_TRANSPILE_ONLY=true webpack serve --config ./.erb/configs/webpack.config.renderer.dev.ts",
     "test": "jest",
-    "install:native:win": "cd release/app/node_modules/crewtimer_video_recorder && node ../prebuild-install/bin.js --verbose --force --runtime napi --platform win32 --arch x64",
+    "install:native:win": "cd release/app/node_modules/crewtimer_video_recorder && node ../prebuild-install/bin.js --verbose --force --runtime napi --platform win32 --arch x64 --local-prebuilds ../../../../native/recorder/prebuilds --token=",
     "build:win": "npm run build && npm run install:native:win && node_modules/.bin/electron-builder --win --x64 --config.npmRebuild=false",
-    "install:native:win:local": "cd release/app/node_modules/crewtimer_video_recorder && node ../prebuild-install/bin.js --verbose --force --runtime napi --platform win32 --arch x64 --local-prebuilds ../../../../native/recorder/prebuilds --token=",
-    "build:win:local": "npm run build && npm run install:native:win:local && node_modules/.bin/electron-builder --win --x64 --config.npmRebuild=false",
     "build:mac": "npm run build && npm run build:native:mac && APPLE_KEYCHAIN_PROFILE=crewtimer-app-signing node_modules/.bin/electron-builder --mac --arm64",
     "kill": "kill -9 `lsof -i:1213 -t`",
     "build:native": "cd release/app && yarn add ../../native/recorder",
@@ -61,7 +59,7 @@
     "cleanbasic": "ts-node ./.erb/scripts/clean.js && rm -rf release/build",
     "build:release": "yarn clean && yarn build && yarn build:mac && yarn build:win && open release/build",
     "build:publish": "ts-node ./.erb/scripts/publish-build-artifacts.js",
-    "clean": "rm -rf .erb/node_modules .erb/dll node_modules src/node_modules release/build release/app/node_modules native/recorder/prebuilds native/recorder/build && yarn install"
+    "clean": "rm -rf .erb/node_modules .erb/dll node_modules src/node_modules release/build release/app/node_modules native/recorder/build && yarn install"
   },
   "browserslist": [
     "extends browserslist-config-erb"
