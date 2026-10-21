@@ -33,6 +33,12 @@ A unix like environment is needed to build ffmpeg and opencv.  Cygwin is used to
 
 Either check out the git repo or if in a Macos Parallels Desktop, map a network drive to share the git repo.
 
+When the repo is shared with the Mac, run `yarn install` in `native/recorder` on the Mac
+only. Its `node_modules` holds only JavaScript tools, and the build scripts run them
+through `node` rather than the `node_modules/.bin` shims, so Windows builds use the same
+install. Running `yarn install` on Windows would reinstall everything for Windows and
+leave the Mac needing another install.
+
 In windows explorer, navigate to the scripts/ folder and double click on the Cygwin-vstudio.bat file.  This will open a bash terminal with the visual studio tools available from the command line.
 
 #### Alternative: Git Bash + MSVC (no Cygwin)
@@ -70,8 +76,8 @@ To build the module locally and use it in the app (instead of the downloaded pre
 
 ```bash
 cd native/recorder
-yarn install --ignore-scripts      # the install script would fetch the prebuild
-npx node-gyp rebuild --arch=x64
+yarn install --ignore-scripts      # skip if the Mac has installed node_modules; the install script would fetch the prebuild
+node node_modules/node-gyp/bin/node-gyp.js rebuild --arch=x64
 cp build/Release/crewtimer_video_recorder.node \
    ../../release/app/node_modules/crewtimer_video_recorder/build/Release/
 cd ../..
@@ -79,24 +85,24 @@ npm run build
 node_modules/.bin/electron-builder --win --x64 --config.npmRebuild=false
 ```
 
-`yarn build:win` is not used here because its `install:native:win` step downloads the
-prebuild over the local module.
+`yarn build:win` is not used here because its `install:native:win` step installs a
+prebuild tarball over the module just built.
 
 When the Mac and Windows machines share this checkout, the Windows module can be built
 on Windows and packaged from the Mac without going through GitHub:
 
 ```bash
-# Windows, in native/recorder: build the prebuild tarball but never upload it
-yarn install --ignore-scripts
+# Windows, in native/recorder: build the prebuild tarball but never upload it,
+# using the node_modules installed on the Mac
 yarn build:win:local   # -> prebuilds/crewtimer_video_recorder-v<version>-napi-v6-win32-x64.tar.gz
 
-# Mac, at the repo root: package Windows using that tarball
-yarn build:win:local
+# Mac, at the repo root: package Windows (also run by yarn build:release)
+yarn build:win
 ```
 
-The Mac step uses the tarball in `native/recorder/prebuilds` when one matches the module
-version and otherwise downloads the GitHub prebuild; its log says which (`found local
-prebuild`). Delete the tarball when you want the published prebuild again.
+`yarn build:win` uses the tarball in `native/recorder/prebuilds` when one matches the
+module version and otherwise downloads the GitHub prebuild; its log says which (`found
+local prebuild`). Delete the tarball when you want the published prebuild again.
 
 ## Building the prebuilt binary
 
@@ -119,7 +125,7 @@ cd crewtimer-video-review/native/ffreader
 Build the module and upload to github:
 
 ```bash
-yarn install
+yarn install   # on the Mac; Windows sharing the repo uses the Mac's install
 yarn build:mac # if mac
 yarn build:win # if windows
 ```

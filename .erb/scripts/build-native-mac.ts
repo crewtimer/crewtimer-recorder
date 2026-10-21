@@ -6,7 +6,15 @@ import path from 'path';
 import webpackPaths from '../configs/webpack.paths';
 
 const nativeDir = path.join(webpackPaths.rootPath, 'native', 'recorder');
-const nodeGyp = path.join(nativeDir, 'node_modules', '.bin', 'node-gyp');
+// Run through node, not node_modules/.bin, whose shims differ between the Mac
+// and Windows installs of the shared native/recorder folder
+const nodeGyp = path.join(
+  nativeDir,
+  'node_modules',
+  'node-gyp',
+  'bin',
+  'node-gyp.js',
+);
 const moduleFile = path.join(
   'build',
   'Release',
@@ -42,7 +50,10 @@ const isMacArm64 = (file: string) => {
 // same checkout, and the NDI SDK path's spaces break make's incremental
 // dependency files on macOS. A full build only takes a few seconds longer.
 console.log('Rebuilding native recorder...');
-execSync(`"${nodeGyp}" rebuild`, { cwd: nativeDir, stdio: 'inherit' });
+execSync(`"${process.execPath}" "${nodeGyp}" rebuild`, {
+  cwd: nativeDir,
+  stdio: 'inherit',
+});
 
 if (!isMacArm64(built)) {
   throw new Error(`${built} is not a macOS arm64 module`);

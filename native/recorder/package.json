@@ -7,17 +7,17 @@
   "scripts": {
     "install": "prebuild-install --verbose -r napi || node-gyp rebuild",
     "xinstall-prebuild": "prebuild-install --verbose -r napi",
-    "prebuild": "prebuild --tag module --verbose --runtime napi --all --verbose",
+    "prebuild": "node node_modules/prebuild/bin.js --tag module --verbose --runtime napi --all --verbose",
     "pushrelease": "rm -rf node_modules build prebuilds yarn.lock && yarn install && yarn prebuild",
-    "rebuild": "node-gyp rebuild",
-    "uploadall": "prebuild --tag module --verbose --upload-all",
-    "upload": "prebuild --tag module --verbose --runtime napi",
-    "build": "node-gyp rebuild",
+    "rebuild": "node node_modules/node-gyp/bin/node-gyp.js rebuild",
+    "uploadall": "node node_modules/prebuild/bin.js --tag module --verbose --upload-all",
+    "upload": "node node_modules/prebuild/bin.js --tag module --verbose --runtime napi",
+    "build": "node node_modules/node-gyp/bin/node-gyp.js rebuild",
     "testrebuild": "echo 'Building recorder' && mkdir -p ./release/Build &&cp ../../../../native/recorder/prebuilds/build/Release/crewtimer_video_recorder.node ./release/Build",
-    "build:mac-arm": "prebuild --prerelease --napi --napi-version 6 --runtime napi --arch arm64 --platform darwin",
+    "build:mac-arm": "node node_modules/prebuild/bin.js --prerelease --napi --napi-version 6 --runtime napi --arch arm64 --platform darwin",
     "build:mac": "yarn build:mac-arm",
-    "build:win": "prebuild --napi --napi-version 6 --runtime napi --arch=x64 --platform win32",
-    "build:win:local": "prebuild --napi --napi-version 6 --runtime napi --arch=x64 --platform win32 --no-upload --no-upload-all",
+    "build:win": "node node_modules/prebuild/bin.js --napi --napi-version 6 --runtime napi --arch=x64 --platform win32",
+    "build:win:local": "node node_modules/prebuild/bin.js --napi --napi-version 6 --runtime napi --arch=x64 --platform win32 --no-upload --no-upload-all",
     "build:ffmpeg": "bash ./scripts/build-ffmpeg.sh",
     "rebuild:ffmpeg": "find lib-build -name libswscale.a -exec rm {} \\; && yarn build:ffmpeg",
     "clean": "rm -rf node_modules yarn.lock prebuilds build",
@@ -28,15 +28,14 @@
   "license": "ISC",
   "devDependencies": {
     "@types/node": "^22.9.1",
-    "electron": "^33.2.0",
     "node-addon-api": "^8.2.2",
     "node-gyp": "^10.2.0",
     "prebuild": "^13.0.1",
     "typescript": "^5.6.3"
   },
   "dependencies": {
-    "prebuild-install": "^7.1.3",
     "bindings": "^1.5.0",
+    "prebuild-install": "^7.1.3",
     "tar": "^7.4.3"
   },
   "binary": {
