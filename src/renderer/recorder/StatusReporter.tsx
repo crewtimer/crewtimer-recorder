@@ -9,7 +9,7 @@ import { addSystemEvent } from './RecorderApi';
 import { DISK_WARN_PERCENT, formatBytes, useSignalStats } from './SignalHealth';
 
 const STATUS_INTERVAL_MS = 60 * 1000;
-const DISK_POLL_MS = 30 * 1000;
+const DISK_POLL_MS = 60 * 1000;
 
 /**
  * Polls recording disk usage and multicasts a status report every minute.
