@@ -2873,10 +2873,12 @@
   dependencies:
     undici-types "~7.19.0"
 
-"@types/node@20.6.2":
-  version "20.6.2"
-  resolved "https://registry.yarnpkg.com/@types/node/-/node-20.6.2.tgz#a065925409f59657022e9063275cd0b9bd7e1b12"
-  integrity sha512-Y+/1vGBHV/cYk6OI1Na/LHzwnlNCAfU3ZNGrc1LdRe/LAIbdDPTTv/HU3M7yXN448aTVDq3eKRm2cg7iKLb8gw==
+"@types/node@^22":
+  version "22.20.5"
+  resolved "https://registry.yarnpkg.com/@types/node/-/node-22.20.5.tgz#afa7bde6da81b8b83ea4e2f020487e9b148c11fd"
+  integrity sha512-U2+DNr+wSjpsTS/wZGYHq7GcwfuSmKiKvoPvK22zwTlRhU91yOniN4qRR5KhIjvif7ysw/dz/hKmfDH0Ris4aA==
+  dependencies:
+    undici-types "~6.21.0"
 
 "@types/node@^24.9.0":
   version "24.13.3"
@@ -2929,14 +2931,7 @@
   resolved "https://registry.yarnpkg.com/@types/react-transition-group/-/react-transition-group-4.4.12.tgz#b5d76568485b02a307238270bfe96cb51ee2a044"
   integrity sha512-8TV6R3h2j7a91c+1DXdJi3Syo69zzIZbz7Lg5tORM5LEJG7X/E6a1V3drRyBRZq7/utz7A+c4OgYLiLcYGHG6w==
 
-"@types/react@*":
-  version "19.2.14"
-  resolved "https://registry.yarnpkg.com/@types/react/-/react-19.2.14.tgz#39604929b5e3957e3a6fa0001dafb17c7af70bad"
-  integrity sha512-ilcTH/UniCkMdtexkoCN0bI7pMcJDvmQFPvuPvmEaYA/NSfFTAgdUSLAoVjaRJm7+6PvcM+q1zYOwS4wTYMF9w==
-  dependencies:
-    csstype "^3.2.2"
-
-"@types/react@^18", "@types/react@^18.2.21":
+"@types/react@*", "@types/react@18.3.28", "@types/react@^18", "@types/react@^18.2.21":
   version "18.3.28"
   resolved "https://registry.yarnpkg.com/@types/react/-/react-18.3.28.tgz#0a85b1a7243b4258d9f626f43797ba18eb5f8781"
   integrity sha512-z9VXpC7MWrhfWipitjNdgCauoMLRdIILQsAEV+ZesIzBq/oUlxk0m3ApZuMFCXdnS4U7KrI+l3WRUEGQ8K1QKw==
@@ -11835,6 +11830,11 @@ unbox-primitive@^1.1.0:
     has-bigints "^1.0.2"
     has-symbols "^1.1.0"
     which-boxed-primitive "^1.1.1"
+
+undici-types@~6.21.0:
+  version "6.21.0"
+  resolved "https://registry.yarnpkg.com/undici-types/-/undici-types-6.21.0.tgz#691d00af3909be93a7faa13be61b3a5b50ef12cb"
+  integrity sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==
 
 undici-types@~7.18.0:
   version "7.18.2"

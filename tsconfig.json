@@ -9,7 +9,7 @@
     "sourceMap": true,
     "moduleResolution": "node",
     "paths": {
-      "crewtimer_video_recorder": ["./release/app/node_modules/crewtimer_video_recorder"]
+      "crewtimer_video_recorder": ["./native/recorder"]
     },
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,

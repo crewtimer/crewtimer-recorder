@@ -343,6 +343,14 @@ const applyZoom = ({
 
 const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   let [frame] = useFrameGrab();
+  // Until a frame with data arrives, show the last good frame (initially a
+  // test pattern) so everything below has frame dimensions.
+  if (frame?.data) {
+    lastGoodFrame = frame;
+  } else {
+    frame = lastGoodFrame;
+  }
+
   const [guide, setGuide] = useGuide();
   const [isRecording] = useIsRecording();
   const [settings] = useRecordingProps();
@@ -461,12 +469,6 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         (clip.width !== 1 || clip.height !== 1),
     );
   }, [clip, setIsAdjustingCrop, videoScaling.zoomMode]);
-
-  if (frame?.data) {
-    lastGoodFrame = frame;
-  } else {
-    frame = lastGoodFrame;
-  }
 
   useEffect(() => {
     let crop = { ...recordingProps.cropArea };
