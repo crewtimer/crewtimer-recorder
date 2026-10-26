@@ -4,15 +4,30 @@
 //   2. SPS/PPS: a file started mid-stream decodes on its own.
 //   3. Latency: how many frames the encoder holds before their packets come out.
 // Each available encoder runs twice. "today" keeps FFRecorder's settings but leaves the
-// encoder open, to show what goes wrong. "proposed" forces keyframes and uses a global
+// encoder open, to show what goes wrong. "proposed" forces keyframes and asks for a global
 // header, and must pass. Encoder settings mirror FFVideoRecorder::openVideoStream.
+//
+// Usage: overlap-encoder [output directory]. Results are also written to
+// overlap-encoder-results.txt in the current directory. Build on Windows with
+// build-overlap-encoder.bat.
+#include <algorithm>
 #include <cmath>
+#include <cstdarg>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <map>
 #include <string>
 #include <vector>
+#if defined(_WIN32)
+#include <direct.h>
+#define makeDir(path) _mkdir(path)
+#else
+#include <sys/stat.h>
+#define makeDir(path) mkdir(path, 0755)
+#endif
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
@@ -27,13 +42,37 @@ static const int QUALITY = 80;
 static int64_t framePts(int i) { return av_rescale(i, 1000000, FPS); }
 static int frameOf(int64_t pts) { return int(std::llround(pts * double(FPS) / 1e6)); }
 
-static int logErrors = 0;
-static void countErrors(void *, int level, const char *fmt, va_list args)
+// Writes to the console and the results file.
+struct Report
 {
-  if (level <= AV_LOG_ERROR)
+  std::ofstream file;
+  template <class T> Report &operator<<(const T &v)
   {
-    ++logErrors;
-    vfprintf(stderr, fmt, args);
+    std::cout << v << std::flush;
+    file << v << std::flush;
+    return *this;
+  }
+} out;
+
+static int logErrors = 0;
+static std::string mftName;               // h264_mf logs which Media Foundation encoder it picked
+static std::vector<std::string> openLog; // warnings and errors while opening an encoder
+static void logCallback(void *, int level, const char *fmt, va_list args)
+{
+  char buf[512];
+  vsnprintf(buf, sizeof(buf), fmt, args);
+  std::string line = buf;
+  line.erase(line.find_last_not_of("\r\n") + 1);
+  if (strncmp(fmt, "MFT name", 8) == 0)
+    mftName = line;
+  else if (level <= AV_LOG_WARNING)
+  {
+    openLog.push_back(line);
+    if (level <= AV_LOG_ERROR)
+    {
+      ++logErrors;
+      std::cerr << line << "\n";
+    }
   }
 }
 
@@ -69,6 +108,7 @@ static bool hasNal(const AVPacket *p, int type)
     if (t == type) return true;
   return false;
 }
+static bool hasParameterSets(const AVPacket *p) { return hasNal(p, 7) && hasNal(p, 8); }
 
 // Moving pattern with an abrupt change every 50 frames to provoke scene-cut keyframes.
 static void fillFrame(AVFrame *f, int i)
@@ -86,75 +126,100 @@ static void fillFrame(AVFrame *f, int i)
                        ((noise >> 24) & 15));
     }
   }
-  for (int p = 1; p < 3; ++p)
+  const uint8_t u = uint8_t(64 + (scene * 53 + 40) % 128), v = uint8_t(64 + (scene * 53 + 80) % 128);
+  if (f->format == AV_PIX_FMT_NV12)
+  {
     for (int y = 0; y < H / 2; ++y)
-      memset(f->data[p] + y * f->linesize[p], 64 + (scene * 53 + p * 40) % 128, W / 2);
+      for (int x = 0; x < W / 2; ++x)
+      {
+        f->data[1][y * f->linesize[1] + 2 * x] = u;
+        f->data[1][y * f->linesize[1] + 2 * x + 1] = v;
+      }
+  }
+  else
+  {
+    for (int y = 0; y < H / 2; ++y)
+    {
+      memset(f->data[1] + y * f->linesize[1], u, W / 2);
+      memset(f->data[2] + y * f->linesize[2], v, W / 2);
+    }
+  }
 }
 
-static AVCodecContext *openEncoder(const AVCodec *codec, bool proposed, std::string &err)
+struct Variant
+{
+  const char *codec;
+  std::string label;
+  bool mfHardware = false; // h264_mf only: hardware MFT, or Microsoft's software encoder
+  AVPixelFormat pixFmt = AV_PIX_FMT_YUV420P;
+  bool noProfile = false;     // h264_mf: leave the profile at the encoder's default
+  bool noRateControl = false; // h264_mf: leave rate control at the encoder's default
+  Variant(const char *codec, std::string label, bool mfHardware = false)
+      : codec(codec), label(label), mfHardware(mfHardware) {}
+};
+
+static AVCodecContext *openEncoder(const AVCodec *codec, const Variant &v, bool proposed, std::string &err)
 {
   const std::string name = codec->name;
   const int quantizer = int(std::lround(14 + (100 - QUALITY) * 0.3));
-  for (int attempt = 0; attempt < 2; ++attempt)
+  AVCodecContext *ctx = avcodec_alloc_context3(codec);
+  ctx->bit_rate = name == "h264_mf" ? 40000000 : 0;
+  ctx->width = W;
+  ctx->height = H;
+  ctx->framerate = av_make_q(FPS, 1);
+  ctx->time_base = av_make_q(1, 1000000);
+  ctx->pix_fmt = v.pixFmt;
+  ctx->max_b_frames = 0;
+  ctx->thread_count = 0;
+  ctx->gop_size = GOP;
+  if (proposed) ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+  AVDictionary *opts = nullptr;
+  if (name == "libx264")
   {
-    AVCodecContext *ctx = avcodec_alloc_context3(codec);
-    ctx->bit_rate = name == "h264_mf" ? 40000000 : 0;
-    ctx->width = W;
-    ctx->height = H;
-    ctx->framerate = av_make_q(FPS, 1);
-    ctx->time_base = av_make_q(1, 1000000);
-    ctx->pix_fmt = AV_PIX_FMT_YUV420P;
-    ctx->max_b_frames = 0;
-    ctx->thread_count = 0;
-    ctx->gop_size = GOP;
-    if (proposed) ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-    AVDictionary *opts = nullptr;
-    if (name == "libx264")
-    {
-      av_dict_set(&opts, "preset", "medium", 0);
-      av_dict_set_int(&opts, "crf", quantizer, 0);
-    }
-    else if (name == "h264_nvenc")
-    {
-      av_dict_set(&opts, "preset", "p4", 0);
-      av_dict_set(&opts, "tune", "hq", 0);
-      av_dict_set(&opts, "rc", "vbr", 0);
-      av_dict_set_int(&opts, "cq", quantizer, 0);
-      if (proposed) av_dict_set_int(&opts, "forced_idr", 1, 0);
-    }
-    else if (name == "h264_qsv")
-    {
-      av_dict_set(&opts, "preset", "medium", 0);
-      ctx->global_quality = quantizer;
-    }
-    else if (name == "h264_videotoolbox")
-    {
-      ctx->qmin = -1;
-      ctx->qmax = -1;
-      ctx->flags |= AV_CODEC_FLAG_QSCALE;
-      ctx->global_quality = QUALITY * FF_QP2LAMBDA;
-    }
-    else if (name == "h264_amf")
-    {
-      av_dict_set(&opts, "rc", "cqp", 0);
-      av_dict_set_int(&opts, "qp_i", quantizer, 0);
-      av_dict_set_int(&opts, "qp_p", quantizer, 0);
-      av_dict_set_int(&opts, "qp_b", quantizer, 0);
-    }
-    else if (name == "h264_mf")
-    {
-      ctx->profile = AV_PROFILE_H264_HIGH;
-      av_dict_set(&opts, "rate_control", "u_vbr", 0);
-      if (attempt == 0) av_dict_set_int(&opts, "hw_encoding", 1, 0);
-    }
-    const int ret = avcodec_open2(ctx, codec, &opts);
-    const int unused = av_dict_count(opts);
-    av_dict_free(&opts);
-    if (ret >= 0 && unused == 0) return ctx;
-    avcodec_free_context(&ctx);
-    err = ret < 0 ? "could not open" : "options not accepted";
-    if (name != "h264_mf") break; // only h264_mf has a software fallback
+    av_dict_set(&opts, "preset", "medium", 0);
+    av_dict_set_int(&opts, "crf", quantizer, 0);
   }
+  else if (name == "h264_nvenc")
+  {
+    av_dict_set(&opts, "preset", "p4", 0);
+    av_dict_set(&opts, "tune", "hq", 0);
+    av_dict_set(&opts, "rc", "vbr", 0);
+    av_dict_set_int(&opts, "cq", quantizer, 0);
+    if (proposed) av_dict_set_int(&opts, "forced_idr", 1, 0);
+  }
+  else if (name == "h264_qsv")
+  {
+    av_dict_set(&opts, "preset", "medium", 0);
+    ctx->global_quality = quantizer;
+  }
+  else if (name == "h264_videotoolbox")
+  {
+    ctx->qmin = -1;
+    ctx->qmax = -1;
+    ctx->flags |= AV_CODEC_FLAG_QSCALE;
+    ctx->global_quality = QUALITY * FF_QP2LAMBDA;
+  }
+  else if (name == "h264_amf")
+  {
+    av_dict_set(&opts, "rc", "cqp", 0);
+    av_dict_set_int(&opts, "qp_i", quantizer, 0);
+    av_dict_set_int(&opts, "qp_p", quantizer, 0);
+    av_dict_set_int(&opts, "qp_b", quantizer, 0);
+  }
+  else if (name == "h264_mf")
+  {
+    if (!v.noProfile) ctx->profile = AV_PROFILE_H264_HIGH;
+    if (!v.noRateControl) av_dict_set(&opts, "rate_control", "u_vbr", 0);
+    if (v.mfHardware) av_dict_set_int(&opts, "hw_encoding", 1, 0);
+  }
+  mftName.clear();
+  openLog.clear();
+  const int ret = avcodec_open2(ctx, codec, &opts);
+  const int unused = av_dict_count(opts);
+  av_dict_free(&opts);
+  if (ret >= 0 && unused == 0) return ctx;
+  avcodec_free_context(&ctx);
+  err = ret < 0 ? "could not open" : "options not accepted";
   return nullptr;
 }
 
@@ -163,20 +228,21 @@ struct Encoded
   std::vector<AVPacket *> packets;
   std::map<int, AVPacket *> byFrame;
   int maxLag = 0;
+  int sendRetries = 0;
   std::string err;
 };
 
 static bool forcedKey(int i) { return i % GOP == 0 || i == SPLIT; }
 
-static void receive(AVCodecContext *ctx, Encoded &out, int sent)
+static void receive(AVCodecContext *ctx, Encoded &e, int sent)
 {
   AVPacket *pkt = av_packet_alloc();
   while (avcodec_receive_packet(ctx, pkt) >= 0)
   {
     const int frame = frameOf(pkt->pts);
-    if (sent >= 0) out.maxLag = std::max(out.maxLag, sent - frame);
-    out.packets.push_back(av_packet_clone(pkt));
-    out.byFrame[frame] = out.packets.back();
+    if (sent >= 0) e.maxLag = std::max(e.maxLag, sent - frame);
+    e.packets.push_back(av_packet_clone(pkt));
+    e.byFrame[frame] = e.packets.back();
     av_packet_unref(pkt);
   }
   av_packet_free(&pkt);
@@ -184,30 +250,34 @@ static void receive(AVCodecContext *ctx, Encoded &out, int sent)
 
 static Encoded encodeAll(AVCodecContext *ctx, bool force)
 {
-  Encoded out;
+  Encoded e;
   AVFrame *frame = av_frame_alloc();
   frame->format = ctx->pix_fmt;
   frame->width = W;
   frame->height = H;
   frame->color_range = AVCOL_RANGE_MPEG;
   av_frame_get_buffer(frame, 0);
-  for (int i = 0; i < FRAMES; ++i)
+  for (int i = 0; i < FRAMES && e.err.empty(); ++i)
   {
     fillFrame(frame, i);
     frame->pts = framePts(i);
     frame->pict_type = force && forcedKey(i) ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_NONE;
-    if (avcodec_send_frame(ctx, frame) < 0)
+    // An async encoder (hardware h264_mf) can refuse input until it has output ready.
+    int ret;
+    for (int attempt = 0; (ret = avcodec_send_frame(ctx, frame)) == AVERROR(EAGAIN) && attempt < 1000; ++attempt)
     {
-      out.err = "send_frame failed at frame " + std::to_string(i);
-      break;
+      ++e.sendRetries;
+      receive(ctx, e, i - 1);
     }
+    if (ret < 0)
+      e.err = "send_frame failed at frame " + std::to_string(i);
     // Lag counts frames sent after this one before its packet came out.
-    receive(ctx, out, i);
+    receive(ctx, e, i);
   }
   avcodec_send_frame(ctx, nullptr);
-  receive(ctx, out, -1);
+  receive(ctx, e, -1);
   av_frame_free(&frame);
-  return out;
+  return e;
 }
 
 // Write packets[begin, end) to an MP4 with times re-based to the first packet.
@@ -220,7 +290,7 @@ static std::string writeMp4(const std::string &path, AVCodecContext *enc,
   avcodec_parameters_from_context(st->codecpar, enc);
   st->time_base = enc->time_base;
   std::string err;
-  if (avio_open(&oc->pb, path.c_str(), AVIO_FLAG_WRITE) < 0) err = "avio_open failed";
+  if (avio_open(&oc->pb, path.c_str(), AVIO_FLAG_WRITE) < 0) err = "avio_open failed for " + path;
   else if (avformat_write_header(oc, nullptr) < 0) err = "write_header failed";
   const int64_t base = packets[begin]->pts;
   for (size_t i = begin; err.empty() && i < end; ++i)
@@ -242,22 +312,22 @@ static std::string writeMp4(const std::string &path, AVCodecContext *enc,
 
 struct Decoded
 {
-  std::vector<int64_t> pts; // stream time base converted to microseconds
+  std::vector<int64_t> pts; // microseconds
   std::vector<uint64_t> hashes;
   int errors = 0;
 };
 
 static Decoded decodeMp4(const std::string &path)
 {
-  Decoded out;
+  Decoded d;
   logErrors = 0;
   AVFormatContext *ic = nullptr;
   if (avformat_open_input(&ic, path.c_str(), nullptr, nullptr) < 0 ||
       avformat_find_stream_info(ic, nullptr) < 0)
   {
-    out.errors = 1;
+    d.errors = 1;
     if (ic) avformat_close_input(&ic);
-    return out;
+    return d;
   }
   AVStream *st = ic->streams[0];
   const AVCodec *codec = avcodec_find_decoder(st->codecpar->codec_id);
@@ -275,25 +345,25 @@ static Decoded decodeMp4(const std::string &path)
       for (int y = 0; y < frame->height; ++y)
         for (int x = 0; x < frame->width; ++x)
           hash = (hash ^ frame->data[0][y * frame->linesize[0] + x]) * 1099511628211ULL;
-      out.pts.push_back(av_rescale_q(frame->best_effort_timestamp, st->time_base, av_make_q(1, 1000000)));
-      out.hashes.push_back(hash);
+      d.pts.push_back(av_rescale_q(frame->best_effort_timestamp, st->time_base, av_make_q(1, 1000000)));
+      d.hashes.push_back(hash);
       av_frame_unref(frame);
     }
   };
   while (av_read_frame(ic, pkt) >= 0)
   {
-    if (avcodec_send_packet(dec, pkt) < 0) ++out.errors;
+    if (avcodec_send_packet(dec, pkt) < 0) ++d.errors;
     av_packet_unref(pkt);
     drain();
   }
   avcodec_send_packet(dec, nullptr);
   drain();
-  out.errors += logErrors;
+  d.errors += logErrors;
   av_frame_free(&frame);
   av_packet_free(&pkt);
   avcodec_free_context(&dec);
   avformat_close_input(&ic);
-  return out;
+  return d;
 }
 
 struct Files
@@ -302,6 +372,13 @@ struct Files
   int bStartFrame = -1;
   Decoded a, b;
 };
+
+static std::string fileTag(const Variant &v, const char *mode)
+{
+  std::string tag = std::string(v.label) + "-" + mode;
+  std::replace(tag.begin(), tag.end(), ' ', '-');
+  return tag;
+}
 
 // File A holds frames before SPLIT. File B starts at the latest keyframe at least
 // OVERLAP_US before SPLIT and runs to the end.
@@ -339,13 +416,13 @@ static void freePackets(Encoded &e)
 }
 
 // Encoder kept open with today's settings: report where it breaks.
-static void runToday(const AVCodec *codec, const std::string &dir)
+static void runToday(const AVCodec *codec, const Variant &v, const std::string &dir)
 {
   std::string err;
-  AVCodecContext *enc = openEncoder(codec, false, err);
+  AVCodecContext *enc = openEncoder(codec, v, false, err);
   if (!enc)
   {
-    std::cout << "  today:    skipped (" << err << ")\n";
+    out << "  today:    skipped (" << err << ")\n";
     return;
   }
   Encoded e = encodeAll(enc, false);
@@ -357,51 +434,64 @@ static void runToday(const AVCodec *codec, const std::string &dir)
     if (kv.first % GOP == 0 && !key) ++gridNotKey;
     if (kv.first % GOP != 0 && key) ++extraKeys;
     if (key && !hasNal(p, 5)) ++nonIdrKeys;
-    if (key && kv.first > 0 && !(hasNal(p, 7) && hasNal(p, 8))) ++keysNoSps;
+    if (key && kv.first > 0 && !hasParameterSets(p)) ++keysNoSps;
     if (p->dts != p->pts) ++dtsDiffers;
   }
-  Files f = splitFiles(dir, std::string(codec->name) + "-today", enc, e);
-  std::cout << "  today:    grid frames not key=" << gridNotKey << "/" << (FRAMES + GOP - 1) / GOP
-            << " extra keys=" << extraKeys << " non-IDR keys=" << nonIdrKeys
-            << " later keys without SPS/PPS=" << keysNoSps << " dts!=pts=" << dtsDiffers
-            << " lag=" << e.maxLag << " frames\n";
+  out << "  today:    grid frames not key=" << gridNotKey << "/" << (FRAMES + GOP - 1) / GOP
+      << " extra keys=" << extraKeys << " non-IDR keys=" << nonIdrKeys
+      << " later keys without SPS/PPS=" << keysNoSps << " dts!=pts=" << dtsDiffers
+      << " lag=" << e.maxLag << " frames\n";
+  if (!e.err.empty())
+    out << "            " << e.err << "\n";
+  Files f = splitFiles(dir, fileTag(v, "today"), enc, e);
   if (!f.err.empty())
-    std::cout << "            file B: " << f.err << "\n";
+    out << "            file B: " << f.err << "\n";
   else
-    std::cout << "            file B from frame " << f.bStartFrame << ": decoded "
-              << f.b.hashes.size() << "/" << FRAMES - f.bStartFrame
-              << " frames, " << f.b.errors << " decode errors\n";
+    out << "            file B from frame " << f.bStartFrame << ": decoded "
+        << f.b.hashes.size() << "/" << FRAMES - f.bStartFrame
+        << " frames, " << f.b.errors << " decode errors\n";
   freePackets(e);
   avcodec_free_context(&enc);
 }
 
 // Forced keyframes and a global header: every check must pass.
-static bool runProposed(const AVCodec *codec, const std::string &dir)
+static bool runProposed(const AVCodec *codec, const Variant &v, const std::string &dir)
 {
   std::string err;
-  AVCodecContext *enc = openEncoder(codec, true, err);
+  AVCodecContext *enc = openEncoder(codec, v, true, err);
   if (!enc)
   {
-    std::cout << "  proposed: FAIL (" << err << ")\n";
+    out << "  proposed: FAIL (" << err << ")\n";
     return false;
   }
   std::vector<std::string> failures;
-  if (enc->extradata_size == 0) failures.push_back("no extradata from global header");
   Encoded e = encodeAll(enc, true);
   if (!e.err.empty()) failures.push_back(e.err);
   if (int(e.byFrame.size()) != FRAMES)
     failures.push_back("packets for " + std::to_string(e.byFrame.size()) + "/" + std::to_string(FRAMES) + " frames");
-  int missedForced = 0, extraKeys = 0;
+  int missedForced = 0, extraKeys = 0, forcedNoSps = 0;
   for (auto &kv : e.byFrame)
   {
-    const bool idr = (kv.second->flags & AV_PKT_FLAG_KEY) && hasNal(kv.second, 5);
-    if (forcedKey(kv.first) && !idr) ++missedForced;
-    if (!forcedKey(kv.first) && (kv.second->flags & AV_PKT_FLAG_KEY)) ++extraKeys;
+    const bool key = kv.second->flags & AV_PKT_FLAG_KEY;
+    if (forcedKey(kv.first) && !(key && hasNal(kv.second, 5))) ++missedForced;
+    if (forcedKey(kv.first) && !hasParameterSets(kv.second)) ++forcedNoSps;
+    if (!forcedKey(kv.first) && key) ++extraKeys;
   }
   if (missedForced) failures.push_back(std::to_string(missedForced) + " forced frames not IDR");
+  // Some MFTs give no global header and only carry SPS/PPS inside keyframes. The muxer then
+  // takes them from the file's first packet, so either source works.
+  std::string paramSets;
+  if (enc->extradata_size > 0)
+    paramSets = "global header " + std::to_string(enc->extradata_size) + " bytes";
+  else if (forcedNoSps == 0)
+    paramSets = "in keyframes only (no global header)";
+  else
+  {
+    paramSets = "missing";
+    failures.push_back("no global header and " + std::to_string(forcedNoSps) + " keyframes lack SPS/PPS");
+  }
 
-  Files f = splitFiles(dir, std::string(codec->name) + "-proposed", enc, e);
-  int mismatched = 0;
+  Files f = splitFiles(dir, fileTag(v, "proposed"), enc, e);
   if (!f.err.empty())
     failures.push_back(f.err);
   else
@@ -416,17 +506,18 @@ static bool runProposed(const AVCodec *codec, const std::string &dir)
     if (!f.b.pts.empty() && f.b.pts[0] != 0)
       failures.push_back("file B starts at " + std::to_string(f.b.pts[0]) + " us");
     // Overlap frames must decode to the same picture in both files.
-    for (size_t i = 0; i < f.b.hashes.size() && f.bStartFrame + int(i) < int(f.a.hashes.size()); ++i)
+    int mismatched = 0;
+    for (size_t i = 0; i < f.b.hashes.size() && f.bStartFrame + i < f.a.hashes.size(); ++i)
       if (f.b.hashes[i] != f.a.hashes[f.bStartFrame + i]) ++mismatched;
     if (mismatched) failures.push_back(std::to_string(mismatched) + " overlap frames differ");
   }
-  std::cout << "  proposed: " << (failures.empty() ? "PASS" : "FAIL")
-            << " extradata=" << enc->extradata_size << " bytes, extra keys=" << extraKeys
-            << ", lag=" << e.maxLag << " frames (" << e.maxLag * 1000 / FPS << " ms)";
+  out << "  proposed: " << (failures.empty() ? "PASS" : "FAIL") << " SPS/PPS " << paramSets
+      << ", extra keys=" << extraKeys << ", lag=" << e.maxLag << " frames (" << e.maxLag * 1000 / FPS << " ms)";
   if (f.err.empty() && f.bStartFrame >= 0)
-    std::cout << ", overlap=" << SPLIT - f.bStartFrame << " frames";
-  std::cout << "\n";
-  for (auto &msg : failures) std::cout << "            " << msg << "\n";
+    out << ", overlap=" << SPLIT - f.bStartFrame << " frames";
+  if (e.sendRetries) out << ", send retries=" << e.sendRetries;
+  out << "\n";
+  for (auto &msg : failures) out << "            " << msg << "\n";
   freePackets(e);
   avcodec_free_context(&enc);
   return failures.empty();
@@ -434,36 +525,76 @@ static bool runProposed(const AVCodec *codec, const std::string &dir)
 
 int main(int argc, char **argv)
 {
-  if (argc != 2)
+  std::string dir;
+  if (argc > 1)
+    dir = argv[1];
+  else
   {
-    std::cerr << "usage: overlap-encoder <output directory>\n";
-    return 2;
+    const char *tmp = std::getenv("TEMP");
+    dir = std::string(tmp ? tmp : "/tmp") + "/overlap-encoder";
+    makeDir(dir.c_str());
   }
+  out.file.open("overlap-encoder-results.txt");
   av_log_set_level(AV_LOG_ERROR);
-  av_log_set_callback(countErrors);
+  av_log_set_callback(logCallback);
+  out << "overlap-encoder: FFmpeg " << av_version_info() << ", " << W << "x" << H << " " << FPS
+      << " fps, split at frame " << SPLIT << ", 2 s overlap\n";
+
+  // A hardware MFT that rejects the recorder's settings is retried with NV12 input (often
+  // the only format GPU encoders take) and fewer options, to find which setting it rejects.
+  std::vector<std::vector<Variant>> variants = {
+      {Variant("h264_videotoolbox", "h264_videotoolbox")},
+      {Variant("h264_nvenc", "h264_nvenc")},
+      {Variant("h264_qsv", "h264_qsv")},
+      {Variant("h264_amf", "h264_amf")},
+      {},
+      {Variant("h264_mf", "h264_mf software")},
+      {Variant("libx264", "libx264")},
+  };
+  for (int i = 0; i < 5; ++i)
+  {
+    static const char *labels[] = {"recorder settings", "NV12", "NV12, default profile",
+                                   "NV12, default rate control", "NV12, default profile and rate control"};
+    Variant v("h264_mf", std::string("h264_mf hardware, ") + labels[i], true);
+    v.pixFmt = i == 0 ? AV_PIX_FMT_YUV420P : AV_PIX_FMT_NV12;
+    v.noProfile = i == 2 || i == 4;
+    v.noRateControl = i == 3 || i == 4;
+    variants[4].push_back(v);
+  }
   bool ok = true;
   int tested = 0;
-  for (const char *name : {"h264_videotoolbox", "h264_nvenc", "h264_qsv", "h264_amf", "h264_mf", "libx264"})
+  for (const std::vector<Variant> &attempts : variants)
   {
-    const AVCodec *codec = avcodec_find_encoder_by_name(name);
+    const AVCodec *codec = attempts.empty() ? nullptr : avcodec_find_encoder_by_name(attempts[0].codec);
     if (!codec) continue;
-    std::string err;
-    AVCodecContext *probe = openEncoder(codec, false, err);
-    if (!probe)
+    const Variant *chosen = nullptr;
+    for (const Variant &attempt : attempts)
     {
-      std::cout << name << ": not usable on this machine (" << err << ")\n";
-      continue;
+      std::string err;
+      AVCodecContext *probe = openEncoder(codec, attempt, false, err);
+      if (probe)
+      {
+        avcodec_free_context(&probe);
+        chosen = &attempt;
+        break;
+      }
+      out << attempt.label << ": not usable on this machine (" << err << ")\n";
+      for (const std::string &line : openLog) out << "    ffmpeg: " << line << "\n";
     }
-    avcodec_free_context(&probe);
-    std::cout << name << ":\n";
-    runToday(codec, argv[1]);
-    ok = runProposed(codec, argv[1]) && ok;
+    if (!chosen) continue;
+    const Variant &v = *chosen;
+    out << v.label << (mftName.empty() ? "" : " (" + mftName + ")") << ":\n";
+    runToday(codec, v, dir);
+    ok = runProposed(codec, v, dir) && ok;
     ++tested;
   }
-  if (!tested)
+  if (!tested) out << "No H.264 encoder available\n";
+  out << (ok && tested ? "RESULT: PASS" : "RESULT: FAIL") << "\n";
+  if (argc < 2)
   {
-    std::cout << "No H.264 encoder available\n";
-    return 1;
+    // Started without arguments, e.g. by double-click: keep the window open.
+    std::cout << "Results saved to overlap-encoder-results.txt. Press Enter to exit.";
+    std::cin.get();
   }
-  return ok ? 0 : 1;
+  return ok && tested ? 0 : 1;
 }

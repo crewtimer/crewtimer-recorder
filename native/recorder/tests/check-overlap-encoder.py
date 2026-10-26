@@ -19,4 +19,4 @@ with tempfile.TemporaryDirectory(prefix="overlap-encoder-") as directory:
         "c++", "-std=c++11", str(root / "tests/overlap-encoder.cpp"),
         *flags, "-o", executable,
     ], check=True)
-    subprocess.run([executable, directory], check=True)
+    subprocess.run([executable, directory], check=True, cwd=directory)
