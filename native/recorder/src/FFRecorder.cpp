@@ -214,6 +214,9 @@ public:
 
     // Media Foundation targets a bitrate; other encoders target quality.
     const int64_t mfBitRate = mediaFoundationBitRate(recordingQuality);
+    // Hardware MFTs (Intel Quick Sync at least) only accept NV12 and fail format
+    // negotiation on YUV420P. The software fallback keeps YUV420P.
+    bool mfHardware = codecName == "h264_mf";
     auto allocCodecContext = [&]() -> AVCodecContext *
     {
       AVCodecContext *ctx = avcodec_alloc_context3(codec);
@@ -228,7 +231,7 @@ public:
       ctx->framerate = av_d2q(fps, 100000);
       // Preserve source timing independently of the nominal frame rate.
       ctx->time_base = av_make_q(1, 1000000);
-      ctx->pix_fmt = AV_PIX_FMT_YUV420P;
+      ctx->pix_fmt = mfHardware ? AV_PIX_FMT_NV12 : AV_PIX_FMT_YUV420P;
       ctx->max_b_frames = 0;
       ctx->thread_count = 0; // let codec decide
       ctx->gop_size = getKeyFrameInterval();
@@ -313,6 +316,7 @@ public:
       SystemEventQueue::push("ffmpeg", "Warning: Hardware h264_mf unavailable, using software encoder");
       av_dict_free(&codec_options);
       avcodec_free_context(&pCodecCtx);
+      mfHardware = false;
       pCodecCtx = allocCodecContext();
       if (!pCodecCtx)
       {
@@ -342,7 +346,8 @@ public:
     SystemEventQueue::push("ffmpeg", "Recording quality " + std::to_string(recordingQuality) +
                                     " using " + codecName +
                                     (codecName == "h264_mf"
-                                         ? " at " + std::to_string(mfBitRate / 1000000) + " Mbps"
+                                         ? std::string(mfHardware ? " hardware" : " software") + " at " +
+                                               std::to_string(mfBitRate / 1000000) + " Mbps"
                                          : ""));
 
     if (avcodec_parameters_from_context(video_st->codecpar, pCodecCtx) < 0)
@@ -440,10 +445,28 @@ public:
       const uint8_t *srcV = srcU + (w / 2) * (h / 2);
       for (int y = 0; y < h; y++)
         memcpy(pFrame->data[0] + y * pFrame->linesize[0], srcY + y * w, w);
-      for (int y = 0; y < h / 2; y++)
-        memcpy(pFrame->data[1] + y * pFrame->linesize[1], srcU + y * (w / 2), w / 2);
-      for (int y = 0; y < h / 2; y++)
-        memcpy(pFrame->data[2] + y * pFrame->linesize[2], srcV + y * (w / 2), w / 2);
+      if (pCodecCtx->pix_fmt == AV_PIX_FMT_NV12)
+      {
+        // NV12 interleaves the chroma planes: U V U V ...
+        for (int y = 0; y < h / 2; y++)
+        {
+          uint8_t *dst = pFrame->data[1] + y * pFrame->linesize[1];
+          const uint8_t *u = srcU + y * (w / 2);
+          const uint8_t *v = srcV + y * (w / 2);
+          for (int x = 0; x < w / 2; x++)
+          {
+            dst[2 * x] = u[x];
+            dst[2 * x + 1] = v[x];
+          }
+        }
+      }
+      else
+      {
+        for (int y = 0; y < h / 2; y++)
+          memcpy(pFrame->data[1] + y * pFrame->linesize[1], srcU + y * (w / 2), w / 2);
+        for (int y = 0; y < h / 2; y++)
+          memcpy(pFrame->data[2] + y * pFrame->linesize[2], srcV + y * (w / 2), w / 2);
+      }
     }
     else
     {
