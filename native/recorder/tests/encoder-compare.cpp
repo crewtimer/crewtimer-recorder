@@ -1,12 +1,14 @@
 // Re-encode one recording through FFRecorder with the hardware encoder and with a software
-// encoder at each quality setting, so the results can be compared frame for frame in the
-// review app. Each run goes to its own folder (hardware-q80, software-q80, ...) because
-// the files share timestamps. PSNR against the input is reported for each run.
+// encoder at each quality setting, and report size, bitrate, PSNR against the input and
+// encode speed in <input>-compare-results.txt beside the input. Each run's video is a
+// temporary file, deleted once measured. With --keep the videos stay in <input>-compare,
+// one folder per run (hardware-q80, software-q80, ...) because the files share timestamps,
+// so they can be compared frame for frame in the review app.
 //
 // On Windows "hardware" is h264_mf on the GPU and "software" is Microsoft's encoder; on
 // Apple Silicon they are h264_videotoolbox and libx264.
 //
-// Usage: encoder-compare <input.mp4> [seconds, default 20] [output folder]
+// Usage: encoder-compare [--keep] <input.mp4> [seconds, default 20]
 // On Windows an MP4 can be dragged onto encoder-compare.exe. Build there with
 // build-encoder-compare.bat; on macOS:
 //   c++ -std=c++11 -DSTANDALONE -Isrc tests/encoder-compare.cpp src/FFRecorder.cpp \
@@ -26,9 +28,12 @@
 #if defined(_WIN32)
 #include <direct.h>
 #define makeDir(path) _mkdir(path)
+#define removeDir(path) _rmdir(path)
 #else
 #include <sys/stat.h>
+#include <unistd.h>
 #define makeDir(path) mkdir(path, 0755)
+#define removeDir(path) rmdir(path)
 #endif
 #include "SystemEventQueue.hpp"
 #include "VideoRecorder.hpp"
@@ -226,24 +231,40 @@ static int finish(int code)
 
 int main(int argc, char **argv)
 {
-  if (argc < 2)
+  bool keep = false;
+  std::vector<std::string> args;
+  for (int i = 1; i < argc; ++i)
   {
-    std::cout << "Usage: encoder-compare <input.mp4> [seconds, default 20] [output folder]\n"
+    if (std::string(argv[i]) == "--keep")
+      keep = true;
+    else
+      args.push_back(argv[i]);
+  }
+  if (args.empty())
+  {
+    std::cout << "Usage: encoder-compare [--keep] <input.mp4> [seconds, default 20]\n"
                  "On Windows, drag a recording onto encoder-compare.exe.\n";
     return finish(2);
   }
   av_log_set_level(AV_LOG_ERROR);
   Input in;
-  in.path = argv[1];
+  in.path = args[0];
   std::replace(in.path.begin(), in.path.end(), '\\', '/');
   const size_t slash = in.path.find_last_of('/');
   in.folder = slash == std::string::npos ? "." : in.path.substr(0, slash);
   in.stem = in.path.substr(slash == std::string::npos ? 0 : slash + 1);
   in.stem = in.stem.substr(0, in.stem.find_last_of('.'));
-  const double seconds = argc > 2 ? atof(argv[2]) : 20;
-  const std::string folder = argc > 3 ? argv[3] : in.folder + "/" + in.stem + "-compare";
+  const double seconds = args.size() > 1 ? atof(args[1].c_str()) : 20;
+  std::string folder = in.folder + "/" + in.stem + "-compare";
+  if (!keep)
+  {
+    const std::string tmp = std::getenv("TEMP") ? std::getenv("TEMP") : "/tmp";
+    makeDir(tmp.c_str());
+    folder = tmp + "/encoder-compare";
+  }
   makeDir(folder.c_str());
-  out.file.open(folder + "/encoder-compare-results.txt");
+  const std::string results = in.folder + "/" + in.stem + "-compare-results.txt";
+  out.file.open(results);
 
   Reader probe;
   const std::string err = probe.open(in.path);
@@ -264,19 +285,29 @@ int main(int argc, char **argv)
 
   out << "encoder-compare: " << in.stem << " " << in.width << "x" << in.height << " " << std::fixed
       << std::setprecision(2) << in.fps << " fps, first " << std::setprecision(0) << seconds
-      << " s, FFmpeg " << av_version_info() << "\n"
-      << "Output: " << folder << "\n\n";
+      << " s, FFmpeg " << av_version_info() << "\n";
+  if (keep) out << "Videos: " << folder << "\n";
+  out << "\n";
   out << "run          encoder                            MB     Mbps  PSNR avg  PSNR min  encode fps\n";
   bool ok = true;
   for (int quality : {60, 70, 80, 90})
     for (bool software : {false, true})
     {
       Run run = encodeRun(in, folder, quality, software);
+      if (!keep)
+      {
+        // encodeRun has closed the files, which Windows requires before deleting them.
+        const std::string dir = folder + "/" + run.label;
+        std::remove((dir + "/" + in.stem + ".mp4").c_str());
+        std::remove((dir + "/tmp-" + in.stem + ".mp4").c_str());
+        std::remove((dir + "/" + in.stem + ".json").c_str());
+        removeDir(dir.c_str());
+      }
       std::ostringstream line;
       line << std::left << std::setw(13) << run.label << std::setw(33) << run.encoder.substr(0, 32);
       if (!run.err.empty())
       {
-        line << "Error: " << run.err;
+        line << (run.err.compare(0, 6, "Error:") == 0 ? "" : "Error: ") << run.err;
         ok = false;
       }
       else
@@ -289,7 +320,11 @@ int main(int argc, char **argv)
       }
       out << line.str() << "\n";
     }
-  out << "\nHigher PSNR is closer to the input (40+ dB is hard to tell apart). Open each folder in the\n"
-         "review app to compare the same frames zoomed in.\n";
+  out << "\nHigher PSNR is closer to the input (40+ dB is hard to tell apart).\n";
+  if (keep)
+    out << "Open each folder in the review app to compare the same frames zoomed in.\n";
+  else
+    removeDir(folder.c_str());
+  std::cout << "Results saved to " << results << "\n";
   return finish(ok ? 0 : 1);
 }
