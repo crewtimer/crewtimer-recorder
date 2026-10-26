@@ -23,6 +23,7 @@ public:
 
 std::shared_ptr<VideoRecorder> createOpenCVRecorder();
 std::shared_ptr<VideoRecorder> createAppleRecorder();
-std::shared_ptr<VideoRecorder> createFfmpegRecorder(int recordingQuality = 80);
+// forceSoftware skips GPU encoders, for comparing their output with a software encoder.
+std::shared_ptr<VideoRecorder> createFfmpegRecorder(int recordingQuality = 80, bool forceSoftware = false);
 std::shared_ptr<VideoRecorder> createNullRecorder();
 void testopencv();

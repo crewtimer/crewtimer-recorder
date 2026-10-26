@@ -1,0 +1,4 @@
+/overlap-encoder*.exe
+/encoder-compare*.exe
+/*.obj
+/overlap-encoder-results.txt

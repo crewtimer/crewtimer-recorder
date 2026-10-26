@@ -56,9 +56,11 @@ class FFVideoRecorder : public VideoRecorder
   std::string tmpFile;
   std::string codecName;
   const int recordingQuality;
+  const bool forceSoftware;
 
 public:
-  explicit FFVideoRecorder(int quality) : recordingQuality(quality)
+  FFVideoRecorder(int quality, bool forceSoftware)
+      : recordingQuality(quality), forceSoftware(forceSoftware)
   {
     // Get the version of the libavutil library
     unsigned version = avutil_version();
@@ -182,6 +184,11 @@ public:
     const AVCodec *codec = nullptr;
     for (const auto &name : codec_names)
     {
+      // h264_mf stays: it has a software mode.
+      if (forceSoftware && name != "libx264" && name != "libx264rgb" && name != "h264_mf")
+      {
+        continue;
+      }
       codec = avcodec_find_encoder_by_name(
           name.c_str()); // Convert std::string to const char*
       if (codec)
@@ -216,7 +223,7 @@ public:
     const int64_t mfBitRate = mediaFoundationBitRate(recordingQuality);
     // Hardware MFTs (Intel Quick Sync at least) only accept NV12 and fail format
     // negotiation on YUV420P. The software fallback keeps YUV420P.
-    bool mfHardware = codecName == "h264_mf";
+    bool mfHardware = codecName == "h264_mf" && !forceSoftware;
     auto allocCodecContext = [&]() -> AVCodecContext *
     {
       AVCodecContext *ctx = avcodec_alloc_context3(codec);
@@ -300,7 +307,10 @@ public:
     {
       // Hardware MFTs implement quality mode inconsistently, so target a bitrate.
       av_dict_set(&codec_options, "rate_control", "u_vbr", 0);
-      av_dict_set_int(&codec_options, "hw_encoding", 1, 0);
+      if (mfHardware)
+      {
+        av_dict_set_int(&codec_options, "hw_encoding", 1, 0);
+      }
     }
     else
     {
@@ -310,7 +320,7 @@ public:
     }
 
     int openResult = avcodec_open2(pCodecCtx, codec, &codec_options);
-    if (openResult < 0 && codecName == "h264_mf")
+    if (openResult < 0 && mfHardware)
     {
       // No usable hardware MFT; fall back to Microsoft's software encoder.
       SystemEventQueue::push("ffmpeg", "Warning: Hardware h264_mf unavailable, using software encoder");
@@ -669,7 +679,7 @@ public:
   ~FFVideoRecorder() {}
 };
 
-std::shared_ptr<VideoRecorder> createFfmpegRecorder(int recordingQuality)
+std::shared_ptr<VideoRecorder> createFfmpegRecorder(int recordingQuality, bool forceSoftware)
 {
-  return std::shared_ptr<FFVideoRecorder>(new FFVideoRecorder(recordingQuality));
+  return std::shared_ptr<FFVideoRecorder>(new FFVideoRecorder(recordingQuality, forceSoftware));
 }
