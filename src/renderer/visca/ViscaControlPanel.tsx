@@ -551,6 +551,28 @@ const ViscaControlPanel: React.FC = () => {
     cameraReady && viscaEnabled && viscaState === 'Disconnected';
   const controlsDisabled = !cameraReady || disconnected;
 
+  // In the Focus group when VISCA is on; otherwise under Alignment, as it works without camera control
+  const focusAssist = (
+    <Tooltip title="Show a sharpness metric on the preview to help with manual focus">
+      <FormControlLabel
+        control={
+          <Checkbox
+            checked={focusAreaProps.enabled}
+            onChange={() =>
+              setFocusAreaProps((prior) => ({
+                ...prior,
+                enabled: !prior.enabled,
+              }))
+            }
+            size="small"
+          />
+        }
+        label="Focus assist"
+        sx={{ m: 0 }}
+      />
+    </Tooltip>
+  );
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       {disconnected && (
@@ -708,6 +730,7 @@ const ViscaControlPanel: React.FC = () => {
                   return driveFocus(value);
                 }}
               />
+              {focusAssist}
             </Group>
             <Group label="Zoom" disabled={controlsDisabled}>
               <ViscaValueButton
@@ -751,24 +774,7 @@ const ViscaControlPanel: React.FC = () => {
               label="Show timing line"
               sx={{ m: 0 }}
             />
-            <Tooltip title="Show a sharpness metric on the preview to help with manual focus">
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={focusAreaProps.enabled}
-                    onChange={() =>
-                      setFocusAreaProps((prior) => ({
-                        ...prior,
-                        enabled: !prior.enabled,
-                      }))
-                    }
-                    size="small"
-                  />
-                }
-                label="Focus assist"
-                sx={{ m: 0 }}
-              />
-            </Tooltip>
+            {!viscaEnabled && focusAssist}
             <Tooltip title="Show an orange horizontal line on the preview to level the camera; left click the preview to move it">
               <FormControlLabel
                 control={
