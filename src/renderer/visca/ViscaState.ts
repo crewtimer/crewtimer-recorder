@@ -1,5 +1,6 @@
 import { UseDatum } from 'react-usedatum';
 import { UseStoredDatum } from '../store/UseElectronDatum';
+import { Rect } from '../recorder/RecorderTypes';
 
 export enum ExposureMode {
   EXPOSURE_AUTO = 0,
@@ -69,8 +70,13 @@ export const [useFocusReach, setFocusReach, getFocusReach] = UseStoredDatum<
 /** Which of 16 equal slices of the zoom range a zoom position falls in. */
 export const zoomBand = (zoom: number, { min, max }: LensRange['zoom']) =>
   Math.min(15, Math.max(0, Math.floor(((zoom - min) / (max - min)) * 16)));
+/** Camera settings plus the crop region and timing line; presets saved before crop was added lack them. */
+export interface CameraPreset extends CameraState {
+  cropArea?: Rect;
+  guide?: { pt1: number; pt2: number };
+}
 export const [useCameraPresets, setCameraPresets, getCameraPresets] =
-  UseStoredDatum<CameraState[]>('presets', []);
+  UseStoredDatum<CameraPreset[]>('presets', []);
 export const [useCameraState, setCameraState, getCameraState] =
   UseDatum<CameraState>({
     autoFocus: false,
