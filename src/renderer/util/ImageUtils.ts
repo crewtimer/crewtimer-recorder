@@ -123,7 +123,6 @@ export const drawBox = (
   if (fill) {
     context.fillStyle = 'white';
     context.fillRect(x + 1, y + 1, size - 2, size - 2);
-    context.stroke();
   } else {
     context.strokeStyle = 'white';
     context.lineWidth = 1;
