@@ -185,7 +185,7 @@ static AVCodecContext *openEncoder(const AVCodec *codec, const Variant &v, bool 
     av_dict_set(&opts, "tune", "hq", 0);
     av_dict_set(&opts, "rc", "vbr", 0);
     av_dict_set_int(&opts, "cq", quantizer, 0);
-    if (proposed) av_dict_set_int(&opts, "forced_idr", 1, 0);
+    if (proposed) av_dict_set_int(&opts, "forced-idr", 1, 0);
   }
   else if (name == "h264_qsv")
   {

@@ -201,7 +201,18 @@ public:
         "libx264rgb"};
 #endif
 
-    const AVCodec *codec = nullptr;
+    // Try the encoder that worked last time first, then the rest in order. Hardware
+    // encoders are built in whether or not this PC has the hardware, and fail to open
+    // without it.
+    const std::string previousCodec = codecName;
+    if (!previousCodec.empty())
+    {
+      codec_names.erase(std::remove(codec_names.begin(), codec_names.end(), previousCodec),
+                        codec_names.end());
+      codec_names.insert(codec_names.begin(), previousCodec);
+    }
+    std::string err = "Error: No H.264 encoder supporting recording quality is available";
+    bool opened = false;
     for (const auto &name : codec_names)
     {
       // h264_mf stays: it has a software mode.
@@ -209,172 +220,31 @@ public:
       {
         continue;
       }
-      codec = avcodec_find_encoder_by_name(
-          name.c_str()); // Convert std::string to const char*
-      if (codec)
+      const AVCodec *codec = avcodec_find_encoder_by_name(name.c_str());
+      if (!codec)
       {
+        continue;
+      }
+      codecName = codec->name;
+      err = openEncoder(codec, width, height, fps);
+      if (err.empty())
+      {
+        opened = true;
         break;
       }
+      avcodec_free_context(&pCodecCtx);
+      SystemEventQueue::push("ffmpeg", "Warning: " + codecName + " unavailable (" + err + ")");
     }
-
-    if (!codec)
+    if (!opened)
     {
-      auto msg = "Error: No H.264 encoder supporting recording quality is available";
-      SystemEventQueue::push("ffmpeg", msg);
-      return msg;
+      codecName.clear();
+      SystemEventQueue::push("ffmpeg", err);
+      return err;
     }
-
-    if (codecName.empty())
+    if (codecName != previousCodec)
     {
-      codecName = codec->name;
       SystemEventQueue::push("ffmpeg", "Using codec " + codecName);
     }
-
-    // Media Foundation targets a bitrate; other encoders target quality.
-    const int64_t mfBitRate = mediaFoundationBitRate(recordingQuality);
-    // Hardware MFTs (Intel Quick Sync at least) only accept NV12 and fail format
-    // negotiation on YUV420P. The software fallback keeps YUV420P.
-    bool mfHardware = codecName == "h264_mf" && !forceSoftware;
-    auto allocCodecContext = [&]() -> AVCodecContext *
-    {
-      AVCodecContext *ctx = avcodec_alloc_context3(codec);
-      if (!ctx)
-      {
-        return nullptr;
-      }
-      // Quality controls allocate bitrate according to scene complexity.
-      ctx->bit_rate = codecName == "h264_mf" ? mfBitRate : 0;
-      ctx->width = width;
-      ctx->height = height;
-      ctx->framerate = av_d2q(fps, 100000);
-      // Preserve source timing independently of the nominal frame rate.
-      ctx->time_base = av_make_q(1, 1000000);
-      ctx->pix_fmt = mfHardware ? AV_PIX_FMT_NV12 : AV_PIX_FMT_YUV420P;
-      ctx->max_b_frames = 0;
-      ctx->thread_count = 0; // let codec decide
-      ctx->gop_size = getKeyFrameInterval();
-      if (overlap)
-      {
-        // A file started mid-stream needs SPS/PPS from the codec, not its first packet.
-        ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-      }
-      if (std::string("h264_videotoolbox") == codec->name)
-      {
-        ctx->qmin = -1;
-        ctx->qmax = -1;
-      }
-      if (codecName == "h264_mf")
-      {
-        // h264_mf defaults to Constrained Baseline, which disables CABAC and 8x8 transforms.
-        ctx->profile = AV_PROFILE_H264_HIGH;
-      }
-      return ctx;
-    };
-
-    pCodecCtx = allocCodecContext();
-    if (!pCodecCtx)
-    {
-      auto msg = "Error: Could not allocate video codec context";
-      SystemEventQueue::push("ffmpeg", msg);
-      return msg;
-    }
-
-    // Map the app scale to CRF/CQ/ICQ: Standard=26, Medium=23, High=20, Very High=17.
-    // Encoder scales are approximate equivalents, not identical visual quality.
-    const int quantizer = static_cast<int>(std::lround(14 + (100 - recordingQuality) * 0.3));
-    AVDictionary *codec_options = NULL;
-    if (codecName == "libx264" || codecName == "libx264rgb")
-    {
-      // 'preset' controls compression speed; slower = more compression
-      av_dict_set(&codec_options, "preset", "medium", 0);
-      av_dict_set_int(&codec_options, "crf", quantizer, 0);
-    }
-    else if (codecName == "h264_nvenc")
-    {
-      av_dict_set(&codec_options, "preset", "p4", 0); // balanced quality/speed
-      av_dict_set(&codec_options, "tune", "hq", 0);
-      av_dict_set(&codec_options, "rc", "vbr", 0);
-      av_dict_set_int(&codec_options, "cq", quantizer, 0);
-      if (overlap)
-      {
-        // Forced keyframes must be IDR to start a file.
-        av_dict_set_int(&codec_options, "forced_idr", 1, 0);
-      }
-    }
-    else if (codecName == "h264_qsv")
-    {
-      av_dict_set(&codec_options, "preset", "medium", 0);
-      // QSV selects ICQ when global_quality > 0 and no bitrate cap is set.
-      pCodecCtx->global_quality = quantizer;
-    }
-    else if (codecName == "h264_videotoolbox")
-    {
-      pCodecCtx->flags |= AV_CODEC_FLAG_QSCALE;
-      pCodecCtx->global_quality = recordingQuality * FF_QP2LAMBDA;
-    }
-    else if (codecName == "h264_amf")
-    {
-      av_dict_set(&codec_options, "rc", "cqp", 0);
-      av_dict_set_int(&codec_options, "qp_i", quantizer, 0);
-      av_dict_set_int(&codec_options, "qp_p", quantizer, 0);
-      av_dict_set_int(&codec_options, "qp_b", quantizer, 0);
-    }
-    else if (codecName == "h264_mf")
-    {
-      // Hardware MFTs implement quality mode inconsistently, so target a bitrate.
-      av_dict_set(&codec_options, "rate_control", "u_vbr", 0);
-      if (mfHardware)
-      {
-        av_dict_set_int(&codec_options, "hw_encoding", 1, 0);
-      }
-    }
-    else
-    {
-      const auto msg = "Error: Encoder does not support recording quality: " + codecName;
-      SystemEventQueue::push("ffmpeg", msg);
-      return msg;
-    }
-
-    int openResult = avcodec_open2(pCodecCtx, codec, &codec_options);
-    if (openResult < 0 && mfHardware)
-    {
-      // No usable hardware MFT; fall back to Microsoft's software encoder.
-      SystemEventQueue::push("ffmpeg", "Warning: Hardware h264_mf unavailable, using software encoder");
-      av_dict_free(&codec_options);
-      avcodec_free_context(&pCodecCtx);
-      mfHardware = false;
-      pCodecCtx = allocCodecContext();
-      if (!pCodecCtx)
-      {
-        auto msg = "Error: Could not allocate video codec context";
-        SystemEventQueue::push("ffmpeg", msg);
-        return msg;
-      }
-      av_dict_set(&codec_options, "rate_control", "u_vbr", 0);
-      openResult = avcodec_open2(pCodecCtx, codec, &codec_options);
-    }
-    if (openResult < 0)
-    {
-      auto msg = "Error: Could not open codec " + codecName;
-      SystemEventQueue::push("ffmpeg", msg);
-      av_dict_free(&codec_options);
-      return msg;
-    }
-
-    if (av_dict_count(codec_options) != 0)
-    {
-      const auto msg = "Error: Recording quality options were not accepted by " + codecName;
-      av_dict_free(&codec_options);
-      SystemEventQueue::push("ffmpeg", msg);
-      return msg;
-    }
-    av_dict_free(&codec_options);
-    SystemEventQueue::push("ffmpeg", "Recording quality " + std::to_string(recordingQuality) +
-                                    " using " + codecName +
-                                    (codecName == "h264_mf"
-                                         ? std::string(mfHardware ? " hardware" : " software") + " at " +
-                                               std::to_string(mfBitRate / 1000000) + " Mbps"
-                                         : ""));
 
     pFrame = av_frame_alloc();
     if (!pFrame)
@@ -696,6 +566,152 @@ public:
   ~FFVideoRecorder() {}
 
 private:
+  // Open codec as pCodecCtx with the recording quality settings. On failure the caller
+  // frees pCodecCtx and may try another encoder.
+  std::string openEncoder(const AVCodec *codec, int width, int height, float fps)
+  {
+    // Media Foundation targets a bitrate; other encoders target quality.
+    const int64_t mfBitRate = mediaFoundationBitRate(recordingQuality);
+    // Hardware MFTs (Intel Quick Sync at least) only accept NV12 and fail format
+    // negotiation on YUV420P. The software fallback keeps YUV420P.
+    bool mfHardware = codecName == "h264_mf" && !forceSoftware;
+    auto allocCodecContext = [&]() -> AVCodecContext *
+    {
+      AVCodecContext *ctx = avcodec_alloc_context3(codec);
+      if (!ctx)
+      {
+        return nullptr;
+      }
+      // Quality controls allocate bitrate according to scene complexity.
+      ctx->bit_rate = codecName == "h264_mf" ? mfBitRate : 0;
+      ctx->width = width;
+      ctx->height = height;
+      ctx->framerate = av_d2q(fps, 100000);
+      // Preserve source timing independently of the nominal frame rate.
+      ctx->time_base = av_make_q(1, 1000000);
+      ctx->pix_fmt = mfHardware ? AV_PIX_FMT_NV12 : AV_PIX_FMT_YUV420P;
+      ctx->max_b_frames = 0;
+      ctx->thread_count = 0; // let codec decide
+      ctx->gop_size = getKeyFrameInterval();
+      if (overlap)
+      {
+        // A file started mid-stream needs SPS/PPS from the codec, not its first packet.
+        ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+      }
+      if (std::string("h264_videotoolbox") == codec->name)
+      {
+        ctx->qmin = -1;
+        ctx->qmax = -1;
+      }
+      if (codecName == "h264_mf")
+      {
+        // h264_mf defaults to Constrained Baseline, which disables CABAC and 8x8 transforms.
+        ctx->profile = AV_PROFILE_H264_HIGH;
+      }
+      return ctx;
+    };
+
+    pCodecCtx = allocCodecContext();
+    if (!pCodecCtx)
+    {
+      auto msg = "Error: Could not allocate video codec context";
+      return msg;
+    }
+
+    // Map the app scale to CRF/CQ/ICQ: Standard=26, Medium=23, High=20, Very High=17.
+    // Encoder scales are approximate equivalents, not identical visual quality.
+    const int quantizer = static_cast<int>(std::lround(14 + (100 - recordingQuality) * 0.3));
+    AVDictionary *codec_options = NULL;
+    if (codecName == "libx264" || codecName == "libx264rgb")
+    {
+      // 'preset' controls compression speed; slower = more compression
+      av_dict_set(&codec_options, "preset", "medium", 0);
+      av_dict_set_int(&codec_options, "crf", quantizer, 0);
+    }
+    else if (codecName == "h264_nvenc")
+    {
+      av_dict_set(&codec_options, "preset", "p4", 0); // balanced quality/speed
+      av_dict_set(&codec_options, "tune", "hq", 0);
+      av_dict_set(&codec_options, "rc", "vbr", 0);
+      av_dict_set_int(&codec_options, "cq", quantizer, 0);
+      if (overlap)
+      {
+        // Forced keyframes must be IDR to start a file.
+        av_dict_set_int(&codec_options, "forced-idr", 1, 0);
+      }
+    }
+    else if (codecName == "h264_qsv")
+    {
+      av_dict_set(&codec_options, "preset", "medium", 0);
+      // QSV selects ICQ when global_quality > 0 and no bitrate cap is set.
+      pCodecCtx->global_quality = quantizer;
+    }
+    else if (codecName == "h264_videotoolbox")
+    {
+      pCodecCtx->flags |= AV_CODEC_FLAG_QSCALE;
+      pCodecCtx->global_quality = recordingQuality * FF_QP2LAMBDA;
+    }
+    else if (codecName == "h264_amf")
+    {
+      av_dict_set(&codec_options, "rc", "cqp", 0);
+      av_dict_set_int(&codec_options, "qp_i", quantizer, 0);
+      av_dict_set_int(&codec_options, "qp_p", quantizer, 0);
+      av_dict_set_int(&codec_options, "qp_b", quantizer, 0);
+    }
+    else if (codecName == "h264_mf")
+    {
+      // Hardware MFTs implement quality mode inconsistently, so target a bitrate.
+      av_dict_set(&codec_options, "rate_control", "u_vbr", 0);
+      if (mfHardware)
+      {
+        av_dict_set_int(&codec_options, "hw_encoding", 1, 0);
+      }
+    }
+    else
+    {
+      const auto msg = "Error: Encoder does not support recording quality: " + codecName;
+      return msg;
+    }
+
+    int openResult = avcodec_open2(pCodecCtx, codec, &codec_options);
+    if (openResult < 0 && mfHardware)
+    {
+      // No usable hardware MFT; fall back to Microsoft's software encoder.
+      SystemEventQueue::push("ffmpeg", "Warning: Hardware h264_mf unavailable, using software encoder");
+      av_dict_free(&codec_options);
+      avcodec_free_context(&pCodecCtx);
+      mfHardware = false;
+      pCodecCtx = allocCodecContext();
+      if (!pCodecCtx)
+      {
+        auto msg = "Error: Could not allocate video codec context";
+        return msg;
+      }
+      av_dict_set(&codec_options, "rate_control", "u_vbr", 0);
+      openResult = avcodec_open2(pCodecCtx, codec, &codec_options);
+    }
+    if (openResult < 0)
+    {
+      av_dict_free(&codec_options);
+      return "Error: Could not open codec " + codecName;
+    }
+
+    if (av_dict_count(codec_options) != 0)
+    {
+      const auto msg = "Error: Recording quality options were not accepted by " + codecName;
+      av_dict_free(&codec_options);
+      return msg;
+    }
+    av_dict_free(&codec_options);
+    SystemEventQueue::push("ffmpeg", "Recording quality " + std::to_string(recordingQuality) +
+                                    " using " + codecName +
+                                    (codecName == "h264_mf"
+                                         ? std::string(mfHardware ? " hardware" : " software") + " at " +
+                                               std::to_string(mfBitRate / 1000000) + " Mbps"
+                                         : ""));
+    return "";
+  }
+
   int64_t toPts(uint64_t ts100ns) const
   {
     return av_rescale_q(ts100ns - firstTimestamp100ns, av_make_q(1, 10000000), av_make_q(1, 1000000));

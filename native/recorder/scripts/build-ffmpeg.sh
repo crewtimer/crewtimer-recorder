@@ -41,20 +41,31 @@ DOWNLOAD_DIR="${BASE_BUILD_DIR}/ffmpeg-${FFMPEG_VERSION}"
 INSTALL_DIR="${BASE_BUILD_DIR}/ffmpeg-static-${PLATFORM}"
 BUILD_DIR="${DOWNLOAD_DIR}/build-${PLATFORM}"
 FFMPEG_URL="https://github.com/FFmpeg/FFmpeg/archive/refs/tags/${FFMPEG_VERSION}.zip"
-CHECK_FILE="${INSTALL_DIR}/lib/libswscale.a"  # File to check for existing build
 # libsrt
 LIBSRT_VERSION="1.5.1"
 SRT_URL="https://github.com/Haivision/srt/archive/refs/tags/v${LIBSRT_VERSION}.zip"
 SRT_SRC_DIR="${BASE_BUILD_DIR}/srt-${LIBSRT_VERSION}"
+# NVIDIA codec headers (Windows): header-only; FFmpeg loads the driver's NVENC/NVDEC DLLs
+# at run time, so builds still run on PCs without NVIDIA. 11.1 needs driver 471.41+.
+NVCODEC_VERSION="n11.1.5.3"
+# tar.gz, not zip: Git Bash has tar but no unzip
+NVCODEC_URL="https://github.com/FFmpeg/nv-codec-headers/archive/refs/tags/${NVCODEC_VERSION}.tar.gz"
+NVCODEC_SRC_DIR="${BASE_BUILD_DIR}/nv-codec-headers-${NVCODEC_VERSION}"
 
 if [[ "$OSTYPE" == "cygwin" ]]; then
   # INSTALL_DIR=`cygdrive "${INSTALL_DIR}"`
   echo INSTALL_DIR=${INSTALL_DIR}
 fi
 
-# Check if the library has already been built
-if [ -f "$CHECK_FILE" ]; then
-  echo "FFMPEG static library already built ($CHECK_FILE). Skipping build."
+# Check if the library has already been built (on Windows, with NVENC: libavcodec has
+# the encoder's symbol only when it was compiled in; LC_ALL=C -a to search a binary)
+needs_build() {
+  [ ! -f "$1/lib/libswscale.a" ] ||
+    { [[ "$PLATFORM" == "win" ]] &&
+        ! LC_ALL=C grep -aq ff_h264_nvenc_encoder "$1/lib/libavcodec.a"; }
+}
+if ! needs_build "$INSTALL_DIR"; then
+  echo "FFMPEG static library already built (${INSTALL_DIR}). Skipping build."
   exit 0
 fi
 
@@ -72,6 +83,18 @@ fi
 if [ ! -f "${BASE_BUILD_DIR}/srt-${LIBSRT_VERSION}.zip" ]; then
   echo "Downloading SRT ${LIBSRT_VERSION}..."
   curl -L "${SRT_URL}" -o "${BASE_BUILD_DIR}/srt-${LIBSRT_VERSION}.zip"
+fi
+
+if [[ "$PLATFORM" == "win" ]]; then
+  NVCODEC_ARCHIVE="${BASE_BUILD_DIR}/nv-codec-headers-${NVCODEC_VERSION}.tar.gz"
+  if [ ! -f "$NVCODEC_ARCHIVE" ]; then
+    echo "Downloading nv-codec-headers ${NVCODEC_VERSION}..."
+    curl -fL "${NVCODEC_URL}" -o "$NVCODEC_ARCHIVE"
+  fi
+  if [ ! -d "$NVCODEC_SRC_DIR" ]; then
+    # Relative paths: GNU tar reads "C:" in a path as a remote host
+    (cd "$BASE_BUILD_DIR" && tar -xzf "nv-codec-headers-${NVCODEC_VERSION}.tar.gz")
+  fi
 fi
 
 # Extract FFMPEG
@@ -95,7 +118,7 @@ fi
 cd "${BASE_BUILD_DIR}/FFmpeg-${FFMPEG_VERSION}"
 pwd
 for ARCH in $ARCH_FLAGS; do
-    if [ -f "${INSTALL_DIR}-${ARCH}/lib/libswscale.a" ]; then
+    if ! needs_build "${INSTALL_DIR}-${ARCH}"; then
       continue;
     fi
     if [[ "$PLATFORM" == "mac" ]]; then
@@ -150,6 +173,15 @@ for ARCH in $ARCH_FLAGS; do
       popd > /dev/null
     fi
 
+    if [[ "$PLATFORM" == "win" ]]; then
+      # Installs include/ffnvcodec and lib/pkgconfig/ffnvcodec.pc, found by configure
+      echo "Installing nv-codec-headers for $ARCH..."
+      make -C "${NVCODEC_SRC_DIR}" install PREFIX="${INSTALL_DIR}-${ARCH}"
+      # Fail at configure rather than ship a build without NVENC. --static: static
+      # libsrt needs its Libs.private (ws2_32) under Cygwin as well as Git Bash.
+      CONFIGURE_OPTIONS+=(--enable-ffnvcodec --enable-nvenc --pkg-config-flags=--static)
+    fi
+
     PKG_CONFIG_PATH="${INSTALL_DIR}-${ARCH}/lib/pkgconfig"
     if [[ "$OSTYPE" == "cygwin" ]]; then
       # if pkg-config is a cygwin binary, convert path to unix style
@@ -163,9 +195,8 @@ for ARCH in $ARCH_FLAGS; do
     if [[ "$OSTYPE" == "msys" ]]; then
       # --extra-ldflags is passed to link.exe untranslated, so use its own option
       EXTRA_LDFLAGS="-libpath:${INSTALL_DIR}-${ARCH}/lib"
-      CONFIGURE_OPTIONS=(
+      CONFIGURE_OPTIONS+=(
         --pkg-config="$PKG_CONFIG_EXE"
-        --pkg-config-flags=--static
         --disable-programs
       )
       # Stop Git Bash from rewriting MSVC-style arguments as paths. Only for FFmpeg:

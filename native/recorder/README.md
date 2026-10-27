@@ -72,6 +72,12 @@ Under Git Bash the script works around three MSYS issues (path rewriting of MSVC
 arguments, FFmpeg's dependency awk, and the `lib.exe` archive step) and builds SRT with
 the static C runtime to match FFmpeg and node-gyp.
 
+On Windows the script also installs NVIDIA's header-only nv-codec-headers so FFmpeg
+includes NVENC (and NVDEC). FFmpeg loads the NVIDIA driver at run time, so the build
+still runs on PCs without an NVIDIA GPU; the recorder then falls back to the next encoder.
+NVENC needs NVIDIA driver 471.41 or later. An existing build without NVENC is rebuilt
+automatically.
+
 To build the module locally and use it in the app (instead of the downloaded prebuild):
 
 ```bash
