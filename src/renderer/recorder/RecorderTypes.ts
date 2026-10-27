@@ -13,6 +13,8 @@ export interface RecordingProps {
   recordingPrefix: string;
   recordingDuration: number;
   recordingQuality: number;
+  /** Each file after the first also starts with the last 2 s of the previous one */
+  overlapRecording: boolean;
   networkCamera: string;
   networkIP: string;
   showFinishGuide: boolean;
@@ -49,6 +51,7 @@ export interface StartRecorderMessage extends RecorderMessage {
     recordingPrefix: string;
     recordingDuration: number;
     recordingQuality: number;
+    overlapRecording: boolean;
     networkCamera: string;
     cropArea: Rect;
     guide: { pt1: number; pt2: number };
@@ -128,6 +131,7 @@ export const DefaultRecordingProps: RecordingProps = {
   recordingPrefix: 'CT_',
   recordingDuration: 120,
   recordingQuality: 80,
+  overlapRecording: true,
   networkCamera: '',
   networkIP: '',
   showFinishGuide: true,

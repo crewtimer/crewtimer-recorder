@@ -431,7 +431,8 @@ public:
                     const FrameProcessor::FRectangle cropArea,
                     const FrameProcessor::Guide guide,
                     const int rotation,
-                    const int recordingQuality = 80)
+                    const int recordingQuality = 80,
+                    const bool overlapRecording = true)
   {
     std::lock_guard<std::recursive_mutex> lock(controlMutex);
     this->srcName = srcName;
@@ -476,7 +477,11 @@ public:
     if (encoder == "ffmpeg")
     {
       SystemEventQueue::push("VID", "Using ffmpeg encoder.");
-      videoRecorder = createFfmpegRecorder(recordingQuality);
+      videoRecorder = createFfmpegRecorder(recordingQuality, false, overlapRecording);
+      if (overlapRecording)
+      {
+        SystemEventQueue::push("VID", "Overlapped recording enabled.");
+      }
     }
 
     if (encoder == "null")
@@ -493,7 +498,7 @@ public:
     }
 
     auto processor = std::shared_ptr<FrameProcessor>(new FrameProcessor(
-        dir, prefix, videoRecorder, interval, cropArea, guide));
+        dir, prefix, videoRecorder, interval, cropArea, guide, overlapRecording));
     {
       std::lock_guard<std::mutex> lock(frameSinkMutex);
       frameProcessor = processor;

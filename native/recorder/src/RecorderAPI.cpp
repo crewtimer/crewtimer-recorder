@@ -308,6 +308,10 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
         }
         recordingQuality = static_cast<int>(quality);
       }
+      // On unless explicitly turned off.
+      const bool overlapRecording = !(props.Has("overlapRecording") &&
+                                      props.Get("overlapRecording").IsBoolean()) ||
+                                    props.Get("overlapRecording").As<Napi::Boolean>().Value();
       auto folder = props.Get("recordingFolder").As<Napi::String>().Utf8Value();
       auto prefix = getNapiStringField(props, "recordingPrefix", "CT_");
       auto networkCamera =
@@ -330,7 +334,8 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
       guide.pt2 = guideObj.Get("pt2").As<Napi::Number>().FloatValue();
 
       auto result = videoController->start(networkCamera, protocol, "ffmpeg", folder, prefix,
-                                           interval, cropRect, guide, rotation, recordingQuality);
+                                           interval, cropRect, guide, rotation, recordingQuality,
+                                           overlapRecording);
       if (!result.empty())
       {
         std::cerr << "Error: " << result << std::endl;

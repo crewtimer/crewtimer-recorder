@@ -1,9 +1,13 @@
+#include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <iostream>
 #include <sstream>
+#include <utility>
 #include <vector>
 
 extern "C"
@@ -19,6 +23,7 @@ extern "C"
 }
 
 #include "SystemEventQueue.hpp"
+#include "TimingConstants.hpp"
 #include "VideoRecorder.hpp"
 
 // Map recording quality to a Media Foundation bitrate: Standard (60)=20, Medium (70)=30,
@@ -42,25 +47,59 @@ static int64_t mediaFoundationBitRate(int quality)
   return points[count - 1][1] * 1000000LL;
 }
 
+// One encoder runs from openVideoStream to stop. Without overlap it writes a single file.
+// With overlap, splitVideoStream starts further files while the encoder keeps running:
+// each new file begins with the encoder's recent packets from a forced keyframe at least
+// RecordingOverlap100ns back, and the previous file closes once the encoder has produced
+// its last packet. Packet times are relative to the first frame and re-based per file.
 class FFVideoRecorder : public VideoRecorder
 {
-  uint64_t firstTimestamp100ns = 0;
+  struct OutputFile
+  {
+    RecordedFile info;
+    std::string tmpPath;
+    AVFormatContext *formatCtx = nullptr;
+    AVStream *stream = nullptr;
+    // A file after the first opens at its first keyframe at or after startPts.
+    bool started = false;
+    // Its MP4 could not be created; the previous file keeps every packet instead.
+    bool failed = false;
+    int64_t startPts = 0;
+    // Packets from endPts on belong to the next file.
+    int64_t endPts = INT64_MAX;
+    // First frame not in the previous file. The next file's overlap stops here, so only
+    // neighbouring files overlap.
+    int64_t livePts = 0;
+  };
+  // An encoded packet kept for the overlap, with its frame's capture time.
+  struct BufferedPacket
+  {
+    AVPacket *packet;
+    uint64_t ts100ns;
+  };
+
+  uint64_t firstTimestamp100ns = 0; // capture time of the first frame; pts are relative to it
   int64_t lastFramePts = AV_NOPTS_VALUE;
+  int64_t framesSent = 0;
+  bool forceKeyFrame = false;
   AVFrame *pFrame = nullptr;
   AVPacket *pkt = nullptr;
   struct SwsContext *sws_ctx = nullptr;
-  AVFormatContext *pFormatCtx = nullptr;
   AVCodecContext *pCodecCtx = nullptr;
-  AVStream *video_st = nullptr;
-  std::string outputFile;
-  std::string tmpFile;
+  // Oldest first; more than one while earlier files wait for their last packets.
+  std::deque<OutputFile> outputs;
+  // Overlap only: recent packets, forced keyframes, and the capture times of recent frames.
+  std::deque<BufferedPacket> history;
+  std::deque<int64_t> keyFramePts;
+  std::deque<std::pair<int64_t, uint64_t>> sentFrames;
   std::string codecName;
   const int recordingQuality;
   const bool forceSoftware;
+  const bool overlap;
 
 public:
-  FFVideoRecorder(int quality, bool forceSoftware)
-      : recordingQuality(quality), forceSoftware(forceSoftware)
+  FFVideoRecorder(int quality, bool forceSoftware, bool overlap)
+      : recordingQuality(quality), forceSoftware(forceSoftware), overlap(overlap)
   {
     // Get the version of the libavutil library
     unsigned version = avutil_version();
@@ -132,30 +171,11 @@ public:
     }
     firstTimestamp100ns = timestamp;
     lastFramePts = AV_NOPTS_VALUE;
-    outputFile = filename + ".mp4";
-    tmpFile = directory + "/" + "tmp-" + outputFile;
-    outputFile = directory + "/" + outputFile;
-    // std::cout << "Creating file '" << outputFile << "'" << std::endl;
+    framesSent = 0;
+    forceKeyFrame = false;
 
     av_log_set_level(AV_LOG_ERROR);
     // av_log_set_level(AV_LOG_INFO);
-
-    /* allocate the output media context */
-    avformat_alloc_output_context2(&pFormatCtx, NULL, NULL, tmpFile.c_str());
-    if (!pFormatCtx)
-    {
-      const auto msg = "Warning: Could not deduce output format from file extension: "
-                       "using MPEG.";
-      SystemEventQueue::push("ffmpeg", msg);
-      avformat_alloc_output_context2(&pFormatCtx, NULL, "mpeg",
-                                     tmpFile.c_str());
-    }
-    if (!pFormatCtx)
-    {
-      auto msg = "Error: Could not allocate format context";
-      SystemEventQueue::push("ffmpeg", msg);
-      return msg;
-    }
 
     // Codec names in hardware accelerated preferred order, platform-specific
 #if defined(__APPLE__)
@@ -210,15 +230,6 @@ public:
       SystemEventQueue::push("ffmpeg", "Using codec " + codecName);
     }
 
-    video_st = avformat_new_stream(pFormatCtx, NULL);
-    if (!video_st)
-    {
-      auto msg = "Error: Could not allocate video stream";
-      SystemEventQueue::push("ffmpeg", msg);
-      return msg;
-    }
-    video_st->id = pFormatCtx->nb_streams - 1;
-
     // Media Foundation targets a bitrate; other encoders target quality.
     const int64_t mfBitRate = mediaFoundationBitRate(recordingQuality);
     // Hardware MFTs (Intel Quick Sync at least) only accept NV12 and fail format
@@ -242,6 +253,11 @@ public:
       ctx->max_b_frames = 0;
       ctx->thread_count = 0; // let codec decide
       ctx->gop_size = getKeyFrameInterval();
+      if (overlap)
+      {
+        // A file started mid-stream needs SPS/PPS from the codec, not its first packet.
+        ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+      }
       if (std::string("h264_videotoolbox") == codec->name)
       {
         ctx->qmin = -1;
@@ -262,11 +278,6 @@ public:
       SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
-    video_st->time_base = pCodecCtx->time_base; // Use same timebase for both
-
-    /* Some formats want stream headers to be separate. */
-    // if (oc->oformat->flags & AVFMT_GLOBALHEADER)
-    //   c->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 
     // Map the app scale to CRF/CQ/ICQ: Standard=26, Medium=23, High=20, Very High=17.
     // Encoder scales are approximate equivalents, not identical visual quality.
@@ -284,6 +295,11 @@ public:
       av_dict_set(&codec_options, "tune", "hq", 0);
       av_dict_set(&codec_options, "rc", "vbr", 0);
       av_dict_set_int(&codec_options, "cq", quantizer, 0);
+      if (overlap)
+      {
+        // Forced keyframes must be IDR to start a file.
+        av_dict_set_int(&codec_options, "forced_idr", 1, 0);
+      }
     }
     else if (codecName == "h264_qsv")
     {
@@ -360,56 +376,6 @@ public:
                                                std::to_string(mfBitRate / 1000000) + " Mbps"
                                          : ""));
 
-    if (avcodec_parameters_from_context(video_st->codecpar, pCodecCtx) < 0)
-    {
-      const auto msg = "Error: Could not copy codec parameters";
-      SystemEventQueue::push("ffmpeg", msg);
-    }
-
-    if (!(pFormatCtx->oformat->flags & AVFMT_NOFILE))
-    {
-      if (avio_open(&pFormatCtx->pb, tmpFile.c_str(), AVIO_FLAG_WRITE) < 0)
-      {
-        auto msg = "Error: Could not open " + tmpFile;
-        SystemEventQueue::push("ffmpeg", msg);
-        return msg;
-      }
-    }
-
-    // Optional: PRFT if your build supports it
-    if (muxer_has_opt(pFormatCtx, "write_prft"))
-    {
-      av_opt_set_int(pFormatCtx->priv_data, "write_prft", 1, 0);
-      av_opt_set(pFormatCtx->priv_data, "prft", "wallclock", 0);
-    }
-    // Prepare values
-    long long utc_us = (timestamp + 5) / 10; // 100ns to microseconds
-    const std::string iso = iso8601_utc_now_us(static_cast<uint64_t>(utc_us));
-
-    char utc_us_buf[32];
-    std::snprintf(utc_us_buf, sizeof(utc_us_buf), "%lld", (long long)utc_us);
-
-    // Stamp container + streams with custom key
-    av_dict_set(&pFormatCtx->metadata, "creation_time", iso.c_str(), 0);
-    av_dict_set(&pFormatCtx->metadata, "com.crewtimer.first_utc_us", utc_us_buf, 0);
-
-    for (unsigned i = 0; i < pFormatCtx->nb_streams; ++i)
-    {
-      av_dict_set(&pFormatCtx->streams[i]->metadata, "creation_time", iso.c_str(), 0);
-      av_dict_set(&pFormatCtx->streams[i]->metadata, "com.crewtimer.first_utc_us", utc_us_buf, 0);
-    }
-
-    AVDictionary *opts = nullptr;
-    av_dict_set(&opts, "movflags", "use_metadata_tags", 0); // allow custom tags
-    int err = avformat_write_header(pFormatCtx, &opts);
-    av_dict_free(&opts);
-    if (err < 0)
-    {
-      auto msg = "Error: Cannot write mp4 header";
-      SystemEventQueue::push("ffmpeg", msg);
-      return msg;
-    }
-
     pFrame = av_frame_alloc();
     if (!pFrame)
     {
@@ -439,11 +405,23 @@ public:
     pkt->size = 0;
     sws_ctx = nullptr;
 
-    return "";
+    // The first file starts with the encoder's first packet, which is always a keyframe.
+    OutputFile first;
+    first.info.directory = directory;
+    first.info.filename = filename;
+    outputs.push_back(first);
+    return openMuxer(outputs.back());
   }
 
   std::string writeVideoFrame(FramePtr video_frame)
   {
+    // The encoder may still reference the previous frame's buffer.
+    if (av_frame_make_writable(pFrame) < 0)
+    {
+      const std::string msg = "Error: Could not allocate the video frame data";
+      SystemEventQueue::push("ffmpeg", msg);
+      return msg;
+    }
     if (video_frame->pixelFormat == Frame::PixelFormat::YUV420P)
     {
       // I420 layout: Y plane at data, U at data+w*h, V at data+w*h*5/4
@@ -506,16 +484,14 @@ public:
     }
 
     // Both NDI and SRT supply corrected capture times in 100 ns units.
-    // Start each segment at zero, preserving gaps in the source timeline.
+    // Start each recording at zero, preserving gaps in the source timeline.
     if (video_frame->timestamp < firstTimestamp100ns)
     {
       const std::string msg = "Error: Frame timestamp precedes recording start";
       SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
-    const int64_t pts = av_rescale_q(
-        video_frame->timestamp - firstTimestamp100ns,
-        av_make_q(1, 10000000), pCodecCtx->time_base);
+    const int64_t pts = toPts(video_frame->timestamp);
     if (lastFramePts != AV_NOPTS_VALUE && pts <= lastFramePts)
     {
       const std::string msg = "Error: Recording frame timestamps must increase";
@@ -523,6 +499,10 @@ public:
       return msg;
     }
     pFrame->pts = pts;
+    // Overlapped files start at forced keyframes, so their positions are known before the
+    // encoder produces them.
+    const bool keyFrame = overlap && (framesSent % getKeyFrameInterval() == 0 || forceKeyFrame);
+    pFrame->pict_type = keyFrame ? AV_PICTURE_TYPE_I : AV_PICTURE_TYPE_NONE;
 
     std::string errorMsg = "";
     if (avcodec_send_frame(pCodecCtx, pFrame) < 0)
@@ -534,6 +514,16 @@ public:
     else
     {
       lastFramePts = pts;
+      ++framesSent;
+      forceKeyFrame = false;
+      if (overlap)
+      {
+        sentFrames.push_back(std::make_pair(pts, video_frame->timestamp));
+        if (keyFrame)
+        {
+          keyFramePts.push_back(pts);
+        }
+      }
     }
 
     while (1)
@@ -552,26 +542,73 @@ public:
         break;
       }
 
-      av_packet_rescale_ts(pkt, pCodecCtx->time_base, video_st->time_base);
-      pkt->duration = av_rescale_q(1, av_inv_q(pCodecCtx->framerate),
-                                   video_st->time_base);
-      pkt->stream_index = video_st->index;
-
-      if (av_write_frame(pFormatCtx, pkt) < 0)
+      const std::string writeErr = handlePacket(pkt);
+      av_packet_unref(pkt);
+      if (!writeErr.empty())
       {
         if (errorMsg.empty())
         {
-          errorMsg = "Error: Cannot write video frame";
-          SystemEventQueue::push("ffmpeg", errorMsg);
+          errorMsg = writeErr;
         }
-        // Continue draining packets even on error
-        av_packet_unref(pkt);
         break;
       }
-      av_packet_unref(pkt);
+    }
+    if (overlap)
+    {
+      trimHistory();
     }
 
     return errorMsg;
+  }
+
+  bool supportsSplit() { return overlap; }
+
+  uint64_t splitStartTimestamp(uint64_t splitTs)
+  {
+    if (!overlap || outputs.empty() || splitTs < firstTimestamp100ns)
+    {
+      return splitTs;
+    }
+    return captureTime(splitStartPts(toPts(splitTs)));
+  }
+
+  std::string splitVideoStream(std::string directory, std::string filename, uint64_t splitTs)
+  {
+    if (!overlap || !pCodecCtx || outputs.empty())
+    {
+      return "Error: Recorder cannot split files";
+    }
+    if (splitTs < firstTimestamp100ns)
+    {
+      const std::string msg = "Error: Frame timestamp precedes recording start";
+      SystemEventQueue::push("ffmpeg", msg);
+      return msg;
+    }
+    // The newest file may not have started yet when splits come faster than the encoder's
+    // delay; it starts when its keyframe comes out.
+    const int64_t splitPts = toPts(splitTs);
+    OutputFile next;
+    next.info.directory = directory;
+    next.info.filename = filename;
+    next.livePts = splitPts;
+    next.startPts = splitStartPts(splitPts);
+    outputs.back().endPts = splitPts;
+    forceKeyFrame = true;
+    outputs.push_back(next);
+
+    // The overlap packets the encoder has already produced; the rest arrive as encoded.
+    for (const BufferedPacket &buffered : history)
+    {
+      if (buffered.packet->pts >= outputs.back().startPts)
+      {
+        const std::string err = writePacket(outputs.back(), buffered.packet, buffered.ts100ns);
+        if (!err.empty())
+        {
+          return err;
+        }
+      }
+    }
+    return "";
   }
 
   std::string stop()
@@ -605,37 +642,37 @@ public:
           retval = msg;
           break;
         }
-        av_packet_rescale_ts(pkt, pCodecCtx->time_base, video_st->time_base);
-        pkt->duration = av_rescale_q(1, av_inv_q(pCodecCtx->framerate),
-                                     video_st->time_base);
-        pkt->stream_index = video_st->index;
-
-        if (av_write_frame(pFormatCtx, pkt) < 0)
-        {
-          av_packet_unref(pkt);
-          auto msg = "Error: Cannot write video frame";
-          SystemEventQueue::push("ffmpeg", msg);
-          retval = msg;
-          break;
-        }
+        // Keep draining after a write error so the other files still get their last frames.
+        const std::string writeErr = handlePacket(pkt);
         av_packet_unref(pkt);
-      }
-      // Properly close the output file
-      av_write_trailer(pFormatCtx);
-
-      if (!(pFormatCtx->oformat->flags & AVFMT_NOFILE))
-      {
-        avio_closep(&pFormatCtx->pb);
+        if (retval.empty())
+        {
+          retval = writeErr;
+        }
       }
     }
+
+    // The encoder is drained, so every file is complete.
+    while (!outputs.empty())
+    {
+      const std::string closeErr = closeFile(outputs.front());
+      outputs.pop_front();
+      if (retval.empty())
+      {
+        retval = closeErr;
+      }
+    }
+    for (BufferedPacket &buffered : history)
+    {
+      av_packet_free(&buffered.packet);
+    }
+    history.clear();
+    keyFramePts.clear();
+    sentFrames.clear();
 
     if (pCodecCtx)
     {
       avcodec_free_context(&pCodecCtx);
-    }
-    if (pFormatCtx)
-    {
-      avformat_free_context(pFormatCtx);
     }
     if (pFrame)
     {
@@ -651,35 +688,310 @@ public:
     }
 
     pCodecCtx = nullptr;
-    pFormatCtx = nullptr;
     pFrame = nullptr;
     pkt = nullptr;
     sws_ctx = nullptr;
-    video_st = nullptr;
-
-    if (tmpFile.length() > 0)
-    {
-      // Attempt to rename the file
-      if (std::rename(tmpFile.c_str(), outputFile.c_str()) == 0)
-      {
-        // std::cout << "File successfully renamed from " << tmpFile << " to "
-        //           << outputFile << std::endl;
-      }
-      else
-      {
-        // If renaming failed, print an error message
-        auto msg = "Error: Cannot rename file";
-        SystemEventQueue::push("ffmpeg", msg);
-        retval = msg;
-      }
-      tmpFile = "";
-    }
     return retval;
   }
   ~FFVideoRecorder() {}
+
+private:
+  int64_t toPts(uint64_t ts100ns) const
+  {
+    return av_rescale_q(ts100ns - firstTimestamp100ns, av_make_q(1, 10000000), av_make_q(1, 1000000));
+  }
+
+  // Capture time of the frame sent at pts.
+  uint64_t captureTime(int64_t pts) const
+  {
+    auto it = std::lower_bound(sentFrames.begin(), sentFrames.end(), std::make_pair(pts, uint64_t(0)));
+    return it != sentFrames.end() && it->first == pts ? it->second : firstTimestamp100ns + pts * 10;
+  }
+
+  // Where a file split at splitPts starts: the latest forced keyframe at least the overlap
+  // before the split, give or take half a frame of capture jitter, but not before the
+  // newest file's own live part.
+  int64_t splitStartPts(int64_t splitPts) const
+  {
+    const int64_t overlapPts = int64_t(TimingConstants::RecordingOverlap100ns / 10);
+    const int64_t halfFramePts = int64_t(500000 / av_q2d(pCodecCtx->framerate));
+    int64_t start = outputs.back().livePts;
+    for (int64_t key : keyFramePts)
+    {
+      if (key > start && key <= splitPts - overlapPts + halfFramePts)
+      {
+        start = key;
+      }
+    }
+    return start;
+  }
+
+  // Drop what no split can need: anything before the latest forced keyframe at least the
+  // overlap before the newest packet.
+  void trimHistory()
+  {
+    if (history.empty())
+    {
+      return;
+    }
+    const int64_t limit = history.back().packet->pts - int64_t(TimingConstants::RecordingOverlap100ns / 10);
+    int64_t cutoff = INT64_MIN;
+    for (int64_t key : keyFramePts)
+    {
+      if (key <= limit)
+      {
+        cutoff = key;
+      }
+    }
+    if (cutoff == INT64_MIN)
+    {
+      return;
+    }
+    while (!keyFramePts.empty() && keyFramePts.front() < cutoff)
+    {
+      keyFramePts.pop_front();
+    }
+    while (!history.empty() && history.front().packet->pts < cutoff)
+    {
+      av_packet_free(&history.front().packet);
+      history.pop_front();
+    }
+    while (!sentFrames.empty() && sentFrames.front().first < cutoff)
+    {
+      sentFrames.pop_front();
+    }
+  }
+
+  // Send an encoded packet to every file that holds it, and close a file once the next one
+  // has started and the encoder has moved past the file's end.
+  std::string handlePacket(const AVPacket *packet)
+  {
+    const uint64_t ts100ns = overlap ? captureTime(packet->pts) : firstTimestamp100ns + packet->pts * 10;
+    if (overlap)
+    {
+      BufferedPacket buffered = {av_packet_clone(packet), ts100ns};
+      history.push_back(buffered);
+    }
+    std::string err;
+    // Newest file first, so the previous file knows whether the next one has started.
+    for (size_t i = outputs.size(); i-- > 0;)
+    {
+      OutputFile &file = outputs[i];
+      const bool nextStarted = i + 1 < outputs.size() && outputs[i + 1].started;
+      if (packet->pts >= file.endPts && nextStarted)
+      {
+        continue;
+      }
+      const std::string writeErr = writePacket(file, packet, ts100ns);
+      if (err.empty())
+      {
+        err = writeErr;
+      }
+    }
+    for (size_t i = 0; i + 1 < outputs.size();)
+    {
+      if (packet->pts < outputs[i].endPts || !outputs[i + 1].started)
+      {
+        ++i;
+        continue;
+      }
+      if (!outputs[i].started)
+      {
+        // Only if the encoder ignored forced keyframes; neighbouring files hold its frames.
+        SystemEventQueue::push("ffmpeg", "Warning: " + outputs[i].info.filename +
+                                             " skipped: no keyframe before the next file");
+      }
+      const std::string closeErr = closeFile(outputs[i]);
+      outputs.erase(outputs.begin() + i);
+      if (err.empty())
+      {
+        err = closeErr;
+      }
+      i = 0; // the file before may now be able to close
+    }
+    return err;
+  }
+
+  std::string writePacket(OutputFile &file, const AVPacket *packet, uint64_t ts100ns)
+  {
+    if (!file.started)
+    {
+      if (file.failed || !(packet->flags & AV_PKT_FLAG_KEY) || packet->pts < file.startPts)
+      {
+        return "";
+      }
+      if (packet->pts != file.startPts)
+      {
+        SystemEventQueue::push("ffmpeg", "Warning: " + file.info.filename +
+                                             " starts late, at the next keyframe");
+      }
+      file.startPts = packet->pts;
+      const std::string err = openMuxer(file);
+      if (!err.empty())
+      {
+        // Free the partly opened muxer and do not retry; the file is never started.
+        closeFile(file);
+        file.failed = true;
+        return err;
+      }
+    }
+    AVPacket *out = av_packet_clone(packet);
+    if (!out)
+    {
+      const std::string msg = "Error: Unable to allocate AVPacket";
+      SystemEventQueue::push("ffmpeg", msg);
+      return msg;
+    }
+    out->pts -= file.startPts;
+    if (out->dts != AV_NOPTS_VALUE)
+    {
+      out->dts -= file.startPts;
+    }
+    av_packet_rescale_ts(out, pCodecCtx->time_base, file.stream->time_base);
+    out->duration = av_rescale_q(1, av_inv_q(pCodecCtx->framerate), file.stream->time_base);
+    out->stream_index = file.stream->index;
+    const int ret = av_write_frame(file.formatCtx, out);
+    av_packet_free(&out);
+    if (ret < 0)
+    {
+      const std::string msg = "Error: Cannot write video frame";
+      SystemEventQueue::push("ffmpeg", msg);
+      return msg;
+    }
+    if (file.info.frames == 0)
+    {
+      file.info.firstTs100ns = ts100ns;
+    }
+    file.info.lastTs100ns = ts100ns;
+    ++file.info.frames;
+    return "";
+  }
+
+  // Create the file's tmp- MP4 and write its header; its first frame is at file.startPts.
+  std::string openMuxer(OutputFile &file)
+  {
+    file.tmpPath = file.info.directory + "/tmp-" + file.info.filename + ".mp4";
+    avformat_alloc_output_context2(&file.formatCtx, NULL, NULL, file.tmpPath.c_str());
+    if (!file.formatCtx)
+    {
+      const auto msg = "Warning: Could not deduce output format from file extension: "
+                       "using MPEG.";
+      SystemEventQueue::push("ffmpeg", msg);
+      avformat_alloc_output_context2(&file.formatCtx, NULL, "mpeg",
+                                     file.tmpPath.c_str());
+    }
+    if (!file.formatCtx)
+    {
+      auto msg = "Error: Could not allocate format context";
+      SystemEventQueue::push("ffmpeg", msg);
+      return msg;
+    }
+    AVFormatContext *pFormatCtx = file.formatCtx;
+
+    file.stream = avformat_new_stream(pFormatCtx, NULL);
+    if (!file.stream)
+    {
+      auto msg = "Error: Could not allocate video stream";
+      SystemEventQueue::push("ffmpeg", msg);
+      return msg;
+    }
+    file.stream->id = pFormatCtx->nb_streams - 1;
+    file.stream->time_base = pCodecCtx->time_base; // Use same timebase for both
+
+    if (avcodec_parameters_from_context(file.stream->codecpar, pCodecCtx) < 0)
+    {
+      const auto msg = "Error: Could not copy codec parameters";
+      SystemEventQueue::push("ffmpeg", msg);
+    }
+
+    if (!(pFormatCtx->oformat->flags & AVFMT_NOFILE))
+    {
+      if (avio_open(&pFormatCtx->pb, file.tmpPath.c_str(), AVIO_FLAG_WRITE) < 0)
+      {
+        auto msg = "Error: Could not open " + file.tmpPath;
+        SystemEventQueue::push("ffmpeg", msg);
+        return msg;
+      }
+    }
+
+    // Optional: PRFT if your build supports it
+    if (muxer_has_opt(pFormatCtx, "write_prft"))
+    {
+      av_opt_set_int(pFormatCtx->priv_data, "write_prft", 1, 0);
+      av_opt_set(pFormatCtx->priv_data, "prft", "wallclock", 0);
+    }
+    // Every file counts from the recording's first frame, so a frame shared by two
+    // overlapping files gets the same UTC time in both.
+    long long utc_us = (firstTimestamp100ns + 5) / 10 + file.startPts; // 100ns to microseconds
+    const std::string iso = iso8601_utc_now_us(static_cast<uint64_t>(utc_us));
+
+    char utc_us_buf[32];
+    std::snprintf(utc_us_buf, sizeof(utc_us_buf), "%lld", (long long)utc_us);
+
+    // Stamp container + streams with custom key
+    av_dict_set(&pFormatCtx->metadata, "creation_time", iso.c_str(), 0);
+    av_dict_set(&pFormatCtx->metadata, "com.crewtimer.first_utc_us", utc_us_buf, 0);
+
+    for (unsigned i = 0; i < pFormatCtx->nb_streams; ++i)
+    {
+      av_dict_set(&pFormatCtx->streams[i]->metadata, "creation_time", iso.c_str(), 0);
+      av_dict_set(&pFormatCtx->streams[i]->metadata, "com.crewtimer.first_utc_us", utc_us_buf, 0);
+    }
+
+    AVDictionary *opts = nullptr;
+    av_dict_set(&opts, "movflags", "use_metadata_tags", 0); // allow custom tags
+    int err = avformat_write_header(pFormatCtx, &opts);
+    av_dict_free(&opts);
+    if (err < 0)
+    {
+      auto msg = "Error: Cannot write mp4 header";
+      SystemEventQueue::push("ffmpeg", msg);
+      return msg;
+    }
+    file.started = true;
+    return "";
+  }
+
+  // Finish the file and rename it into place.
+  std::string closeFile(OutputFile &file)
+  {
+    if (!file.formatCtx)
+    {
+      return "";
+    }
+    if (file.started)
+    {
+      // Properly close the output file
+      av_write_trailer(file.formatCtx);
+    }
+    if (!(file.formatCtx->oformat->flags & AVFMT_NOFILE))
+    {
+      avio_closep(&file.formatCtx->pb);
+    }
+    avformat_free_context(file.formatCtx);
+    file.formatCtx = nullptr;
+    if (!file.started)
+    {
+      return "";
+    }
+
+    const std::string outputFile = file.info.directory + "/" + file.info.filename + ".mp4";
+    if (std::rename(file.tmpPath.c_str(), outputFile.c_str()) != 0)
+    {
+      // If renaming failed, print an error message
+      auto msg = "Error: Cannot rename file";
+      SystemEventQueue::push("ffmpeg", msg);
+      return msg;
+    }
+    if (onFileClosed)
+    {
+      onFileClosed(file.info);
+    }
+    return "";
+  }
 };
 
-std::shared_ptr<VideoRecorder> createFfmpegRecorder(int recordingQuality, bool forceSoftware)
+std::shared_ptr<VideoRecorder> createFfmpegRecorder(int recordingQuality, bool forceSoftware, bool overlap)
 {
-  return std::shared_ptr<FFVideoRecorder>(new FFVideoRecorder(recordingQuality, forceSoftware));
+  return std::shared_ptr<FFVideoRecorder>(new FFVideoRecorder(recordingQuality, forceSoftware, overlap));
 }

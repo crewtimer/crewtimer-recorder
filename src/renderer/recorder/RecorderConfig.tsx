@@ -3,7 +3,9 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   CircularProgress,
+  FormControlLabel,
   TextField,
   Typography,
   MenuItem,
@@ -42,6 +44,7 @@ import {
 import { ViscaPortSelector } from '../visca/ViscaPortSelector';
 import RotationSelector from './RotationSelector';
 import { startPreview, stopPreview, updateSettings } from './RecorderApi';
+import { DefaultRecordingProps } from './RecorderTypes';
 import {
   CAMERA_FALLBACK_IP,
   showCameraFallbackDialog,
@@ -257,9 +260,12 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
         : event.target.value;
 
     if (
-      ['recordingDuration', 'recordingPrefix', 'recordingQuality'].includes(
-        event.target.name,
-      )
+      [
+        'recordingDuration',
+        'recordingPrefix',
+        'recordingQuality',
+        'overlapRecording',
+      ].includes(event.target.name)
     ) {
       setRecordingPropsPending(true);
     }
@@ -641,6 +647,26 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
                   </TextField>
                 </Tooltip>
               </Box>
+              <Tooltip
+                placement="top"
+                title="Each new file also starts with the last 2 seconds of the previous file, so Video Review can follow a finish across a file split. Applies on next start."
+              >
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      name="overlapRecording"
+                      checked={
+                        recordingProps.overlapRecording ??
+                        DefaultRecordingProps.overlapRecording
+                      }
+                      onChange={handleChange}
+                      size="small"
+                    />
+                  }
+                  label="Overlapped recording"
+                  sx={{ m: 0, alignSelf: 'flex-start' }}
+                />
+              </Tooltip>
             </Panel>
           )}
         </Box>

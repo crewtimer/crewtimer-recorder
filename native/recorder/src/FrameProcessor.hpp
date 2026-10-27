@@ -88,7 +88,7 @@ public:
    */
   FrameProcessor(const std::string directory, const std::string prefix,
                  std::shared_ptr<VideoRecorder> videoRecorder, int durationSecs,
-                 FRectangle cropArea, Guide guide);
+                 FRectangle cropArea, Guide guide, bool overlap = false);
 
   void addFrame(FramePtr frame);
 
@@ -105,7 +105,8 @@ public:
 
   /**
    * @brief Triggers the frame processor to close the currently open file and
-   * open a new file.
+   * open a new file, once the current file has TimingConstants::MinimumNewVideo100ns
+   * of new video. Requests made while waiting each make a further file.
    */
   void splitFile();
 
@@ -128,9 +129,12 @@ private:
   Guide guide;
 
   std::shared_ptr<VideoRecorder> videoRecorder;
+  // Split files keep the encoder open and overlap; the recorder reports each finished
+  // file, and its sidecar is written then.
+  const bool overlap;
   uint64_t durationSecs;
   uint64_t nextStartTime = 0;
-  std::atomic<bool> splitRequested;
+  std::atomic<int> pendingSplits{0}; ///< Requested splits not yet made; each gets its own file.
   std::queue<FramePtr> frameQueue;        ///< Queue to hold the frames.
   std::mutex queueMutex;                  ///< Mutex for synchronizing access to the frame queue.
   std::condition_variable frameAvailable; ///< Condition variable to notify
@@ -168,5 +172,11 @@ private:
   /**
    * @brief Write a JSON file with meta data about the video file
    */
-  void writeJsonSidecarFile();
+  void writeJsonSidecarFile(const std::string &path, uint64_t startTs, uint64_t stopTs,
+                            int64_t numFrames);
+
+  /**
+   * @brief Finish the current file, or with overlap every file, and its sidecar
+   */
+  void closeRecording();
 };

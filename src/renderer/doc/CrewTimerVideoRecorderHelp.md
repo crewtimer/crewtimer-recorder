@@ -51,3 +51,20 @@ better). The UI presets are 60, 70, 80, and 90. For x264, NVIDIA, Intel, and AMD
 map to CRF/CQ/ICQ/QP values of 26, 23, 20, and 17 respectively. Apple VideoToolbox
 uses the property directly on its 0–100 quality scale.
 These are approximate mappings, not guarantees of equal visual quality.
+
+### Overlapped recording
+
+Overlapped recording is on by default. With it on, each new file also starts with at least the last 2
+seconds of the previous file, so a finish that crosses a file split can be reviewed in
+either file. The overlapping frames are identical in both files, with the same
+timestamps. Files take about 2 seconds more space each. A change takes effect the next
+time recording starts.
+
+Whether or not files overlap, every file holds at least 2 seconds of new video. A split
+that comes sooner, from the slice length or a split request, waits until it has, and
+several requests in quick succession each still make their own file. Stopping the
+recording ends the last file at once.
+
+The first file of a recording has no overlap, and neither does the file that starts
+after the camera reconnects or changes resolution or frame rate. Use a recent version of
+CrewTimer Video Review, which recognises overlapping files.

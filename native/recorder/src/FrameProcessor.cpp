@@ -40,10 +40,12 @@ FrameProcessor::FrameProcessor(const std::string directory,
                                const std::string prefix,
                                std::shared_ptr<VideoRecorder> videoRecorder,
                                int durationSecs, FRectangle cropArea,
-                               Guide guide)
+                               Guide guide, bool overlap)
     : directory(directory), prefix(prefix), cropArea(cropArea),
       pxCropArea(Rectangle(0, 0, 0, 0)), guide(guide),
-      videoRecorder(videoRecorder), durationSecs(durationSecs), running(true),
+      videoRecorder(videoRecorder),
+      overlap(overlap && videoRecorder->supportsSplit()),
+      durationSecs(durationSecs), running(true),
       processThread(&FrameProcessor::processFrames, this)
 {
   errorMessage = "";
@@ -84,7 +86,7 @@ void FrameProcessor::stop()
  * @brief Triggers the frame processor to close the currently open file and
  * open a new file.
  */
-void FrameProcessor::splitFile() { splitRequested = true; }
+void FrameProcessor::splitFile() { ++pendingSplits; }
 
 FrameProcessor::StatusInfo FrameProcessor::getStatus()
 {
@@ -117,20 +119,31 @@ FramePtr FrameProcessor::getLastFrame()
   return lastFrame;
 }
 
-void FrameProcessor::writeJsonSidecarFile()
+void FrameProcessor::closeRecording()
+{
+  if (!overlap)
+  {
+    writeJsonSidecarFile(jsonFilename, startTs, lastTs, frameCount);
+  }
+  // With overlap the recorder writes sidecars through onFileClosed as files finish.
+  videoRecorder->stop();
+}
+
+void FrameProcessor::writeJsonSidecarFile(const std::string &path, uint64_t startTs,
+                                          uint64_t stopTs, int64_t numFrames)
 {
   constexpr double LANDSCAPE_ROLLING_SHUTTER_SCAN_TIME_MS = 13.8;
 
-  if (frameCount == 0)
+  if (numFrames == 0)
   {
     return;
   }
 
-  std::ofstream jsonFile(jsonFilename);
+  std::ofstream jsonFile(path);
   if (!jsonFile)
   {
     errorMessage =
-        "Error: Could not open the file '" + jsonFilename + "' for writing.";
+        "Error: Could not open the file '" + path + "' for writing.";
     running = false;
     return;
   }
@@ -143,8 +156,8 @@ void FrameProcessor::writeJsonSidecarFile()
   jsonFile << std::fixed << std::setprecision(7) << "{\n"
            << "  \"file\": {\n"
            << "    \"startTs\": \"" << startTs / 1e7 << "\",\n"
-           << "    \"stopTs\": \"" << lastTs / 1e7 << "\",\n"
-           << "    \"numFrames\": " << frameCount << ",\n"
+           << "    \"stopTs\": \"" << stopTs / 1e7 << "\",\n"
+           << "    \"numFrames\": " << numFrames << ",\n"
            << "    \"tzOffset\": " << tzOffset << "\n"
            << "  },\n"
            << "  \"source\": {\n"
@@ -202,7 +215,6 @@ void FrameProcessor::processFrames()
 {
   SystemEventQueue::push("fproc", "Starting frame processor");
   int count = 0;
-  auto start = high_resolution_clock::now();
   auto useEmbeddedTimestamp = true;
   lastXres = 0;
   lastYres = 0;
@@ -223,6 +235,15 @@ void FrameProcessor::processFrames()
   // stops entirely is caught by the time since the last video frame instead.
   constexpr auto stallThreshold = seconds(2);
   auto lastVideoFrameTime = steady_clock::now();
+  if (overlap)
+  {
+    // Called on this thread from inside the recorder; cleared before the thread ends.
+    videoRecorder->onFileClosed = [this](const RecordedFile &file)
+    {
+      writeJsonSidecarFile(file.directory + "/" + file.filename + ".json",
+                           file.firstTs100ns, file.lastTs100ns, file.frames);
+    };
+  }
 
   while (running)
   {
@@ -265,8 +286,7 @@ void FrameProcessor::processFrames()
         SystemEventQueue::instance().push("fproc", "Source disconnected - splitting file immediately");
         if (frameCount > 0)
         {
-          writeJsonSidecarFile();
-          videoRecorder->stop();
+          closeRecording();
         }
         frameCount = 0;
         count = 0;
@@ -305,11 +325,6 @@ void FrameProcessor::processFrames()
       const auto fps =
           (float)video_frame->frame_rate_N / (float)video_frame->frame_rate_D;
 
-      // Ensure we do not split within the first second of a recording as the
-      // filename will be the same when resuming after the split
-      auto now = high_resolution_clock::now();
-      auto elapsed = duration_cast<milliseconds>(now - start);
-      auto okToSplit = elapsed.count() > 1200;
       auto propChange = lastXres != video_frame->xres ||
                         lastYres != video_frame->yres || lastFPS != fps;
       lastXres = video_frame->xres;
@@ -379,11 +394,19 @@ void FrameProcessor::processFrames()
       if (!rateEvent.empty())
         SystemEventQueue::push("fproc", rateEvent);
 
+      // Timed and requested splits wait for MinimumNewVideo100ns of new video, which also
+      // keeps file names, made to the second, apart. Half a frame absorbs capture jitter.
+      const uint64_t halfFrame100ns = fps > 0 ? uint64_t(5e6 / fps) : 0;
+      const bool enoughNewVideo =
+          frameCount > 0 &&
+          video_frame->timestamp + halfFrame100ns >= startTs + TimingConstants::MinimumNewVideo100ns;
+      const bool splitRequested = pendingSplits > 0;
+
       // The video review app may have trouble reading the last video frame when there is not a multiple of gop_size frames
       // Exact cause unknown.
       if (propChange || count == 0 ||
-          (useEmbeddedTimestamp && video_frame->timestamp >= nextStartTime && frameCount % keyFrameInterval == 0) ||
-          (okToSplit && splitRequested && frameCount % keyFrameInterval == 0))
+          (enoughNewVideo && frameCount % keyFrameInterval == 0 &&
+           ((useEmbeddedTimestamp && video_frame->timestamp >= nextStartTime) || splitRequested)))
       {
         count++;
         if (splitRequested)
@@ -391,17 +414,23 @@ void FrameProcessor::processFrames()
           SystemEventQueue::instance().push(
               "info", "Split Requested");
         }
-        if (frameCount > 0)
+        // A timed or requested split keeps the encoder running when overlapping. A source
+        // change, a reconnect or the first file starts a new recording with no overlap.
+        const bool overlapSplit = overlap && frameCount > 0 && !propChange;
+        if (frameCount > 0 && !overlapSplit)
         {
           // SystemEventQueue::instance().push(
           //     "debug", "Stopping Recorder and writing json file");
-          writeJsonSidecarFile();
-          videoRecorder->stop();
+          closeRecording();
         }
 
         const auto ts100ns = video_frame->timestamp;
         startTs = ts100ns;
-        const uint64_t sliceDuration100ns = durationSecs * 10000000;
+        // An overlapping file starts, and is named, at its first overlap frame.
+        const auto fileStartTs = overlapSplit ? videoRecorder->splitStartTimestamp(ts100ns) : ts100ns;
+        // Shorter slices cannot split sooner, and a zero length must not divide below.
+        const uint64_t sliceDuration100ns =
+            std::max<uint64_t>(durationSecs * 10000000, TimingConstants::MinimumNewVideo100ns);
         if (splitRequested || count == 1)
         {
           // Starting a recording (or after the source reconnects) and a requested split both
@@ -415,11 +444,13 @@ void FrameProcessor::processFrames()
           nextStartTime += (1 + elapsedPeriods) * sliceDuration100ns;
         }
 
-        splitRequested = false;
-        start = high_resolution_clock::now();
+        if (splitRequested)
+        {
+          --pendingSplits;
+        }
 
         // Construct a filename with the time embedded
-        const auto milli = (5000 + ts100ns) / 10000;
+        const auto milli = (5000 + fileStartTs) / 10000;
 
         // Convert utc milliseconds to time_point of system clock
         time_point<system_clock> tp =
@@ -483,10 +514,14 @@ void FrameProcessor::processFrames()
               "info", "Opening file " + filename + " in " + directory);
         }
 
-        const auto err = videoRecorder->openVideoStream(
-            directory, filename,
-            pxCropArea.width ? pxCropArea.width : video_frame->xres,
-            pxCropArea.height ? pxCropArea.height : video_frame->yres, fps, video_frame->timestamp);
+        const auto err =
+            overlapSplit
+                ? videoRecorder->splitVideoStream(directory, filename, video_frame->timestamp)
+                : videoRecorder->openVideoStream(
+                      directory, filename,
+                      pxCropArea.width ? pxCropArea.width : video_frame->xres,
+                      pxCropArea.height ? pxCropArea.height : video_frame->yres, fps,
+                      video_frame->timestamp);
         if (!err.empty())
         {
           errorMessage = err;
@@ -530,9 +565,9 @@ void FrameProcessor::processFrames()
       auto err = videoRecorder->writeVideoFrame(cropped);
       if (!err.empty())
       {
+        // frameCount still holds the frames written, for the sidecar.
         errorMessage = err;
         running = false;
-        frameCount = 0;
         break;
       }
       lastTs = video_frame->timestamp;
@@ -548,9 +583,9 @@ void FrameProcessor::processFrames()
     }
   }
 
-  if (frameCount > 0)
-  {
-    writeJsonSidecarFile();
-    videoRecorder->stop();
-  }
+  // Always stop the recorder, even when an error left frameCount at 0: a failed split still
+  // has the previous file open, and a failed open has a partly opened encoder. With no
+  // frames no sidecar is written, and stopping a stopped recorder does nothing.
+  closeRecording();
+  videoRecorder->onFileClosed = nullptr;
 }
