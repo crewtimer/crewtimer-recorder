@@ -50,12 +50,49 @@ import ViscaValueButton from './ViscaValueButton';
 import RangeStepper from './RangeStepper';
 import ViscaPresets from './ViscaPresets';
 import {
+  GuideColor,
+  guideColorValues,
   useFocusArea,
+  useGuideColor,
   useHorizon,
   useRecordingProps,
 } from '../recorder/RecorderData';
-import RotationSelector from '../recorder/RotationSelector';
 import { useCameraList } from '../recorder/CameraMonitor';
+
+const guideColors: GuideColor[] = ['white', 'black', 'red', 'green'];
+
+/** Small colour swatches for the timing line; the selected one is ringed. */
+const GuideColorPicker: React.FC = () => {
+  const [guideColor, setGuideColor] = useGuideColor();
+  return (
+    <Box sx={{ display: 'flex', gap: 0.75 }}>
+      {guideColors.map((color) => (
+        <Tooltip key={color} title={`Timing line ${color}`}>
+          <Box
+            component="button"
+            type="button"
+            aria-label={`Timing line ${color}`}
+            aria-pressed={guideColor === color}
+            onClick={() => setGuideColor(color)}
+            sx={{
+              width: 16,
+              height: 16,
+              p: 0,
+              borderRadius: '3px',
+              cursor: 'pointer',
+              bgcolor: guideColorValues[color],
+              border: '1px solid',
+              borderColor: 'grey.500',
+              outline: guideColor === color ? '2px solid' : 'none',
+              outlineColor: 'primary.main',
+              outlineOffset: '1px',
+            }}
+          />
+        </Tooltip>
+      ))}
+    </Box>
+  );
+};
 
 /** A labelled cluster of controls in the camera control toolbar. */
 const Group: React.FC<{
@@ -753,27 +790,27 @@ const ViscaControlPanel: React.FC = () => {
             </Group>
           </>
         )}
-        <Group label="Rotation">
-          <RotationSelector />
-        </Group>
         <Group label="Alignment">
           <Stack>
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={!!recordingProps.showFinishGuide}
-                  onChange={() =>
-                    setRecordingProps({
-                      ...recordingProps,
-                      showFinishGuide: !recordingProps.showFinishGuide,
-                    })
-                  }
-                  size="small"
-                />
-              }
-              label="Show timing line"
-              sx={{ m: 0 }}
-            />
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={!!recordingProps.showFinishGuide}
+                    onChange={() =>
+                      setRecordingProps({
+                        ...recordingProps,
+                        showFinishGuide: !recordingProps.showFinishGuide,
+                      })
+                    }
+                    size="small"
+                  />
+                }
+                label="Show timing line"
+                sx={{ m: 0 }}
+              />
+              <GuideColorPicker />
+            </Box>
             {!viscaEnabled && focusAssist}
             <Tooltip title="Show an orange horizontal line on the preview to level the camera; left click the preview to move it">
               <FormControlLabel

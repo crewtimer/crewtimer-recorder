@@ -59,6 +59,17 @@ export const [useGuide, setGuide, getGuide] = UseStoredDatum('guide', {
   pt2: 0,
 });
 
+/** Preview colour of the timing line, chosen to stand out against the water and boats. */
+export type GuideColor = 'white' | 'black' | 'red' | 'green';
+/** Canvas colour for each choice; CSS 'green' is too dark to see on water, so use a bright green. */
+export const guideColorValues: Record<GuideColor, string> = {
+  white: 'white',
+  black: 'black',
+  red: 'red',
+  green: '#00e000',
+};
+export const [useGuideColor] = UseStoredDatum<GuideColor>('guideColor', 'red');
+
 export const [useSystemLog, setSystemLog, getSystemLog] = UseDatum<
   RecordingLogEntry[]
 >([]);

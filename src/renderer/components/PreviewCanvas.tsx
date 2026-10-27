@@ -10,11 +10,13 @@ import {
   getGuide,
   getIsRecording,
   getRecordingProps,
+  guideColorValues,
   useFocusArea,
   useFrameGrab,
   useHorizon,
   useCameraTimeSample,
   useGuide,
+  useGuideColor,
   useIsRecording,
   useRecordingProps,
   useRecordingPropsPending,
@@ -352,6 +354,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   }
 
   const [guide, setGuide] = useGuide();
+  const [guideColor] = useGuideColor();
   const [isRecording] = useIsRecording();
   const [settings] = useRecordingProps();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -984,13 +987,20 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
 
     // Adjust the canvas size to fill its parent — only resize when changed to
     // avoid the implicit canvas clear that would flash white between frames.
+    // The backing store is in device pixels so the video and overlays stay sharp
+    // on high-DPI displays; drawing below stays in CSS pixels via the transform.
+    const dpr = window.devicePixelRatio || 1;
     const parentWidth = canvas.parentElement?.clientWidth || width;
     const parentHeight = canvas.parentElement?.clientHeight || height;
+    const backingWidth = Math.round(parentWidth * dpr);
+    const backingHeight = Math.round(parentHeight * dpr);
 
-    if (canvas.width !== parentWidth || canvas.height !== parentHeight) {
-      canvas.width = parentWidth;
-      canvas.height = parentHeight;
+    if (canvas.width !== backingWidth || canvas.height !== backingHeight) {
+      canvas.width = backingWidth;
+      canvas.height = backingHeight;
     }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingQuality = 'high';
 
     let cancelled = false;
     const blob = new Blob([new Uint8Array(data)], { type: 'image/jpeg' });
@@ -1002,7 +1012,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         }
 
         // Clear the canvas and draw the JPEG bitmap with scaling
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, parentWidth, parentHeight);
         ctx.drawImage(
           bitmap,
           0,
@@ -1050,11 +1060,17 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
           const to = nativeGuide.pt2;
           from.y = destClipRect.y;
           to.y = destClipRect.y + destClipRect.height;
+          // Centre the 1px line on a device pixel so a vertical line is solid
+          // rather than smeared at half strength across two pixel columns.
+          const snap = (v: number) =>
+            (Math.round(v * dpr - dpr / 2) + dpr / 2) / dpr;
+          from.x = snap(from.x);
+          to.x = snap(to.x);
           ctx.save();
           ctx.beginPath();
           ctx.moveTo(from.x, from.y);
           ctx.lineTo(to.x, to.y);
-          ctx.strokeStyle = 'red';
+          ctx.strokeStyle = guideColorValues[guideColor] ?? 'red';
           ctx.lineWidth = 1;
           ctx.stroke();
           ctx.restore();
@@ -1254,6 +1270,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     divwidth,
     divheight,
     guide,
+    guideColor,
     isRecording,
     settings.showFinishGuide,
     cropImage,
