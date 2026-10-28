@@ -71,7 +71,7 @@ export function TopBar() {
               CrewTimer Video Recorder
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              {`v${window.platform.appVersion}${waypoint ? ` · ${waypoint} waypoint` : ''}`}
+              {`v${window.platform.appVersion}${waypoint ? ` · ${waypoint} hint waypoint` : ''}`}
             </Typography>
           </Box>
         </Stack>

@@ -15,8 +15,9 @@ declare global {
       ): void;
       openFileDialog(): Promise<OpenFileReturn>;
       openDirDialog(title: string, defaultPath: string): Promise<OpenDirReturn>;
-      openFileExplorer(path: string): Promise<void>;
-      openLogFolder(): Promise<void>;
+      /** Resolves to an error message to show, or '' when the folder opened */
+      openFileExplorer(path: string): Promise<string>;
+      openLogFolder(): Promise<string>;
       multicastSend(msg: object): Promise<void>;
       getDiskUsage(folder: string): Promise<DiskUsage>;
       getFilesInDirectory(dirPath: string): Promise<DirListReturn>;

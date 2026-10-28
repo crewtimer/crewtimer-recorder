@@ -1,4 +1,6 @@
 #include <algorithm>
+#include <chrono>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdio>
 #include <cmath>
@@ -6,9 +8,16 @@
 #include <cstring>
 #include <deque>
 #include <iostream>
+#include <memory>
+#include <mutex>
 #include <sstream>
+#include <thread>
 #include <utility>
 #include <vector>
+#ifndef _WIN32
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 extern "C"
 {
@@ -47,6 +56,9 @@ static int64_t mediaFoundationBitRate(int quality)
   return points[count - 1][1] * 1000000LL;
 }
 
+// How often files being written are flushed to disk; see FFVideoRecorder::flushLoop.
+constexpr int FlushIntervalMs = 250;
+
 // One encoder runs from openVideoStream to stop. Without overlap it writes a single file.
 // With overlap, splitVideoStream starts further files while the encoder keeps running:
 // each new file begins with the encoder's recent packets from a forced keyframe at least
@@ -54,9 +66,22 @@ static int64_t mediaFoundationBitRate(int quality)
 // its last packet. Packet times are relative to the first frame and re-based per file.
 class FFVideoRecorder : public VideoRecorder
 {
+  // A second handle on a file being written, for flushing it to disk (see flushLoop).
+  struct FlushHandle
+  {
+    int fd;
+    explicit FlushHandle(int fd) : fd(fd) {}
+    ~FlushHandle()
+    {
+#ifndef _WIN32
+      ::close(fd);
+#endif
+    }
+  };
   struct OutputFile
   {
     RecordedFile info;
+    std::shared_ptr<FlushHandle> flush;
     std::string tmpPath;
     AVFormatContext *formatCtx = nullptr;
     AVStream *stream = nullptr;
@@ -93,6 +118,26 @@ class FFVideoRecorder : public VideoRecorder
   std::deque<int64_t> keyFramePts;
   std::deque<std::pair<int64_t, uint64_t>> sentFrames;
   std::string codecName;
+  // Overlap only: finished files wait in toClose for one thread that writes their
+  // trailers, closes and renames them, in order, so Video Review never sees an earlier
+  // file appear after a later one. Closing a large file can take seconds on macOS exFAT,
+  // which must not hold up encoding. Closed files and their errors wait in closedFiles
+  // for the encoding thread to report.
+  std::thread closer;
+  std::mutex closeMutex;
+  std::condition_variable closeWake;
+  std::deque<OutputFile> toClose;
+  std::deque<std::pair<RecordedFile, std::string>> closedFiles;
+  bool closing = false; // the closer thread is finishing a file
+  bool closerStop = false;
+  // Files being written are flushed to disk every FlushIntervalMs, so closing one has
+  // little left to write: on macOS exFAT, closing a 4 s file otherwise takes 0.5 s and a
+  // 30 s file over 1 s, delaying when Video Review can open it.
+  std::thread flusher;
+  std::mutex flushMutex;
+  std::condition_variable flushWake;
+  std::vector<std::shared_ptr<FlushHandle>> flushing;
+  bool flusherStop = false;
   const int recordingQuality;
   const bool forceSoftware;
   const bool overlap;
@@ -285,6 +330,11 @@ public:
 
   std::string writeVideoFrame(FramePtr video_frame)
   {
+    const std::string closedErr = reportClosedFiles();
+    if (!closedErr.empty())
+    {
+      return closedErr;
+    }
     // The encoder may still reference the previous frame's buffer.
     if (av_frame_make_writable(pFrame) < 0)
     {
@@ -522,6 +572,18 @@ public:
       }
     }
 
+    // Files finishing in the background come first.
+    {
+      std::unique_lock<std::mutex> lock(closeMutex);
+      closeWake.wait(lock, [this]
+                     { return toClose.empty() && !closing; });
+    }
+    const std::string closedErr = reportClosedFiles();
+    if (retval.empty())
+    {
+      retval = closedErr;
+    }
+
     // The encoder is drained, so every file is complete.
     while (!outputs.empty())
     {
@@ -563,7 +625,27 @@ public:
     sws_ctx = nullptr;
     return retval;
   }
-  ~FFVideoRecorder() {}
+  ~FFVideoRecorder()
+  {
+    {
+      std::lock_guard<std::mutex> lock(closeMutex);
+      closerStop = true;
+    }
+    closeWake.notify_all();
+    if (closer.joinable())
+    {
+      closer.join();
+    }
+    {
+      std::lock_guard<std::mutex> lock(flushMutex);
+      flusherStop = true;
+    }
+    flushWake.notify_all();
+    if (flusher.joinable())
+    {
+      flusher.join();
+    }
+  }
 
 private:
   // Open codec as pCodecCtx with the recording quality settings. On failure the caller
@@ -817,12 +899,8 @@ private:
         SystemEventQueue::push("ffmpeg", "Warning: " + outputs[i].info.filename +
                                              " skipped: no keyframe before the next file");
       }
-      const std::string closeErr = closeFile(outputs[i]);
+      closeInBackground(outputs[i]);
       outputs.erase(outputs.begin() + i);
-      if (err.empty())
-      {
-        err = closeErr;
-      }
       i = 0; // the file before may now be able to close
     }
     return err;
@@ -965,12 +1043,153 @@ private:
       return msg;
     }
     file.started = true;
+    startFlushing(file);
     return "";
   }
 
-  // Finish the file and rename it into place.
+  void startFlushing(OutputFile &file)
+  {
+#ifndef _WIN32
+    const int fd = ::open(file.tmpPath.c_str(), O_RDONLY);
+    if (fd < 0)
+    {
+      return; // the file still records; it just closes more slowly
+    }
+    file.flush = std::make_shared<FlushHandle>(fd);
+    std::lock_guard<std::mutex> lock(flushMutex);
+    flushing.push_back(file.flush);
+    if (!flusher.joinable())
+    {
+      flusher = std::thread(&FFVideoRecorder::flushLoop, this);
+    }
+#endif
+  }
+
+  void stopFlushing(OutputFile &file)
+  {
+    if (!file.flush)
+    {
+      return;
+    }
+    {
+      std::lock_guard<std::mutex> lock(flushMutex);
+      flushing.erase(std::remove(flushing.begin(), flushing.end(), file.flush), flushing.end());
+    }
+    // The handle closes once the flusher is done with it too.
+    file.flush.reset();
+  }
+
+  void flushLoop()
+  {
+#ifndef _WIN32
+    std::unique_lock<std::mutex> lock(flushMutex);
+    while (!flushWake.wait_for(lock, std::chrono::milliseconds(FlushIntervalMs), [this]
+                               { return flusherStop; }))
+    {
+      // fsync can take tens of ms; hold copies so files can stop flushing meanwhile.
+      std::vector<std::shared_ptr<FlushHandle>> handles = flushing;
+      lock.unlock();
+      for (const auto &handle : handles)
+      {
+        ::fsync(handle->fd);
+      }
+      handles.clear();
+      lock.lock();
+    }
+#endif
+  }
+
+  // Finish the file and rename it into place, then report it.
   std::string closeFile(OutputFile &file)
   {
+    const std::string err = finishFile(file);
+    if (err.empty() && file.started && onFileClosed)
+    {
+      onFileClosed(file.info);
+    }
+    return err;
+  }
+
+  void closeInBackground(const OutputFile &file)
+  {
+    {
+      std::lock_guard<std::mutex> lock(closeMutex);
+      toClose.push_back(file);
+    }
+    if (!closer.joinable())
+    {
+      closer = std::thread(&FFVideoRecorder::closeLoop, this);
+    }
+    closeWake.notify_all();
+  }
+
+  void closeLoop()
+  {
+    std::unique_lock<std::mutex> lock(closeMutex);
+    while (true)
+    {
+      closeWake.wait(lock, [this]
+                     { return !toClose.empty() || closerStop; });
+      if (toClose.empty())
+      {
+        return; // stopping, with nothing left to finish
+      }
+      OutputFile file = toClose.front();
+      toClose.pop_front();
+      closing = true;
+      lock.unlock();
+      const auto began = std::chrono::steady_clock::now();
+      const std::string err = finishFile(file);
+      const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                          std::chrono::steady_clock::now() - began)
+                          .count();
+      if (file.started && err.empty())
+      {
+        SystemEventQueue::push("ffmpeg", "Closed file " + file.info.filename + " in " +
+                                             std::to_string(ms) + " ms");
+      }
+      lock.lock();
+      closing = false;
+      // A file that never started is not reported, as with closeFile.
+      if (file.started || !err.empty())
+      {
+        closedFiles.push_back(std::make_pair(file.started && err.empty() ? file.info : RecordedFile(), err));
+      }
+      closeWake.notify_all();
+    }
+  }
+
+  // On the encoding thread: report files the closer thread has finished. Returns the
+  // first close error.
+  std::string reportClosedFiles()
+  {
+    std::deque<std::pair<RecordedFile, std::string>> closed;
+    {
+      std::lock_guard<std::mutex> lock(closeMutex);
+      closed.swap(closedFiles);
+    }
+    std::string err;
+    for (const auto &entry : closed)
+    {
+      if (!entry.second.empty())
+      {
+        if (err.empty())
+        {
+          err = entry.second;
+        }
+      }
+      else if (onFileClosed)
+      {
+        onFileClosed(entry.first);
+      }
+    }
+    return err;
+  }
+
+  // Write the trailer, close the file and rename it into place.
+  std::string finishFile(OutputFile &file)
+  {
+    stopFlushing(file);
     if (!file.formatCtx)
     {
       return "";
@@ -998,10 +1217,6 @@ private:
       auto msg = "Error: Cannot rename file";
       SystemEventQueue::push("ffmpeg", msg);
       return msg;
-    }
-    if (onFileClosed)
-    {
-      onFileClosed(file.info);
     }
     return "";
   }

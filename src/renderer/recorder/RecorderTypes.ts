@@ -20,6 +20,8 @@ export interface RecordingProps {
   showFinishGuide: boolean;
   cropArea: Rect;
   waypoint: string;
+  /** CrewTimer regatta whose times at the waypoint split the recording */
+  regattaId: string;
   protocol: string;
   rotation: -180 | -90 | 0 | 90;
 }
@@ -36,12 +38,24 @@ export interface RecorderMessage {
     | 'grab-frame'
     | 'get-camera-list'
     | 'send-visca-cmd'
+    | 'split-video'
     | 'settings';
 }
 
 export interface SettingsMessage extends RecorderMessage {
   op: 'settings';
   props: { [key: string]: number | string | object };
+}
+
+export interface SplitVideoMessage extends RecorderMessage {
+  op: 'split-video';
+  /** UTC time of the crossing */
+  props: { tsMilli: number };
+}
+
+/** OK when the crossing needs a split, Ignored when a closed or closing file owns it, or Not recording */
+export interface SplitVideoResponse extends HandlerResponse {
+  status: 'OK' | 'Ignored' | 'Not recording';
 }
 
 export interface StartRecorderMessage extends RecorderMessage {
@@ -137,6 +151,7 @@ export const DefaultRecordingProps: RecordingProps = {
   showFinishGuide: true,
   cropArea: { x: 0, y: 0, width: 1, height: 1 },
   waypoint: '',
+  regattaId: '',
   protocol: 'SRT',
   rotation: 0,
 };
@@ -166,6 +181,7 @@ export type RecorderMessageTypes =
   | StartRecorderMessage
   | RecorderMessage
   | ViscaMessage
+  | SplitVideoMessage
   | SettingsMessage;
 export type RecorderMessageResponseType =
   | HandlerResponse
@@ -174,4 +190,5 @@ export type RecorderMessageResponseType =
   | CameraListResponse
   | RecordingStatus
   | RecordingLog
+  | SplitVideoResponse
   | ViscaResponse;

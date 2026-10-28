@@ -10,6 +10,8 @@ import {
   DefaultRecordingProps,
   SettingsMessage,
   RecordingLogEntry,
+  SplitVideoMessage,
+  SplitVideoResponse,
 } from './RecorderTypes';
 import {
   getGuide,
@@ -38,6 +40,8 @@ export const startRecording = () => {
   // console.log(`recording props: ${JSON.stringify(getRecordingProps())}`);
   const recordingProps = { ...DefaultRecordingProps, ...getRecordingProps() };
   recordingProps.recordingDuration = Number(recordingProps.recordingDuration);
+  // Always overlap, whatever an older version saved; the option is hidden for now
+  recordingProps.overlapRecording = true;
   setActiveRecordingFolder(recordingProps.recordingFolder);
   const cropArea = { ...recordingProps.cropArea };
   const guide = getGuide();
@@ -145,6 +149,13 @@ export const requestVideoFrame = async () => {
       showErrorDialog(e);
     });
 };
+
+/** Ask the recorder to split for a crossing at tsMilli (UTC). */
+export const requestSplitAt = (tsMilli: number) =>
+  window.msgbus.sendMessage<SplitVideoMessage, SplitVideoResponse>('recorder', {
+    op: 'split-video',
+    props: { tsMilli },
+  });
 
 export const updateSettings = (props: {
   [key: string]: string | number | object;
@@ -281,6 +292,15 @@ window.Util.onNativeMessage((nativeMessage: NativeMessage) => {
 
   // Handle the message based on the sender and content
   switch (sender) {
+    case 'file-closed':
+      // Video Review lists the new file now rather than at its next poll
+      window.Util.multicastSend({
+        cmd: 'recorder-file-closed',
+        wp: getRecordingProps().waypoint,
+        filename: content.filename,
+        tsMilli: Date.now(),
+      });
+      break;
     case 'mcast': {
       if (content.cmd === 'split-video') {
         startRecordingOnSplit(content.wp);

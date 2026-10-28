@@ -82,11 +82,42 @@ void FrameProcessor::stop()
   videoRecorder = nullptr;
 }
 
-/**
- * @brief Triggers the frame processor to close the currently open file and
- * open a new file.
- */
-void FrameProcessor::splitFile() { ++pendingSplits; }
+// With overlap the next file reaches back to a short file's split, so owns from about
+// halfway through it.
+static uint64_t shortOwned100ns(bool overlap)
+{
+  return overlap ? TimingConstants::MinimumNewVideo100ns / 2 : TimingConstants::MinimumNewVideo100ns;
+}
+
+bool FrameProcessor::splitFile()
+{
+  std::lock_guard<std::mutex> lock(splitMutex);
+  const uint64_t ts100ns = processedTs;
+  // A waiting split is made at or after its crossing, and its file holds the
+  // following MinimumNewVideo100ns.
+  const bool covered =
+      ts100ns == 0 || ts100ns < shortEndTs ||
+      (!crossings.empty() && ts100ns < crossings.back() + TimingConstants::MinimumNewVideo100ns);
+  if (covered)
+  {
+    SystemEventQueue::push("fproc", "Split request ignored; the latest video is in a file that closes soon");
+    return false;
+  }
+  crossings.push_back(ts100ns);
+  return true;
+}
+
+bool FrameProcessor::splitAt(uint64_t ts100ns)
+{
+  std::lock_guard<std::mutex> lock(splitMutex);
+  if (ts100ns < ownedFromTs || ts100ns < shortOwnedUntilTs ||
+      (!crossings.empty() && ts100ns < crossings.back() + shortOwned100ns(overlap)))
+  {
+    return false;
+  }
+  crossings.push_back(ts100ns);
+  return true;
+}
 
 FrameProcessor::StatusInfo FrameProcessor::getStatus()
 {
@@ -235,15 +266,22 @@ void FrameProcessor::processFrames()
   // stops entirely is caught by the time since the last video frame instead.
   constexpr auto stallThreshold = seconds(2);
   auto lastVideoFrameTime = steady_clock::now();
-  if (overlap)
+  // Called on this thread from inside the recorder once a file is in place; cleared
+  // before the thread ends.
+  videoRecorder->onFileClosed = [this](const RecordedFile &file)
   {
-    // Called on this thread from inside the recorder; cleared before the thread ends.
-    videoRecorder->onFileClosed = [this](const RecordedFile &file)
+    // Without overlap closeRecording wrote the sidecar before stopping the recorder.
+    if (overlap)
     {
       writeJsonSidecarFile(file.directory + "/" + file.filename + ".json",
                            file.firstTs100ns, file.lastTs100ns, file.frames);
-    };
-  }
+    }
+#ifndef STANDALONE
+    // The renderer tells Video Review, so it lists the file without waiting to poll.
+    nlohmann::json msg = {{"directory", file.directory}, {"filename", file.filename}};
+    sendMessageToRenderer("file-closed", std::make_shared<nlohmann::json>(msg));
+#endif
+  };
 
   while (running)
   {
@@ -400,7 +438,12 @@ void FrameProcessor::processFrames()
       const bool enoughNewVideo =
           frameCount > 0 &&
           video_frame->timestamp + halfFrame100ns >= startTs + TimingConstants::MinimumNewVideo100ns;
-      const bool splitRequested = pendingSplits > 0;
+      bool splitRequested;
+      {
+        std::lock_guard<std::mutex> lock(splitMutex);
+        processedTs = video_frame->timestamp;
+        splitRequested = !crossings.empty() && video_frame->timestamp >= crossings.front();
+      }
 
       // The video review app may have trouble reading the last video frame when there is not a multiple of gop_size frames
       // Exact cause unknown.
@@ -428,13 +471,33 @@ void FrameProcessor::processFrames()
         startTs = ts100ns;
         // An overlapping file starts, and is named, at its first overlap frame.
         const auto fileStartTs = overlapSplit ? videoRecorder->splitStartTimestamp(ts100ns) : ts100ns;
+        {
+          std::lock_guard<std::mutex> lock(splitMutex);
+          // The previous file owns the first half of the overlap.
+          ownedFromTs = fileStartTs + (ts100ns - fileStartTs) / 2;
+          // A short file closes after MinimumNewVideo100ns, and owns what the next
+          // file does not reach back to. Crossings it holds need no more splits.
+          shortOwnedUntilTs = splitRequested ? ts100ns + shortOwned100ns(overlap) : 0;
+          shortEndTs = splitRequested ? ts100ns + TimingConstants::MinimumNewVideo100ns : 0;
+          while (!crossings.empty() && crossings.front() < shortOwnedUntilTs)
+          {
+            crossings.pop_front();
+          }
+        }
         // Shorter slices cannot split sooner, and a zero length must not divide below.
         const uint64_t sliceDuration100ns =
             std::max<uint64_t>(durationSecs * 10000000, TimingConstants::MinimumNewVideo100ns);
-        if (splitRequested || count == 1)
+        if (splitRequested)
         {
-          // Starting a recording (or after the source reconnects) and a requested split both
-          // start a full slice from the new file's first frame.
+          // A requested file closes once it has its minimum new video, so Video Review
+          // can open it straight away. The timed split that closes it starts a full slice.
+          // Allow the same capture jitter as enoughNewVideo.
+          nextStartTime = ts100ns + TimingConstants::MinimumNewVideo100ns - halfFrame100ns;
+        }
+        else if (count == 1)
+        {
+          // Starting a recording (or after the source reconnects) starts a full slice
+          // from the new file's first frame.
           nextStartTime = ts100ns + sliceDuration100ns;
         }
         else if (ts100ns >= nextStartTime)
@@ -442,11 +505,6 @@ void FrameProcessor::processFrames()
           // Keep subsequent slices on the schedule established by the last reset.
           const uint64_t elapsedPeriods = (ts100ns - nextStartTime) / sliceDuration100ns;
           nextStartTime += (1 + elapsedPeriods) * sliceDuration100ns;
-        }
-
-        if (splitRequested)
-        {
-          --pendingSplits;
         }
 
         // Construct a filename with the time embedded

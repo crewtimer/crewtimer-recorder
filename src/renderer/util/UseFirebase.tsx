@@ -21,6 +21,8 @@ interface WatchFirebaseOpts<T, P> {
   filter?: { key: string; value: ValueTypes };
   dataTransformer?: (data: T | undefined) => P;
   changeKey?: string;
+  /** Regatta ids starting with 9 or t. live in the dev database */
+  regattaId?: string;
 }
 
 const callbackHandlers: KeyMap<((data: any) => void)[]> = {};
@@ -36,13 +38,12 @@ const unsubscribers: KeyMap<() => void> = {};
  * @param {WatchFirebaseOpts<T, P>} [opts] Optional parameters for filtering and transforming data.
  * @returns {() => void} Unsubscribe function to stop listening for data changes.
  */
-function firebaseSubscribe<T, P>(
+export function firebaseSubscribe<T, P>(
   path: string,
   onDataRx: (data: T | undefined) => void,
   opts?: WatchFirebaseOpts<T, P>,
 ) {
-  const mobileID = ''; // not used for recorder: getMobileID();
-  const database = firebasedb(mobileID);
+  const database = firebasedb(opts?.regattaId || '');
   const rxResults = (snapshot: DataSnapshot) => {
     const val = snapshot.val();
     onDataRx(val === null ? undefined : val);
@@ -68,7 +69,7 @@ export function useFirebaseDatum<T, P = T>(
   path: string,
   opts?: WatchFirebaseOpts<T, P>,
 ) {
-  const key = `${path}_${opts?.filter?.key}_${opts?.filter?.value}_${opts?.changeKey}`;
+  const key = `${opts?.regattaId}_${path}_${opts?.filter?.key}_${opts?.filter?.value}_${opts?.changeKey}`;
   const [value, setValue] = useState<P | undefined>(dataValues[key]);
   useEffect(() => {
     const setValueCallback = (data: P | undefined) => {

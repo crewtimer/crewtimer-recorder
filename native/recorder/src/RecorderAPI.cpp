@@ -349,6 +349,25 @@ nativeVideoRecorder(const Napi::CallbackInfo &info)
 
       return ret;
     }
+    else if (op == "split-video")
+    {
+      if (!args.Has("props"))
+      {
+        Napi::TypeError::New(env, "Missing props field")
+            .ThrowAsJavaScriptException();
+        return ret;
+      }
+      auto props = args.Get("props").As<Napi::Object>();
+      if (!props.Has("tsMilli") || !props.Get("tsMilli").IsNumber())
+      {
+        Napi::TypeError::New(env, "tsMilli must be a number")
+            .ThrowAsJavaScriptException();
+        return ret;
+      }
+      const auto tsMilli = props.Get("tsMilli").As<Napi::Number>().Int64Value();
+      ret.Set("status", Napi::String::New(env, videoController->splitAt(tsMilli)));
+      return ret;
+    }
     else if (op == "stop-recording")
     {
       if (videoController)

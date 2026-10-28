@@ -61,21 +61,23 @@ export function openDirDialog(
   });
 }
 
-export function openFileExplorer(path: string): Promise<void> {
+/** Resolves to an error message to show, or '' when the folder opened. */
+export function openFileExplorer(path: string): Promise<string> {
   return new Promise((resolve) => {
     ipcRenderer
       .invoke('open-file-explorer', path)
       .then((result) => resolve(result))
-      .catch(() => resolve());
+      .catch((err) => resolve(`Could not open ${path}: ${err}`));
   });
 }
 
-export function openLogFolder(): Promise<void> {
+/** Resolves to an error message to show, or '' when the folder opened. */
+export function openLogFolder(): Promise<string> {
   return new Promise((resolve) => {
     ipcRenderer
       .invoke('open-log-folder')
       .then((result) => resolve(result))
-      .catch(() => resolve());
+      .catch((err) => resolve(`Could not open the log folder: ${err}`));
   });
 }
 

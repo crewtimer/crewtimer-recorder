@@ -4,10 +4,9 @@ import {
   app,
   dialog,
   ipcMain,
+  shell,
 } from 'electron';
 import { getMainWindow } from '../mainWindow';
-
-const { exec } = require('child_process');
 
 const fs = require('fs');
 
@@ -78,32 +77,27 @@ ipcMain.handle('get-documents-folder', (/* event */) => {
   });
 });
 
-function openFileExplorer(folderPath: string) {
-  const { platform } = process;
-  let command;
-
-  if (platform === 'win32') {
-    command = `explorer "${folderPath}"`;
-  } else if (platform === 'darwin') {
-    command = `open "${folderPath}"`;
-  } else if (platform === 'linux') {
-    command = `xdg-open "${folderPath}"`;
+/**
+ * Shows a folder in Finder or Explorer.
+ * @returns an error message to show, or '' when the folder opened
+ */
+async function openFileExplorer(folderPath: string): Promise<string> {
+  if (!fs.existsSync(folderPath)) {
+    return `The folder ${folderPath} does not exist. Check that its disk is connected, or choose another folder.`;
   }
-
-  if (command) {
-    exec(command, (error: any) => {
-      if (error) {
-        console.error('Error opening file explorer:', error);
-      }
-    });
+  const error = await shell.openPath(folderPath);
+  if (error) {
+    console.error('Error opening file explorer:', error);
+    return `Could not open ${folderPath}: ${error}`;
   }
+  return '';
 }
 
-ipcMain.handle('open-file-explorer', (_event, dirPath) => {
-  openFileExplorer(dirPath);
-});
+ipcMain.handle('open-file-explorer', (_event, dirPath) =>
+  openFileExplorer(dirPath),
+);
 
 // applog.txt and applog.prev.txt are written to the user data folder
-ipcMain.handle('open-log-folder', () => {
-  openFileExplorer(app.getPath('userData'));
-});
+ipcMain.handle('open-log-folder', () =>
+  openFileExplorer(app.getPath('userData')),
+);

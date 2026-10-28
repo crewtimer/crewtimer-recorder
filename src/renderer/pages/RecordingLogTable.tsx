@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import { alpha } from '@mui/material/styles';
 import SearchIcon from '@mui/icons-material/Search';
+import { showErrorDialog } from '../components/ErrorDialog';
 import { useSystemLog } from '../recorder/RecorderData';
 import { RecordingLogEntry } from '../recorder/RecorderTypes';
 import { monoFont } from '../components/Panel';
@@ -167,7 +168,11 @@ const RecordingLogTable: React.FC = () => {
           </Button>
           <Button
             variant="outlined"
-            onClick={() => window.Util.openLogFolder()}
+            onClick={() =>
+              window.Util.openLogFolder().then(
+                (error) => error && showErrorDialog(error),
+              )
+            }
           >
             Open log folder
           </Button>

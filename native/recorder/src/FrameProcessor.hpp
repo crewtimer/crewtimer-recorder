@@ -3,6 +3,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <csignal>
+#include <deque>
 #include <functional>
 #include <iostream>
 #include <mutex>
@@ -104,11 +105,26 @@ public:
   void stop();
 
   /**
-   * @brief Triggers the frame processor to close the currently open file and
-   * open a new file, once the current file has TimingConstants::MinimumNewVideo100ns
-   * of new video. Requests made while waiting each make a further file.
+   * @brief Triggers the frame processor to close the file holding the latest video, once
+   * it has TimingConstants::MinimumNewVideo100ns of new video. The new file closes again
+   * once it has that much new video, so it can be reviewed straight away.
+   *
+   * A request is dropped when the latest video is already in a short file, or in the
+   * short file a waiting split will make: the file it asks to close is closing soon.
+   * @return false when the request was dropped
    */
-  void splitFile();
+  bool splitFile();
+
+  /**
+   * @brief Make sure a file that closes soon owns a crossing at ts100ns, splitting
+   * only when the file that would own it is a long one. Each file owns its video up
+   * to the middle of the overlap with its neighbours, as Video Review shows it. A
+   * crossing owned by a closed file, by the first second of a short file, or by the
+   * short file a waiting split makes, needs no split. A crossing ahead of the video
+   * splits once the video reaches it.
+   * @return false when no split was needed
+   */
+  bool splitAt(uint64_t ts100ns);
 
   StatusInfo getStatus();
 
@@ -134,7 +150,19 @@ private:
   const bool overlap;
   uint64_t durationSecs;
   uint64_t nextStartTime = 0;
-  std::atomic<int> pendingSplits{0}; ///< Requested splits not yet made; each gets its own file.
+  // Guards the split request and the open file's owned window, which split requests
+  // from other threads are judged by.
+  std::mutex splitMutex;
+  /// Crossings, in order, each waiting for a split once the video reaches it.
+  std::deque<uint64_t> crossings;
+  /// Timestamp of the latest frame processed, which a split request is for.
+  uint64_t processedTs = 0;
+  /// The open file owns video from here; earlier video is owned by closed files.
+  uint64_t ownedFromTs = 0;
+  /// A short file, made by a requested split, owns video before this; 0 for a long file.
+  uint64_t shortOwnedUntilTs = 0;
+  /// A short file holds video before this; 0 for a long file.
+  uint64_t shortEndTs = 0;
   std::queue<FramePtr> frameQueue;        ///< Queue to hold the frames.
   std::mutex queueMutex;                  ///< Mutex for synchronizing access to the frame queue.
   std::condition_variable frameAvailable; ///< Condition variable to notify

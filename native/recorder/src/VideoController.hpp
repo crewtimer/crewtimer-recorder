@@ -374,6 +374,25 @@ public:
     this->waypoint = waypoint;
   }
 
+  /**
+   * Make sure a file that closes soon owns a crossing at tsMilli (UTC). Returns "OK"
+   * when that needs a split, "Ignored" when a closed or closing file already owns it,
+   * or "Not recording".
+   */
+  std::string splitAt(int64_t tsMilli)
+  {
+    std::shared_ptr<FrameProcessor> processor;
+    {
+      std::lock_guard<std::mutex> lock(frameSinkMutex);
+      processor = frameProcessor;
+    }
+    if (!processor)
+    {
+      return "Not recording";
+    }
+    return processor->splitAt(uint64_t(tsMilli) * 10000ULL) ? "OK" : "Ignored";
+  }
+
   void searchCameras()
   {
     {

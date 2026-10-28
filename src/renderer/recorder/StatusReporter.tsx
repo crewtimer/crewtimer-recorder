@@ -7,6 +7,7 @@ import {
 } from './RecorderData';
 import { addSystemEvent } from './RecorderApi';
 import { DISK_WARN_PERCENT, formatBytes, useSignalStats } from './SignalHealth';
+import { useRegattaState } from './RegattaMonitor';
 
 const STATUS_INTERVAL_MS = 60 * 1000;
 const DISK_POLL_MS = 60 * 1000;
@@ -16,8 +17,11 @@ const DISK_POLL_MS = 60 * 1000;
  * Warnings and errors are multicast as they occur by addSystemEvent.
  */
 export const StatusReporter = () => {
-  const [{ networkCamera, protocol, recordingFolder, waypoint }] =
+  const [{ networkCamera, protocol, recordingFolder, waypoint, regattaId }] =
     useRecordingProps();
+  const [regatta] = useRegattaState();
+  // Splitting on the regatta's times, so Video Review need not ask for splits
+  const regattaListening = regatta.status === 'found' && !!waypoint;
   const [isRecording] = useIsRecording();
   const [activeFolder] = useActiveRecordingFolder();
   const stats = useSignalStats();
@@ -33,6 +37,8 @@ export const StatusReporter = () => {
   report.current = {
     cmd: 'recorder-status',
     wp: waypoint,
+    regattaId: (regattaId || '').trim(),
+    regattaListening,
     version: window.platform.appVersion,
     camera: networkCamera,
     protocol,
@@ -70,10 +76,10 @@ export const StatusReporter = () => {
     window.Util.multicastSend({ ...report.current, tsMilli: Date.now() });
 
   // Report at startup and as soon as recording starts or stops or the camera
-  // connection changes, so listeners need not wait for the next minute
+  // connection or regatta changes, so listeners need not wait for the next minute
   useEffect(() => {
     sendReport();
-  }, [stats.recording, stats.connected]);
+  }, [stats.recording, stats.connected, regattaListening]);
 
   useEffect(() => {
     const timer = setInterval(sendReport, STATUS_INTERVAL_MS);

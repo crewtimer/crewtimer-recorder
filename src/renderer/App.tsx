@@ -13,6 +13,7 @@ import { ConfirmDialog } from './components/ConfirmDialog';
 import Toast from './components/Toast';
 import { CameraMonitor } from './recorder/CameraMonitor';
 import { StatusReporter } from './recorder/StatusReporter';
+import { RegattaMonitor } from './recorder/RegattaMonitor';
 import { openNagScreen } from './components/NagScreen';
 import { StatusBar } from './components/StatusBar';
 
@@ -66,6 +67,7 @@ function App() {
         <Toast />
         <CameraMonitor />
         <StatusReporter />
+        <RegattaMonitor />
         <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
           <TopBar />
           <Box

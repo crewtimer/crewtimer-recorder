@@ -11,6 +11,8 @@ import {
 import { useCameraList } from '../recorder/CameraMonitor';
 import { startRecording, stopRecording } from '../recorder/RecorderApi';
 import { showErrorDialog } from './ErrorDialog';
+import { setDialogConfig } from './ConfirmDialog';
+import { getRegattaState, regattaProblem } from '../recorder/RegattaMonitor';
 import { showCameraTimeDialog } from '../recorder/CameraTimeDialog';
 import { hasCameraTimeMismatch } from '../recorder/CameraTime';
 import {
@@ -32,8 +34,28 @@ export const StartButton: React.FC = () => {
       stopRecording().catch(showErrorDialog);
       return;
     }
-    const record = () => {
+    const start = () => {
       startRecording().catch(showErrorDialog);
+    };
+    // Without the regatta's times nothing splits the files for review
+    const record = () => {
+      const { regattaId, waypoint } = getRecordingProps();
+      const problem = regattaProblem(
+        regattaId || '',
+        waypoint,
+        getRegattaState(),
+      );
+      if (!problem) {
+        start();
+        return;
+      }
+      setDialogConfig({
+        title: 'Regatta not set up',
+        message: `${problem}, so files will not split on timing hints. Set them on the Source tab. Record anyway?`,
+        button: 'Record',
+        showCancel: true,
+        handleConfirm: start,
+      });
     };
     const checkCameraTime = () => {
       const sample = getCameraTimeSample();
