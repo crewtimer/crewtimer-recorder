@@ -119,10 +119,10 @@ class FFVideoRecorder : public VideoRecorder
   std::deque<std::pair<int64_t, uint64_t>> sentFrames;
   std::string codecName;
   // Overlap only: finished files wait in toClose for one thread that writes their
-  // trailers, closes and renames them, in order, so Video Review never sees an earlier
-  // file appear after a later one. Closing a large file can take seconds on macOS exFAT,
-  // which must not hold up encoding. Closed files and their errors wait in closedFiles
-  // for the encoding thread to report.
+  // trailers and closes them, in order. Closing a large file can take seconds on macOS
+  // exFAT, which must not hold up encoding. Closed files and their errors wait in
+  // closedFiles for the encoding thread to rename into place and report in the same
+  // order, so Video Review never sees an earlier file appear after a later one.
   std::thread closer;
   std::mutex closeMutex;
   std::condition_variable closeWake;
@@ -964,7 +964,7 @@ private:
   // Create the file's tmp- MP4 and write its header; its first frame is at file.startPts.
   std::string openMuxer(OutputFile &file)
   {
-    file.tmpPath = file.info.directory + "/tmp-" + file.info.filename + ".mp4";
+    file.tmpPath = tmpPathFor(file.info);
     avformat_alloc_output_context2(&file.formatCtx, NULL, NULL, file.tmpPath.c_str());
     if (!file.formatCtx)
     {
@@ -1099,13 +1099,41 @@ private:
 #endif
   }
 
+  static std::string tmpPathFor(const RecordedFile &info)
+  {
+    return info.directory + "/tmp-" + info.filename + ".mp4";
+  }
+
+  // On the encoding thread: let the sidecar be written, rename a finished file into
+  // place, then report it.
+  std::string placeFile(const RecordedFile &info)
+  {
+    if (onFileFinished)
+    {
+      onFileFinished(info);
+    }
+    const std::string outputFile = info.directory + "/" + info.filename + ".mp4";
+    if (std::rename(tmpPathFor(info).c_str(), outputFile.c_str()) != 0)
+    {
+      // If renaming failed, print an error message
+      auto msg = "Error: Cannot rename file";
+      SystemEventQueue::push("ffmpeg", msg);
+      return msg;
+    }
+    if (onFileClosed)
+    {
+      onFileClosed(info);
+    }
+    return "";
+  }
+
   // Finish the file and rename it into place, then report it.
   std::string closeFile(OutputFile &file)
   {
     const std::string err = finishFile(file);
-    if (err.empty() && file.started && onFileClosed)
+    if (err.empty() && file.started)
     {
-      onFileClosed(file.info);
+      return placeFile(file.info);
     }
     return err;
   }
@@ -1159,8 +1187,8 @@ private:
     }
   }
 
-  // On the encoding thread: report files the closer thread has finished. Returns the
-  // first close error.
+  // On the encoding thread: rename files the closer thread has finished into place and
+  // report them. Returns the first close or rename error.
   std::string reportClosedFiles()
   {
     std::deque<std::pair<RecordedFile, std::string>> closed;
@@ -1171,22 +1199,16 @@ private:
     std::string err;
     for (const auto &entry : closed)
     {
-      if (!entry.second.empty())
+      const std::string fileErr = entry.second.empty() ? placeFile(entry.first) : entry.second;
+      if (err.empty())
       {
-        if (err.empty())
-        {
-          err = entry.second;
-        }
-      }
-      else if (onFileClosed)
-      {
-        onFileClosed(entry.first);
+        err = fileErr;
       }
     }
     return err;
   }
 
-  // Write the trailer, close the file and rename it into place.
+  // Write the trailer and close the file. It stays at its tmp- path until placeFile.
   std::string finishFile(OutputFile &file)
   {
     stopFlushing(file);
@@ -1205,19 +1227,6 @@ private:
     }
     avformat_free_context(file.formatCtx);
     file.formatCtx = nullptr;
-    if (!file.started)
-    {
-      return "";
-    }
-
-    const std::string outputFile = file.info.directory + "/" + file.info.filename + ".mp4";
-    if (std::rename(file.tmpPath.c_str(), outputFile.c_str()) != 0)
-    {
-      // If renaming failed, print an error message
-      auto msg = "Error: Cannot rename file";
-      SystemEventQueue::push("ffmpeg", msg);
-      return msg;
-    }
     return "";
   }
 };

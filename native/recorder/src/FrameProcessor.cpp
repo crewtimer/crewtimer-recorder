@@ -164,7 +164,7 @@ void FrameProcessor::closeRecording()
   {
     writeJsonSidecarFile(jsonFilename, startTs, lastTs, frameCount);
   }
-  // With overlap the recorder writes sidecars through onFileClosed as files finish.
+  // With overlap the recorder writes sidecars through onFileFinished as files finish.
   videoRecorder->stop();
 }
 
@@ -285,9 +285,10 @@ void FrameProcessor::processFrames()
   auto lastVideoFrameTime = steady_clock::now();
   heldFilename.clear();
   heldClosedFile = {};
-  // Called on this thread from inside the recorder once a file is in place; cleared
-  // before the thread ends.
-  videoRecorder->onFileClosed = [this](const RecordedFile &file)
+  // Called on this thread from inside the recorder, the first just before a file is
+  // renamed into place so Video Review never lists it without its sidecar, the second
+  // once it is in place; cleared before the thread ends.
+  videoRecorder->onFileFinished = [this](const RecordedFile &file)
   {
     // Without overlap closeRecording wrote the sidecar before stopping the recorder.
     if (overlap)
@@ -295,6 +296,9 @@ void FrameProcessor::processFrames()
       writeJsonSidecarFile(file.directory + "/" + file.filename + ".json",
                            file.firstTs100ns, file.lastTs100ns, file.frames);
     }
+  };
+  videoRecorder->onFileClosed = [this](const RecordedFile &file)
+  {
     if (!heldFilename.empty() && file.filename == heldFilename)
     {
       heldFilename.clear();
@@ -673,6 +677,7 @@ void FrameProcessor::processFrames()
   // has the previous file open, and a failed open has a partly opened encoder. With no
   // frames no sidecar is written, and stopping a stopped recorder does nothing.
   closeRecording();
+  videoRecorder->onFileFinished = nullptr;
   videoRecorder->onFileClosed = nullptr;
   // The file after a held one failed to close; report the held one on its own.
   if (!heldClosedFile.second.empty())
