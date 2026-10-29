@@ -490,8 +490,11 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       destWidth: previewWidth,
       destHeight: previewHeight,
     }));
+    // A zoomed view stays on the same point, panned or not, as the canvas resizes
+    const { zoomMode, srcCenterPoint } = getVideoScaling();
     applyZoom({
-      zoomMode: getVideoScaling().zoomMode,
+      zoomMode,
+      center: zoomMode === ZoomMode.Zoom ? { ...srcCenterPoint } : undefined,
       cropRect: clip,
     });
     // drawContentDebounced();
@@ -606,22 +609,21 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     );
   };
 
-  const cycleZoomAt = (x: number, y: number) => {
-    const center = translateDestCanvas2SrcCanvas({ x, y });
-    let { zoomMode } = getVideoScaling();
-    switch (zoomMode) {
-      case ZoomMode.Fit:
-        zoomMode = isDefaultCrop(clip) ? ZoomMode.Zoom : ZoomMode.Maximize;
-        break;
-      case ZoomMode.Maximize:
-        zoomMode = ZoomMode.Zoom;
-        break;
-      case ZoomMode.Zoom:
-      default:
-        zoomMode = ZoomMode.Fit;
-        break;
-    }
-    applyZoom({ center, zoomMode, cropRect: clip });
+  /**
+   * Three views: full, cropped and zoomed. A right click zooms at the point
+   * clicked from the full or cropped view; a double click from the full view
+   * does too. Anything else returns to the full view.
+   */
+  const zoomClickAt = (x: number, y: number, rightClick: boolean) => {
+    const { zoomMode } = getVideoScaling();
+    const zoomIn =
+      zoomMode === ZoomMode.Fit ||
+      (zoomMode === ZoomMode.Maximize && rightClick);
+    applyZoom({
+      center: zoomIn ? translateDestCanvas2SrcCanvas({ x, y }) : undefined,
+      zoomMode: zoomIn ? ZoomMode.Zoom : ZoomMode.Fit,
+      cropRect: clip,
+    });
   };
 
   const handleDoubleClick = (e: React.MouseEvent) => {
@@ -629,7 +631,11 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     e.preventDefault();
     e.stopPropagation();
     const componentRect = canvasRef.current.getBoundingClientRect();
-    cycleZoomAt(e.clientX - componentRect.left, e.clientY - componentRect.top);
+    zoomClickAt(
+      e.clientX - componentRect.left,
+      e.clientY - componentRect.top,
+      false,
+    );
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -669,7 +675,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     if (isZoomClick) {
       e.preventDefault();
       e.stopPropagation();
-      cycleZoomAt(offsetX, offsetY);
+      zoomClickAt(offsetX, offsetY, true);
     } else if (
       videoScaling.zoomMode !== ZoomMode.Maximize &&
       isInIcon(offsetX, offsetY, maxSizeIconX, iconPadding)

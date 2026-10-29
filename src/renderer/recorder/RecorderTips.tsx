@@ -9,7 +9,9 @@ const RecorderTips = () => {
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <MouseIcon />
-        <Typography>Right click to zoom</Typography>
+        <Typography>
+          Right or double click to zoom; double click to return to the full view
+        </Typography>
       </Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
         <CropIcon />
