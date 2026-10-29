@@ -5,6 +5,8 @@ import { setToast } from '../components/Toast';
 import { snooze } from '../util/Util';
 import { StepButton } from './RangeStepper';
 
+type FocusMode = 'auto' | 'man' | 'once' | 'distance';
+
 interface ViscaValueButtonProps {
   /** Used in the step buttons' accessible names, e.g. "Zoom in". */
   name: string;
@@ -15,8 +17,12 @@ interface ViscaValueButtonProps {
   autoOn?: ViscaCommand;
   autoOff?: ViscaCommand;
   autoOnce?: ViscaCommand;
-  /** Called when a step button is pressed. */
-  onPress?: (direction: 'down' | 'up') => void;
+  /** Called when a step button is pressed; the step waits for a returned promise. */
+  onPress?: (direction: 'down' | 'up') => void | Promise<void>;
+  /** When defined, a Distance mode is offered; true while it is selected. */
+  distance?: boolean;
+  /** Called when a mode button is chosen; the mode's command waits for a returned promise. */
+  onMode?: (mode: FocusMode) => void | Promise<void>;
 }
 
 const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
@@ -29,6 +35,8 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
   autoOff,
   autoOnce,
   onPress,
+  distance,
+  onMode,
 }) => {
   const [isAuto, setIsAuto] = useState<boolean>(value === true);
   const setTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -60,30 +68,42 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
     }
   };
 
-  // Decrement press/release handlers
   // The camera stays in autofocus through a step, and autofocus would undo it.
   const leaveAuto = () => {
     if (isAuto) handleCommand(autoOff);
     setIsAuto(false);
   };
 
-  const handleDecrementPress = () => {
-    leaveAuto();
-    onPress?.('down');
+  // Whether a step button is held; it can be released while the press waits on onPress.
+  const held = useRef(false);
 
-    // Send a quick decrement and then stop
-    const sendDecrement = async () => {
-      await handleCommand(decrement);
+  const handlePress = async (
+    direction: 'down' | 'up',
+    command: ViscaCommand,
+  ) => {
+    held.current = true;
+    leaveAuto();
+    // The owner may need to finish its own lens move first.
+    await onPress?.(direction);
+
+    if (setTimeoutRef.current) {
+      clearTimeout(setTimeoutRef.current);
+    }
+    // Send a quick step and then stop
+    const sendStep = async () => {
+      await handleCommand(command);
       await snooze(50);
       await handleCommand(reset);
     };
-
-    sendDecrement();
+    sendStep();
     // After a while, start again until released
-    setTimeoutRef.current = setTimeout(() => handleCommand(decrement), 300);
+    if (held.current) {
+      setTimeoutRef.current = setTimeout(() => handleCommand(command), 300);
+    }
   };
 
-  const handleDecrementRelease = () => {
+  const handleRelease = () => {
+    held.current = false;
     if (setTimeoutRef.current) {
       clearTimeout(setTimeoutRef.current);
       setTimeoutRef.current = null;
@@ -92,45 +112,20 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
     handleCommand(reset);
   };
 
-  // Increment press/release handlers
-  const handleIncrementPress = () => {
-    leaveAuto();
-    onPress?.('up');
-
-    // Send a quick increment and then stop
-    const sendIncrement = async () => {
-      await handleCommand(increment);
-      await snooze(50);
-      await handleCommand(reset);
-    };
-
-    if (setTimeoutRef.current) {
-      clearTimeout(setTimeoutRef.current);
-    }
-    sendIncrement();
-    // After a while, start again until released
-    setTimeoutRef.current = setTimeout(() => handleCommand(increment), 300); // 100 ms
-  };
-
-  const handleIncrementRelease = () => {
-    if (setTimeoutRef.current) {
-      clearTimeout(setTimeoutRef.current);
-      setTimeoutRef.current = null;
-    }
-    handleCommand(reset);
-  };
-
   // Toggle auto/manual/once
-  const handleToggleMode = (
+  const handleToggleMode = async (
     _event: React.MouseEvent<HTMLElement>,
-    newValue: 'auto' | 'man' | 'once' | null,
+    newValue: FocusMode | null,
   ) => {
+    // The owner may need to finish its own lens move first.
+    if (newValue) await onMode?.(newValue);
     switch (newValue) {
       case 'auto':
         handleCommand(autoOn);
         setIsAuto(true);
         break;
       case 'man':
+      case 'distance':
         handleCommand(autoOff);
         setIsAuto(false);
         break;
@@ -143,12 +138,15 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
     }
   };
 
+  let mode: FocusMode = isAuto ? 'auto' : 'man';
+  if (distance) mode = 'distance';
+
   return (
     <Stack direction="row" alignItems="center" spacing={0.75}>
       {autoOn && (
         <ToggleButtonGroup
           exclusive
-          value={isAuto ? 'auto' : 'man'}
+          value={mode}
           onChange={handleToggleMode}
           size="small"
           color="primary"
@@ -158,23 +156,26 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
           <ToggleButton value="auto">Auto</ToggleButton>
           <ToggleButton value="man">Manual</ToggleButton>
           <ToggleButton value="once">Once</ToggleButton>
+          {distance !== undefined && (
+            <ToggleButton value="distance">Distance</ToggleButton>
+          )}
         </ToggleButtonGroup>
       )}
       <StepButton
         direction="down"
         aria-label={`${name} out`}
-        onMouseDown={handleDecrementPress}
-        onMouseUp={handleDecrementRelease}
-        onTouchStart={handleDecrementPress}
-        onTouchEnd={handleDecrementRelease}
+        onMouseDown={() => handlePress('down', decrement)}
+        onMouseUp={handleRelease}
+        onTouchStart={() => handlePress('down', decrement)}
+        onTouchEnd={handleRelease}
       />
       <StepButton
         direction="up"
         aria-label={`${name} in`}
-        onMouseDown={handleIncrementPress}
-        onMouseUp={handleIncrementRelease}
-        onTouchStart={handleIncrementPress}
-        onTouchEnd={handleIncrementRelease}
+        onMouseDown={() => handlePress('up', increment)}
+        onMouseUp={handleRelease}
+        onTouchStart={() => handlePress('up', increment)}
+        onTouchEnd={handleRelease}
       />
     </Stack>
   );

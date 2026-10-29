@@ -9,6 +9,8 @@ import {
   SelectChangeEvent,
   Slider,
   Stack,
+  TextField,
+  InputAdornment,
   FormControlLabel,
   Checkbox,
   Tooltip,
@@ -39,7 +41,14 @@ import {
   LensRange,
   getFocusReach,
   setFocusReach,
+  getViscaIP,
+  getViscaPort,
+  setViscaModel,
   useCameraState,
+  useDistanceFocusCamera,
+  useFocusDistance,
+  useViscaModel,
+  viscaEndpoint,
   useFocusReach,
   useViscaIP,
   useViscaPort,
@@ -58,6 +67,60 @@ import {
   useRecordingProps,
 } from '../recorder/RecorderData';
 import { useCameraList } from '../recorder/CameraMonitor';
+import { setDistanceFocusTarget, stopDistanceFocus } from './DistanceFocus';
+import {
+  cameraFeatures,
+  focusDistanceRange,
+  viscaCameraId,
+} from './CameraFeatures';
+
+/** The subject distance for Distance focus; a value outside the range is shown but not used. */
+const FocusDistanceField: React.FC<{
+  value: number;
+  onChange: (meters: number) => void;
+}> = ({ value, onChange }) => {
+  const [text, setText] = useState(`${value}`);
+  useEffect(() => setText(`${value}`), [value]);
+  const meters = Number(text);
+  const valid =
+    text.trim() !== '' &&
+    meters >= focusDistanceRange.min &&
+    meters <= focusDistanceRange.max;
+  return (
+    <TextField
+      size="small"
+      type="number"
+      label="Distance"
+      value={text}
+      error={!valid}
+      helperText={
+        valid
+          ? undefined
+          : `${focusDistanceRange.min} to ${focusDistanceRange.max} m`
+      }
+      onChange={(event) => {
+        setText(event.target.value);
+        const next = Number(event.target.value);
+        if (
+          event.target.value.trim() !== '' &&
+          next >= focusDistanceRange.min &&
+          next <= focusDistanceRange.max
+        ) {
+          onChange(next);
+        }
+      }}
+      InputProps={{
+        endAdornment: <InputAdornment position="end">m</InputAdornment>,
+        inputProps: {
+          min: focusDistanceRange.min,
+          max: focusDistanceRange.max,
+          step: 1,
+        },
+      }}
+      sx={{ width: 130 }}
+    />
+  );
+};
 
 const guideColors: GuideColor[] = ['white', 'black', 'red', 'green'];
 
@@ -352,6 +415,33 @@ const updateReach = (
   setFocusReach({ ...reach, [band]: next });
 };
 
+/**
+ * Reads the model of the camera at an endpoint, resetting lens data learned on a different
+ * model. Resolves true once the camera has answered, even if it doesn't support the inquiry.
+ */
+const identifyCamera = async (endpoint: string) => {
+  const version = await sendViscaCommand({ type: 'VERSION_VALUE' });
+  // The reply belongs to whichever camera is selected now.
+  if (viscaEndpoint(getViscaIP(), getViscaPort()) !== endpoint) return false;
+  if (!version.data) return false;
+  if (version.data[1] !== 0x50) return true;
+  const model = Array.from(version.data.slice(2, 6), (b) =>
+    b.toString(16).padStart(2, '0'),
+  ).join('');
+  const stored = getCameraModel();
+  if (model !== stored) {
+    // Lens data learned before models were stored is assumed to be from this camera.
+    if (stored !== undefined) {
+      setLensRange(undefined);
+      setFocusReach({});
+      setCameraPresets([]);
+    }
+    setCameraModel(model);
+  }
+  setViscaModel({ endpoint, model });
+  return true;
+};
+
 const ViscaControlPanel: React.FC = () => {
   const [cameraState, setCameraState] = useCameraState();
   const [viscaState] = useViscaState();
@@ -386,6 +476,40 @@ const ViscaControlPanel: React.FC = () => {
     low: atZoom(bandReach.lowZoom) ? bandReach.low : undefined,
     high: atZoom(bandReach.highZoom) ? bandReach.high : undefined,
   };
+
+  // Distance focus: on models with a focus model, focus follows the zoom to hold a distance sharp.
+  // Only the model this camera reported this session counts, and only for the camera it was
+  // turned on for, so a newly selected camera never gets another camera's focus.
+  const endpoint = viscaEndpoint(viscaIP, viscaPort);
+  const [viscaModel] = useViscaModel();
+  const { focusFromDistance } = cameraFeatures(
+    cameraReady && viscaModel?.endpoint === endpoint
+      ? viscaCameraId(viscaModel.model)
+      : undefined,
+  );
+  const [distanceFocusCamera, setDistanceFocusCamera] =
+    useDistanceFocusCamera();
+  const [focusDistance, setFocusDistance] = useFocusDistance();
+  const distanceFocus = distanceFocusCamera === endpoint && !!focusFromDistance;
+  const distanceTarget = distanceFocus
+    ? focusFromDistance(cameraState.zoom, focusDistance)
+    : null;
+  // A distance change sets focus even when it rounds to the same position.
+  useEffect(() => {
+    setDistanceFocusTarget(distanceTarget, { ip: viscaIP, port: viscaPort });
+  }, [distanceTarget, focusDistance, viscaIP, viscaPort]);
+  // The lens stops when the panel goes; it resumes following when the panel returns.
+  useEffect(
+    () => () => {
+      stopDistanceFocus();
+    },
+    [],
+  );
+  /** Turns Distance focus off and resolves once its drive has stopped, ready for a manual move. */
+  const leaveDistanceFocus = () => {
+    setDistanceFocusCamera(undefined);
+    return stopDistanceFocus();
+  };
   useEffect(() => {
     if (!cameraReady || !viscaIP || viscaPort === 0) {
       return;
@@ -406,23 +530,6 @@ const ViscaControlPanel: React.FC = () => {
     let cancelled = false;
     const fetchCameraState = async () => {
       try {
-        const version = await sendViscaCommand({ type: 'VERSION_VALUE' });
-        if (cancelled) return;
-        if (version.data?.[1] === 0x50) {
-          const model = Array.from(version.data.slice(2, 6), (b) =>
-            b.toString(16).padStart(2, '0'),
-          ).join('');
-          const stored = getCameraModel();
-          if (model !== stored) {
-            // Lens data learned before models were stored is assumed to be from this camera.
-            if (stored !== undefined) {
-              setLensRange(undefined);
-              setFocusReach({});
-              setCameraPresets([]);
-            }
-            setCameraModel(model);
-          }
-        }
         const result = await getCameraState();
         if (cancelled) return;
         if (result) {
@@ -458,11 +565,16 @@ const ViscaControlPanel: React.FC = () => {
       return undefined;
     }
     let stopped = false;
+    let identified = false;
     // Each read waits for the last one, so slow replies can't pile up in the VISCA queue.
     const poll = async () => {
       if (stopped) return;
       let delay = 500;
       try {
+        if (!identified) {
+          identified = await identifyCamera(endpoint);
+          if (stopped) return;
+        }
         const zoom = await getLensPosition('zoom');
         if (stopped) return;
         const focus = await getLensPosition('focus');
@@ -532,7 +644,7 @@ const ViscaControlPanel: React.FC = () => {
     return () => {
       stopped = true;
     };
-  }, [cameraReady, setCameraState, viscaIP, viscaPort, viscaState]);
+  }, [cameraReady, endpoint, setCameraState, viscaIP, viscaPort, viscaState]);
 
   const onExposureModeChange = async (
     event: SelectChangeEvent<ExposureMode>,
@@ -727,14 +839,37 @@ const ViscaControlPanel: React.FC = () => {
                 autoOn={{ type: 'AUTO_FOCUS', value: true }}
                 autoOff={{ type: 'AUTO_FOCUS', value: false }}
                 autoOnce={{ type: 'FOCUS_ONCE' }}
+                distance={focusFromDistance ? distanceFocus : undefined}
+                onMode={(mode) => {
+                  if (mode === 'distance') {
+                    setDistanceFocusCamera(endpoint);
+                    return undefined;
+                  }
+                  return leaveDistanceFocus();
+                }}
                 onPress={(direction) => {
                   focusPress.current = {
                     end: direction === 'up' ? 'high' : 'low',
                     from: cameraState.focus,
                     at: Date.now(),
                   };
+                  // Stepping focus by hand is Manual focus.
+                  return leaveDistanceFocus();
                 }}
               />
+              {distanceFocus && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <FocusDistanceField
+                    value={focusDistance}
+                    onChange={setFocusDistance}
+                  />
+                  {distanceTarget === null && (
+                    <Typography variant="body2" color="warning.main">
+                      No focus known for this zoom
+                    </Typography>
+                  )}
+                </Box>
+              )}
               <LensSlider
                 label="Focus position"
                 value={cameraState.focus}
@@ -761,6 +896,7 @@ const ViscaControlPanel: React.FC = () => {
                   })
                 }
                 onSet={async (value) => {
+                  await leaveDistanceFocus();
                   // The camera ignores a focus position while autofocus is on.
                   setCameraState((prev) => ({ ...prev, autoFocus: false }));
                   await sendViscaCommand({ type: 'AUTO_FOCUS', value: false });
@@ -781,7 +917,8 @@ const ViscaControlPanel: React.FC = () => {
                 value={cameraState.zoom}
                 range={shown('zoom')}
                 onSet={async (value) => {
-                  await autoFocus();
+                  // Distance focus keeps following the zoom instead.
+                  if (!distanceFocus) await autoFocus();
                   // A zoom move reports completion at once, so wait for the lens to stop.
                   await sendViscaCommand({ type: 'SET_ZOOM', value });
                   return settleLens('zoom');

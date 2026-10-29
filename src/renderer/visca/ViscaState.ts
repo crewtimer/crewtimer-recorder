@@ -33,9 +33,28 @@ export const [useViscaPort, , getViscaPort] = UseStoredDatum(
 export const [useViscaState, setViscaState, getViscastate] = UseDatum('Idle');
 
 /** Vendor and model ID from the VISCA version inquiry; the learned lens data belongs to this model. */
-export const [, setCameraModel, getCameraModel] = UseStoredDatum<
+export const [useCameraModel, setCameraModel, getCameraModel] = UseStoredDatum<
   string | undefined
 >('cameraModel', undefined);
+
+/** The subject distance in meters that Distance focus keeps sharp as the zoom changes. */
+export const [useFocusDistance] = UseStoredDatum('focusDistance', 30);
+/** The VISCA address and port ("ip:port") of a camera, which binds per-camera state to it. */
+export const viscaEndpoint = (ip: string, port: number) => `${ip}:${port}`;
+/**
+ * The model the camera at an endpoint reported this session. Unlike the stored model, it can't
+ * describe a camera that hasn't answered yet.
+ */
+export const [useViscaModel, setViscaModel] = UseDatum<
+  { endpoint: string; model: string } | undefined
+>(undefined);
+/**
+ * The endpoint of the camera whose focus follows the zoom to hold the focus distance, or
+ * undefined when Distance focus is off; another camera never inherits it.
+ */
+export const [useDistanceFocusCamera, setDistanceFocusCamera] = UseDatum<
+  string | undefined
+>(undefined);
 
 export interface LensRange {
   zoom: { min: number; max: number };

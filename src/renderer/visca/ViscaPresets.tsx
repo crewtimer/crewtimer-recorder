@@ -10,10 +10,12 @@ import {
 import {
   CameraPreset,
   CameraState,
+  setDistanceFocusCamera,
   useCameraPresets,
   useCameraState,
 } from './ViscaState';
 import { getCameraState, updateCameraState } from './ViscaAPI';
+import { stopDistanceFocus } from './DistanceFocus';
 import { setToast } from '../components/Toast';
 import { showErrorDialog } from '../components/ErrorDialog';
 import { snooze } from '../util/Util';
@@ -110,6 +112,9 @@ const ViscaPresets: React.FC = () => {
           delete camState.cropArea;
           delete camState.guide;
           applyPresetCrop(newPreset);
+          // The preset's own focus applies, not one following the zoom.
+          setDistanceFocusCamera(undefined);
+          await stopDistanceFocus();
           setCameraState(camState); // in-memory settings
           await updateCameraState(camState); // send to cameras
           await reportPresetMismatches(presetNumber, camState);

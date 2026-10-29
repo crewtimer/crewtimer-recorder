@@ -258,16 +258,24 @@ function buildViscaPacket(cmd: ViscaCommand): Uint8Array {
  * The main function that dispatches commands.
  * Returns `CameraState` when querying, or `void` for set operations.
  */
+/** Where a VISCA camera listens. */
+export interface ViscaAddress {
+  ip: string;
+  port: number;
+}
+
+/** Sends to the selected camera, or to `to` for work that must stay on one camera. */
 export const sendViscaCommand = async (
   cmd: ViscaCommand,
+  to?: ViscaAddress,
 ): Promise<ViscaResponse> => {
   // Normal single set command
-  const port = getViscaPort();
+  const port = to?.port ?? getViscaPort();
   if (port === 0) {
     return { status: 'OK' };
   }
   const packet = buildViscaPacket(cmd);
-  const ip = getViscaIP();
+  const ip = to?.ip ?? getViscaIP();
   if (ip) {
     return sendViscaCommandToDevice({ ip, port, data: packet });
   }
@@ -307,10 +315,12 @@ const extractViscaValue = (
 /** Reads the zoom or focus position, throwing if the camera doesn't answer with one. */
 export const getLensPosition = async (
   axis: 'zoom' | 'focus',
+  to?: ViscaAddress,
 ): Promise<number> => {
-  const reply = await sendViscaCommand({
-    type: axis === 'zoom' ? 'ZOOM_VALUE' : 'FOCUS_VALUE',
-  });
+  const reply = await sendViscaCommand(
+    { type: axis === 'zoom' ? 'ZOOM_VALUE' : 'FOCUS_VALUE' },
+    to,
+  );
   if (reply.data?.[1] !== 0x50) {
     throw new Error(
       `No ${axis} position from camera (${reply.msg ?? reply.status})`,
@@ -337,30 +347,37 @@ export const settleLens = async (axis: 'zoom' | 'focus') => {
  * Drives focus to a position and returns where it ends up: at the position, or short of it
  * where the lens stops (the limit at this zoom). Continuous moves are used because the X30
  * refuses direct focus positions at some zooms, reporting completion without moving.
+ * The move stops early once cancelled() is true, without starting if it already is. All of
+ * it goes to `to` when given, so a move ends on the camera it started on.
  */
-export const driveFocus = async (target: number): Promise<number> => {
-  let pos = await getLensPosition('focus');
+export const driveFocus = async (
+  target: number,
+  cancelled?: () => boolean,
+  to?: ViscaAddress,
+): Promise<number> => {
+  let pos = await getLensPosition('focus', to);
+  if (cancelled?.()) return pos;
   const near = target > pos;
   const remaining = () => (near ? target - pos : pos - target);
   // Top speed, then the button speed for the last stretch so the stop lands close.
   let speed = remaining() > 300 ? 7 : 2;
-  await sendViscaCommand({ type: 'FOCUS_DRIVE', near, speed });
+  await sendViscaCommand({ type: 'FOCUS_DRIVE', near, speed }, to);
   let still = 0;
   try {
-    while (remaining() > 0 && still < 3) {
+    while (remaining() > 0 && still < 3 && !cancelled?.()) {
       await snooze(100);
-      const next = await getLensPosition('focus');
+      const next = await getLensPosition('focus', to);
       still = next === pos ? still + 1 : 0;
       pos = next;
       if (speed === 7 && remaining() <= 300) {
         speed = 2;
-        await sendViscaCommand({ type: 'FOCUS_DRIVE', near, speed });
+        await sendViscaCommand({ type: 'FOCUS_DRIVE', near, speed }, to);
       }
     }
   } finally {
-    await sendViscaCommand({ type: 'FOCUS_RESET' });
+    await sendViscaCommand({ type: 'FOCUS_RESET' }, to);
   }
-  return getLensPosition('focus');
+  return getLensPosition('focus', to);
 };
 
 export const getCameraState = async (): Promise<CameraState> => {
