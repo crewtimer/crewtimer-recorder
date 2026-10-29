@@ -163,6 +163,12 @@ private:
   uint64_t shortOwnedUntilTs = 0;
   /// A short file holds video before this; 0 for a long file.
   uint64_t shortEndTs = 0;
+  /// A long file split only for a crossing in the short file after it is not reported:
+  /// Video Review finds it when the next file's report makes it refresh the folder, so
+  /// it does not open a file of no interest.
+  std::string heldFilename;
+  /// Directory and filename of a closed long file not reported, in case no next file is.
+  std::pair<std::string, std::string> heldClosedFile;
   std::queue<FramePtr> frameQueue;        ///< Queue to hold the frames.
   std::mutex queueMutex;                  ///< Mutex for synchronizing access to the frame queue.
   std::condition_variable frameAvailable; ///< Condition variable to notify
@@ -207,6 +213,11 @@ private:
    * @brief Finish the current file, or with overlap every file, and its sidecar
    */
   void closeRecording();
+
+  /**
+   * @brief Tell the renderer, and so Video Review, that a file is in place
+   */
+  void reportFileClosed(const std::string &directory, const std::string &filename);
 
   /**
    * @brief A waiting crossing within window100ns of ts100ns, whose split soon closes

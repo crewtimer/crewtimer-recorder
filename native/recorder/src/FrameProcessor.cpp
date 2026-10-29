@@ -168,6 +168,15 @@ void FrameProcessor::closeRecording()
   videoRecorder->stop();
 }
 
+void FrameProcessor::reportFileClosed(const std::string &directory, const std::string &filename)
+{
+#ifndef STANDALONE
+  // The renderer tells Video Review, so it lists the file without waiting to poll.
+  nlohmann::json msg = {{"directory", directory}, {"filename", filename}};
+  sendMessageToRenderer("file-closed", std::make_shared<nlohmann::json>(msg));
+#endif
+}
+
 void FrameProcessor::writeJsonSidecarFile(const std::string &path, uint64_t startTs,
                                           uint64_t stopTs, int64_t numFrames)
 {
@@ -274,6 +283,8 @@ void FrameProcessor::processFrames()
   // stops entirely is caught by the time since the last video frame instead.
   constexpr auto stallThreshold = seconds(2);
   auto lastVideoFrameTime = steady_clock::now();
+  heldFilename.clear();
+  heldClosedFile = {};
   // Called on this thread from inside the recorder once a file is in place; cleared
   // before the thread ends.
   videoRecorder->onFileClosed = [this](const RecordedFile &file)
@@ -284,11 +295,15 @@ void FrameProcessor::processFrames()
       writeJsonSidecarFile(file.directory + "/" + file.filename + ".json",
                            file.firstTs100ns, file.lastTs100ns, file.frames);
     }
-#ifndef STANDALONE
-    // The renderer tells Video Review, so it lists the file without waiting to poll.
-    nlohmann::json msg = {{"directory", file.directory}, {"filename", file.filename}};
-    sendMessageToRenderer("file-closed", std::make_shared<nlohmann::json>(msg));
-#endif
+    if (!heldFilename.empty() && file.filename == heldFilename)
+    {
+      heldFilename.clear();
+      heldClosedFile = {file.directory, file.filename};
+      return;
+    }
+    // Video Review lists a held file along with this one when it refreshes the folder.
+    heldClosedFile = {};
+    reportFileClosed(file.directory, file.filename);
   };
 
   while (running)
@@ -481,6 +496,14 @@ void FrameProcessor::processFrames()
         const auto fileStartTs = overlapSplit ? videoRecorder->splitStartTimestamp(ts100ns) : ts100ns;
         {
           std::lock_guard<std::mutex> lock(splitMutex);
+          // A long file split for a crossing the new file holds from its start has
+          // nothing to review but the overlap the short file repeats. Only the short file
+          // is reported, so Video Review does not open the long one first.
+          if (overlapSplit && splitRequested && shortEndTs == 0 && *crossings.begin() >= fileStartTs)
+          {
+            std::lock_guard<std::mutex> s(statusMutex);
+            heldFilename = statusInfo.filename;
+          }
           // The previous file owns the first half of the overlap.
           ownedFromTs = fileStartTs + (ts100ns - fileStartTs) / 2;
           // A short file closes after MinimumNewVideo100ns, and owns what the next
@@ -651,4 +674,9 @@ void FrameProcessor::processFrames()
   // frames no sidecar is written, and stopping a stopped recorder does nothing.
   closeRecording();
   videoRecorder->onFileClosed = nullptr;
+  // The file after a held one failed to close; report the held one on its own.
+  if (!heldClosedFile.second.empty())
+  {
+    reportFileClosed(heldClosedFile.first, heldClosedFile.second);
+  }
 }
