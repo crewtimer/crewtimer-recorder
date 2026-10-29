@@ -3,11 +3,11 @@
 #include <chrono>
 #include <condition_variable>
 #include <csignal>
-#include <deque>
 #include <functional>
 #include <iostream>
 #include <mutex>
 #include <queue>
+#include <set>
 #include <thread>
 
 #include "VideoRecorder.hpp"
@@ -153,8 +153,8 @@ private:
   // Guards the split request and the open file's owned window, which split requests
   // from other threads are judged by.
   std::mutex splitMutex;
-  /// Crossings, in order, each waiting for a split once the video reaches it.
-  std::deque<uint64_t> crossings;
+  /// Crossings, in time order, each waiting for a split once the video reaches it.
+  std::set<uint64_t> crossings;
   /// Timestamp of the latest frame processed, which a split request is for.
   uint64_t processedTs = 0;
   /// The open file owns video from here; earlier video is owned by closed files.
@@ -207,4 +207,11 @@ private:
    * @brief Finish the current file, or with overlap every file, and its sidecar
    */
   void closeRecording();
+
+  /**
+   * @brief A waiting crossing within window100ns of ts100ns, whose split soon closes
+   * the file holding ts100ns or starts a short file holding it. Called with splitMutex
+   * held.
+   */
+  bool waitingSplitCovers(uint64_t ts100ns, uint64_t window100ns) const;
 };

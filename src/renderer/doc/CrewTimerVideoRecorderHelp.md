@@ -77,7 +77,8 @@ Each new time makes sure the crossing is in a file that closes within about 2 se
 so Video Review can review it straight away. A time in a long file splits it, starting
 a short file; recording then goes back to long files. A time that a closed file or a
 closing short file already holds needs no split. A time in the last second of a short
-file makes one more short file, since the next file would hold it. Times only split
+file makes one more short file, since the next file would hold it. A time more than a minute
+ahead of this PC's clock, such as one from another day, is ignored. Times only split
 while recording. Times already entered when the recorder starts
 listening do not cause splits. While the recorder is splitting on the regatta's times,
 Video Review does not ask for these splits itself. Without a regatta, Start Recording

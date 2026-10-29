@@ -89,21 +89,29 @@ static uint64_t shortOwned100ns(bool overlap)
   return overlap ? TimingConstants::MinimumNewVideo100ns / 2 : TimingConstants::MinimumNewVideo100ns;
 }
 
+bool FrameProcessor::waitingSplitCovers(uint64_t ts100ns, uint64_t window100ns) const
+{
+  // Video just before the crossing is in a file closing at its split, or, with
+  // overlap, the short file it starts. A crossing further off, such as one from
+  // another day, does not cover it.
+  const uint64_t from = ts100ns > window100ns ? ts100ns - window100ns : 0;
+  auto near = crossings.upper_bound(from);
+  return near != crossings.end() && *near < ts100ns + window100ns;
+}
+
 bool FrameProcessor::splitFile()
 {
   std::lock_guard<std::mutex> lock(splitMutex);
   const uint64_t ts100ns = processedTs;
-  // A waiting split is made at or after its crossing, and its file holds the
-  // following MinimumNewVideo100ns.
-  const bool covered =
-      ts100ns == 0 || ts100ns < shortEndTs ||
-      (!crossings.empty() && ts100ns < crossings.back() + TimingConstants::MinimumNewVideo100ns);
+  // A waiting split's short file holds the MinimumNewVideo100ns after its crossing.
+  const bool covered = ts100ns == 0 || ts100ns < shortEndTs ||
+                       waitingSplitCovers(ts100ns, TimingConstants::MinimumNewVideo100ns);
   if (covered)
   {
     SystemEventQueue::push("fproc", "Split request ignored; the latest video is in a file that closes soon");
     return false;
   }
-  crossings.push_back(ts100ns);
+  crossings.insert(ts100ns);
   return true;
 }
 
@@ -111,11 +119,11 @@ bool FrameProcessor::splitAt(uint64_t ts100ns)
 {
   std::lock_guard<std::mutex> lock(splitMutex);
   if (ts100ns < ownedFromTs || ts100ns < shortOwnedUntilTs ||
-      (!crossings.empty() && ts100ns < crossings.back() + shortOwned100ns(overlap)))
+      waitingSplitCovers(ts100ns, shortOwned100ns(overlap)))
   {
     return false;
   }
-  crossings.push_back(ts100ns);
+  crossings.insert(ts100ns);
   return true;
 }
 
@@ -442,7 +450,7 @@ void FrameProcessor::processFrames()
       {
         std::lock_guard<std::mutex> lock(splitMutex);
         processedTs = video_frame->timestamp;
-        splitRequested = !crossings.empty() && video_frame->timestamp >= crossings.front();
+        splitRequested = !crossings.empty() && video_frame->timestamp >= *crossings.begin();
       }
 
       // The video review app may have trouble reading the last video frame when there is not a multiple of gop_size frames
@@ -479,10 +487,7 @@ void FrameProcessor::processFrames()
           // file does not reach back to. Crossings it holds need no more splits.
           shortOwnedUntilTs = splitRequested ? ts100ns + shortOwned100ns(overlap) : 0;
           shortEndTs = splitRequested ? ts100ns + TimingConstants::MinimumNewVideo100ns : 0;
-          while (!crossings.empty() && crossings.front() < shortOwnedUntilTs)
-          {
-            crossings.pop_front();
-          }
+          crossings.erase(crossings.begin(), crossings.lower_bound(shortOwnedUntilTs));
         }
         // Shorter slices cannot split sooner, and a zero length must not divide below.
         const uint64_t sliceDuration100ns =

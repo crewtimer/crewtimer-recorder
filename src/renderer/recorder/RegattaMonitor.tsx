@@ -53,6 +53,10 @@ export const regattaProblem = (
   return undefined;
 };
 
+// A real crossing is at most seconds ahead of this PC's clock; one further ahead
+// is another day's time placed on today, or mistyped.
+const MAX_AHEAD_MILLI = 60 * 1000;
+
 const log = (message: string) =>
   addSystemEvent({ tsMilli: Date.now(), subsystem: 'regatta', message });
 
@@ -140,6 +144,10 @@ export const RegattaMonitor = () => {
           const tsMilli = lapTimeToMilli(lap.Time, nowMilli);
           if (tsMilli === undefined) return;
           seen?.add(crossing);
+          if (tsMilli - nowMilli > MAX_AHEAD_MILLI) {
+            log(`${waypoint} time ${lap.Time} is in the future; ignored`);
+            return;
+          }
           splitForLap(lap, tsMilli, waypoint);
         });
       },

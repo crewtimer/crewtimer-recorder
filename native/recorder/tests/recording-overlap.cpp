@@ -358,9 +358,12 @@ static void testCrossings(const std::string &dir, bool software)
           "file " << f << " new video starts at frame " << ranges[f - 1].second + 1 << ", expected " << liveStarts[f - 1]);
 }
 
-// A crossing at 6 s arriving while the video is at 4 s, as when the video lags, splits
-// once the video reaches it, at 6 s, and its short file closes 2 s later.
-static void testCrossingAhead(const std::string &dir, bool software)
+// Crossings with 60 s slices, each given to splitAt just before its frame is added, as
+// an offset from that frame's time. Each must make a split, starting files whose new
+// video starts at liveStarts.
+static void testCrossingsAt(const std::string &dir, bool software,
+                            const std::vector<std::pair<size_t, int64_t>> &crossings,
+                            const std::vector<int> &liveStarts)
 {
   const uint64_t start = 17672256005000000ULL;
   std::vector<uint64_t> recorded = captureTimes(start - TimingConstants::GlobalTimestampCorrection100ns, 600);
@@ -370,10 +373,13 @@ static void testCrossingAhead(const std::string &dir, bool software)
                              FrameProcessor::Guide(), true);
     for (size_t i = 0; i < recorded.size(); ++i)
     {
-      if (i == 240)
+      for (const auto &crossing : crossings)
       {
+        if (crossing.first != i)
+          continue;
         waitForBacklog(processor);
-        CHECK(processor.splitAt(recorded[360]), "crossing ahead of the video made no split");
+        CHECK(processor.splitAt(uint64_t(int64_t(recorded[i]) + crossing.second)),
+              "crossing given at frame " << i << " made no split");
       }
       while (processor.getStatus().frameBacklog > 30)
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
@@ -383,7 +389,6 @@ static void testCrossingAhead(const std::string &dir, bool software)
     CHECK(processor.getStatus().error.empty(), "frame processor error: " << processor.getStatus().error);
     processor.stop();
   }
-  const std::vector<int> liveStarts = {360, 480};
   std::vector<FileInfo> files = listRecording(dir);
   CHECK(files.size() == liveStarts.size() + 1, "expected " << liveStarts.size() + 1 << " files, found " << files.size());
   const std::vector<std::pair<int, int>> ranges = verify(files, recorded);
@@ -492,8 +497,15 @@ int main(int argc, char **argv)
     std::cout << mode << " encoder, splits requested at 2 s, 2.5 s and 5 s:" << std::endl;
     testFrameProcessor(makeDir(root + "/" + mode + "-requested-again"), software, true, 60, {120, 150, 300},
                        {120, 240, 360, 480});
+    // As when the video lags: the crossing splits once the video reaches it, at 6 s,
+    // and its short file closes 2 s later.
     std::cout << mode << " encoder, crossing at 6 s while the video is at 4 s:" << std::endl;
-    testCrossingAhead(makeDir(root + "/" + mode + "-ahead"), software);
+    testCrossingsAt(makeDir(root + "/" + mode + "-ahead"), software, {{240, 2 * 10000000LL}}, {360, 480});
+    // A crossing an hour ahead, as from another day, waits without hiding the real
+    // crossing at 4 s that follows it.
+    std::cout << mode << " encoder, crossing an hour ahead, then one at 4 s:" << std::endl;
+    testCrossingsAt(makeDir(root + "/" + mode + "-far"), software,
+                    {{120, 3600 * 10000000LL}, {240, 0}}, {240, 360});
     std::cout << mode << " encoder, crossings at 4 s, 8 s and 9.5 s:" << std::endl;
     testCrossings(makeDir(root + "/" + mode + "-crossings"), software);
     std::cout << mode << " encoder, 1 s slices:" << std::endl;
