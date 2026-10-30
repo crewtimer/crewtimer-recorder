@@ -436,6 +436,43 @@ static void testSplits(const std::string &dir, bool software, const std::vector<
     verify(files, ts);
 }
 
+// A held file stays at its tmp- path until the next file is in place, and is not
+// reported then; a held last file is placed and reported on stop.
+static void testHeldFiles(const std::string &dir, bool software)
+{
+  const std::vector<uint64_t> ts = captureTimes(17672256005000000ULL, 600);
+  auto recorder = createFfmpegRecorder(80, software, true);
+  const auto exists = [&](const std::string &name)
+  { return std::ifstream(dir + "/" + name).good(); };
+  std::vector<std::string> reported;
+  recorder->onFileFinished = [&](const RecordedFile &f)
+  {
+    if (f.filename == "P360")
+      CHECK(exists("tmp-P0.mp4") && !exists("P0.mp4"), "held P0 in place before P360");
+    return f.filename == "P0" || f.filename == "P432";
+  };
+  recorder->onFileClosed = [&](const RecordedFile &f)
+  {
+    if (f.filename == "P360")
+      CHECK(exists("P0.mp4") && !exists("tmp-P0.mp4"), "held P0 not in place with P360");
+    reported.push_back(f.filename);
+  };
+  std::string err = recorder->openVideoStream(dir, "P0", W, H, 60, ts[0]);
+  for (size_t i = 0; err.empty() && i < ts.size(); ++i)
+  {
+    if (i == 360 || i == 432)
+      err = recorder->splitVideoStream(dir, "P" + std::to_string(i), ts[i]);
+    if (err.empty())
+      err = recorder->writeVideoFrame(makeFrame(int(i), ts[i]));
+  }
+  if (err.empty())
+    err = recorder->stop();
+  CHECK(err.empty(), err);
+  CHECK(reported == std::vector<std::string>({"P360", "P432"}),
+        "reported " << reported.size() << " files, expected P360 then P432");
+  CHECK(exists("P432.mp4") && !exists("tmp-P432.mp4"), "held last file not placed on stop");
+}
+
 // With 4 s slices, the second file cannot be created. Recording stops with an error, and
 // the first file must still be finished, renamed, and given its sidecar.
 static void testBlockedSplit(const std::string &dir, bool software)
@@ -516,6 +553,8 @@ int main(int argc, char **argv)
     // Faster than libx264's encoder delay, so several files wait for their first packet.
     std::cout << mode << " encoder, recorder splits 0.2 s apart:" << std::endl;
     testSplits(makeDir(root + "/" + mode + "-rapid"), software, {360, 372, 384, 396, 408}, {240, 360, 372, 384, 396});
+    std::cout << mode << " encoder, held files:" << std::endl;
+    testHeldFiles(makeDir(root + "/" + mode + "-held"), software);
     std::cout << mode << " encoder, next file cannot be created:" << std::endl;
     testBlockedSplit(makeDir(root + "/" + mode + "-blocked"), software);
   }

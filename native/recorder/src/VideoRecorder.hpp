@@ -42,8 +42,10 @@ public:
     return "Error: Recorder cannot split files";
   }
   // Called on the encoding thread when a split recording has finished a file, before
-  // it renames the file into place, so a sidecar written here is there first.
-  std::function<void(const RecordedFile &)> onFileFinished;
+  // it renames the file into place, so a sidecar written here is there first. Returning
+  // true holds the file back: it is renamed into place just after the next file, and is
+  // not reported then, or renamed and reported on stop if no next file is placed.
+  std::function<bool(const RecordedFile &)> onFileFinished;
   // Called after a split recording renames a finished file into place.
   std::function<void(const RecordedFile &)> onFileClosed;
 

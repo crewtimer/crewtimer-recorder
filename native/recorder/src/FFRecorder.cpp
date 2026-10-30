@@ -122,7 +122,8 @@ class FFVideoRecorder : public VideoRecorder
   // trailers and closes them, in order. Closing a large file can take seconds on macOS
   // exFAT, which must not hold up encoding. Closed files and their errors wait in
   // closedFiles for the encoding thread to rename into place and report in the same
-  // order, so Video Review never sees an earlier file appear after a later one.
+  // order, so Video Review never sees an earlier file appear after a later one, except
+  // a held file, which appears just after the next file.
   std::thread closer;
   std::mutex closeMutex;
   std::condition_variable closeWake;
@@ -130,6 +131,8 @@ class FFVideoRecorder : public VideoRecorder
   std::deque<std::pair<RecordedFile, std::string>> closedFiles;
   bool closing = false; // the closer thread is finishing a file
   bool closerStop = false;
+  // A finished file onFileFinished held back at its tmp- path; no filename when none.
+  RecordedFile heldFile;
   // Files being written are flushed to disk every FlushIntervalMs, so closing one has
   // little left to write: on macOS exFAT, closing a 4 s file otherwise takes 0.5 s and a
   // 30 s file over 1 s, delaying when Video Review can open it.
@@ -592,6 +595,21 @@ public:
       if (retval.empty())
       {
         retval = closeErr;
+      }
+    }
+    // No file followed a held one, or it failed to close; place and report it alone.
+    if (!heldFile.filename.empty())
+    {
+      const RecordedFile held = heldFile;
+      heldFile = RecordedFile();
+      const std::string heldErr = renameIntoPlace(held);
+      if (heldErr.empty() && onFileClosed)
+      {
+        onFileClosed(held);
+      }
+      if (retval.empty())
+      {
+        retval = heldErr;
       }
     }
     for (BufferedPacket &buffered : history)
@@ -1104,14 +1122,8 @@ private:
     return info.directory + "/tmp-" + info.filename + ".mp4";
   }
 
-  // On the encoding thread: let the sidecar be written, rename a finished file into
-  // place, then report it.
-  std::string placeFile(const RecordedFile &info)
+  static std::string renameIntoPlace(const RecordedFile &info)
   {
-    if (onFileFinished)
-    {
-      onFileFinished(info);
-    }
     const std::string outputFile = info.directory + "/" + info.filename + ".mp4";
     if (std::rename(tmpPathFor(info).c_str(), outputFile.c_str()) != 0)
     {
@@ -1120,11 +1132,35 @@ private:
       SystemEventQueue::push("ffmpeg", msg);
       return msg;
     }
-    if (onFileClosed)
+    return "";
+  }
+
+  // On the encoding thread: let the sidecar be written, rename a finished file into
+  // place, then report it. A held file is renamed just after the next one, so a folder
+  // listing never has the held file without the next one, and only the next is reported.
+  std::string placeFile(const RecordedFile &info)
+  {
+    if (onFileFinished && onFileFinished(info))
+    {
+      // Only a long file is held, so the file after it is never held too.
+      heldFile = info;
+      return "";
+    }
+    std::string err = renameIntoPlace(info);
+    if (!heldFile.filename.empty())
+    {
+      const std::string heldErr = renameIntoPlace(heldFile);
+      heldFile = RecordedFile();
+      if (err.empty())
+      {
+        err = heldErr;
+      }
+    }
+    if (err.empty() && onFileClosed)
     {
       onFileClosed(info);
     }
-    return "";
+    return err;
   }
 
   // Finish the file and rename it into place, then report it.

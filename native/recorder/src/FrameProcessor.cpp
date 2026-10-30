@@ -284,7 +284,6 @@ void FrameProcessor::processFrames()
   constexpr auto stallThreshold = seconds(2);
   auto lastVideoFrameTime = steady_clock::now();
   heldFilename.clear();
-  heldClosedFile = {};
   // Called on this thread from inside the recorder, the first just before a file is
   // renamed into place so Video Review never lists it without its sidecar, the second
   // once it is in place; cleared before the thread ends.
@@ -296,19 +295,17 @@ void FrameProcessor::processFrames()
       writeJsonSidecarFile(file.directory + "/" + file.filename + ".json",
                            file.firstTs100ns, file.lastTs100ns, file.frames);
     }
-  };
-  videoRecorder->onFileClosed = [this](const RecordedFile &file)
-  {
+    // The recorder renames a held file into place just after the next file, so Video
+    // Review lists them together however it reads the folder.
     if (!heldFilename.empty() && file.filename == heldFilename)
     {
       heldFilename.clear();
-      heldClosedFile = {file.directory, file.filename};
-      return;
+      return true;
     }
-    // Video Review lists a held file along with this one when it refreshes the folder.
-    heldClosedFile = {};
-    reportFileClosed(file.directory, file.filename);
+    return false;
   };
+  videoRecorder->onFileClosed = [this](const RecordedFile &file)
+  { reportFileClosed(file.directory, file.filename); };
 
   while (running)
   {
@@ -501,8 +498,8 @@ void FrameProcessor::processFrames()
         {
           std::lock_guard<std::mutex> lock(splitMutex);
           // A long file split for a crossing the new file holds from its start has
-          // nothing to review but the overlap the short file repeats. Only the short file
-          // is reported, so Video Review does not open the long one first.
+          // nothing to review but the overlap the short file repeats. It is held back to
+          // appear just after the short file, so Video Review does not open it first.
           if (overlapSplit && splitRequested && shortEndTs == 0 && *crossings.begin() >= fileStartTs)
           {
             std::lock_guard<std::mutex> s(statusMutex);
@@ -679,9 +676,4 @@ void FrameProcessor::processFrames()
   closeRecording();
   videoRecorder->onFileFinished = nullptr;
   videoRecorder->onFileClosed = nullptr;
-  // The file after a held one failed to close; report the held one on its own.
-  if (!heldClosedFile.second.empty())
-  {
-    reportFileClosed(heldClosedFile.first, heldClosedFile.second);
-  }
 }
