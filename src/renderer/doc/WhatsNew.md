@@ -1,5 +1,16 @@
 | Version | What's New |
 | --- | --- |
+| 2.0.1 | Overlapped recording and splitting on regatta times |
+| | Overlapped recording: each file starts with the last 2 seconds of the one before, so a finish at a split can be reviewed in either file |
+| | Split on regatta times: enter a Regatta ID and Hint Waypoint on the Source tab, and each new time makes a short file Video Review can open within about 2 seconds |
+| | Start Recording asks before recording without a regatta |
+| | Video Review lists each new file as soon as it is finished |
+| | Files close faster on USB disks |
+| | Camera presets save the crop region and timing line |
+| | Timing line colours and a sharper preview on high resolution displays |
+| | Focus assist moved into the Focus group; rotation moved to the recorder settings |
+| | NVIDIA hardware encoding on Windows |
+| | Distance focus for the AIDA UHD-NDI3-X30: enter a distance of 10 to 100 m and focus follows the zoom |
 | 1.0.27 | Recorder health monitoring and more reliable recording |
 | | Monitor recorder health: warn on low frame rate and show disk usage, warning at 85% full |
 | | Broadcast recorder status, warnings and errors to other CrewTimer apps on the network |
