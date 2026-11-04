@@ -1,7 +1,7 @@
 {
   "name": "crewtimer-video-recorder",
-  "version": "2.0.1",
-  "description": "An NDI video recorder for use with CrewTimer Video Review",
+  "version": "2.0.2",
+  "description": "A video recorder for use with CrewTimer Video Review",
   "license": "MIT",
   "author": {
     "name": "CrewTimer Regatta Timing",

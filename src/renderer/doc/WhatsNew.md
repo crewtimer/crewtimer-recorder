@@ -1,5 +1,6 @@
 | Version | What's New |
 | --- | --- |
+| 2.0.2 | Correct video status while the recorder window is hidden |
 | 2.0.1 | Overlapped recording and splitting on regatta times |
 | | Overlapped recording: each file starts with the last 2 seconds of the one before, so a finish at a split can be reviewed in either file |
 | | Split on regatta times: enter a Regatta ID and Hint Waypoint on the Source tab, and each new time makes a short file Video Review can open within about 2 seconds |
