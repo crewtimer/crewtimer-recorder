@@ -21,7 +21,11 @@ const formatTime = (totalSeconds: number) => {
 const checkStatus = () => {
   queryRecordingStatus()
     .then((result) => {
-      const status = { ...DefaultRecordingStatus, ...result };
+      const status = {
+        ...DefaultRecordingStatus,
+        ...result,
+        queriedAtMilli: Date.now(),
+      };
       setRecordingStatus(status);
       setIsRecording(status.recording);
       return result;

@@ -119,10 +119,14 @@ export const useSignalStats = () => {
   else if (frameBacklog > 100) backlogTone = 'warning';
   const diskUsage = disk && !disk.error ? disk : undefined;
   // Whether video is actually arriving; discovery stops while recording, so
-  // the camera list alone would miss a camera that drops mid-recording
+  // the camera list alone would miss a camera that drops mid-recording.
+  // Measured when the status was read, not now: a render prompted by a
+  // regatta time or log entry between reads would otherwise see an old
+  // arrival time and report no video while frames are arriving.
   const connected =
     status.readerRunning &&
-    Date.now() - status.lastFrameArrivalMilli < FRAME_ARRIVAL_TIMEOUT_MS;
+    status.queriedAtMilli - status.lastFrameArrivalMilli <
+      FRAME_ARRIVAL_TIMEOUT_MS;
   // Compare the rounded value so the percentage shown and its colour agree
   const diskFull =
     !!diskUsage && Math.round(diskUsage.usedPercent) >= DISK_WARN_PERCENT;

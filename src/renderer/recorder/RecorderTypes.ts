@@ -97,6 +97,8 @@ export interface RecordingStatus extends HandlerResponse {
   readerRunning: boolean;
   /** PC time (UTC ms) the reader's last video frame arrived; 0 before the first. */
   lastFrameArrivalMilli: number;
+  /** PC time (UTC ms) this status was read; 0 before the first read. */
+  queriedAtMilli: number;
   frameProcessor: {
     recording: boolean;
     error: string;
@@ -124,6 +126,7 @@ export const DefaultRecordingStatus: RecordingStatus = {
   recordingDuration: 0,
   readerRunning: false,
   lastFrameArrivalMilli: 0,
+  queriedAtMilli: 0,
   frameProcessor: {
     recording: false,
     error: '',

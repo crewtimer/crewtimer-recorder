@@ -131,6 +131,9 @@ const createWindow = async () => {
     icon: getAssetPath('icon.png'),
     webPreferences: {
       zoomFactor,
+      // Keep polling recorder status and reporting health while the window
+      // is hidden behind Video Review or minimized.
+      backgroundThrottling: false,
       preload: app.isPackaged
         ? path.join(__dirname, 'preload.js')
         : path.join(__dirname, '../../.erb/dll/preload.js'),
