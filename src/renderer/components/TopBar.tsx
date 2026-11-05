@@ -8,14 +8,10 @@ import { StartButton } from './StartButton';
 import { DiskStatus } from './DiskStatus';
 import { useRecordingProps } from '../recorder/RecorderData';
 import { SETTINGS_PAGES, useSelectedPage } from '../pages/SelectedPage';
+import { compareVersions } from '../util/Version';
 
 const RELEASES_URL =
   'https://github.com/crewtimer/crewtimer-recorder/releases/latest';
-
-const versionAsNumber = (version: string) => {
-  const parts = version.split('.');
-  return Number(parts[0]) * 100 + Number(parts[1]) * 10 + Number(parts[2]);
-};
 
 export function TopBar() {
   const [page, setSelectedPage] = useSelectedPage();
@@ -29,8 +25,7 @@ export function TopBar() {
       '/global/config/video-recorder/latestText',
     ) || '';
   const updateAvailable =
-    versionAsNumber(latestVersion) >
-    versionAsNumber(window.platform.appVersion);
+    compareVersions(latestVersion, window.platform.appVersion) > 0;
 
   // Help and Privacy are reached from the menu and select no tab
   let tab: string | false = false;
