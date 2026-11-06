@@ -36,3 +36,7 @@ assets/Thumbs.db
 .env
 .qodo
 .claude/settings.local.json
+
+# Python bytecode
+__pycache__/
+*.py[cod]
