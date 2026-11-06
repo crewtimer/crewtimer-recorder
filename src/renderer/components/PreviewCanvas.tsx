@@ -294,15 +294,23 @@ const applyZoom = ({
         destX = destWidth / 2 - pixScale * srcPoint.x;
         destY = destHeight / 2 - pixScale * srcPoint.y;
 
-        // Adjust centering to show more of the crop area when near edges
+        // Near the edge of the crop, shift to show more of the crop area. A
+        // point outside the crop stays centred, kept within the frame as
+        // panning is, so the zoom goes where the user clicked.
         const { cropArea } = getRecordingProps();
-        const yMin = -cropArea.y * srcHeight * pixScale;
+        const inCrop =
+          srcPoint.x >= cropArea.x * srcWidth &&
+          srcPoint.x <= (cropArea.x + cropArea.width) * srcWidth &&
+          srcPoint.y >= cropArea.y * srcHeight &&
+          srcPoint.y <= (cropArea.y + cropArea.height) * srcHeight;
+        const bounds = inCrop ? cropArea : DefaultCrop;
+        const yMin = -bounds.y * srcHeight * pixScale;
         const yMax =
-          -(cropArea.y + cropArea.height) * srcHeight * pixScale + destHeight;
+          -(bounds.y + bounds.height) * srcHeight * pixScale + destHeight;
         destY = Math.min(yMin, Math.max(yMax, destY));
-        const xMin = -cropArea.x * srcWidth * pixScale;
+        const xMin = -bounds.x * srcWidth * pixScale;
         const xMax =
-          -(cropArea.x + cropArea.width) * srcWidth * pixScale + destWidth;
+          -(bounds.x + bounds.width) * srcWidth * pixScale + destWidth;
         destX = Math.min(xMin, Math.max(xMax, destX));
       }
       break;
