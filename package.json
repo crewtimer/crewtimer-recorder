@@ -4,7 +4,7 @@
     "@electron/node-gyp": "https://github.com/electron/node-gyp#0453f4fe4656c63277185b35feedec5716a27d90",
     "@types/react": "18.3.28",
     "browserslist": "4.28.7",
-    "electron-to-chromium": "1.5.401"
+    "electron-to-chromium": "1.5.481"
   },
   "description": "A video recorder app for CrewTimer Video Review",
   "keywords": [
@@ -130,7 +130,6 @@
     "react-markdown": "^9.0.1",
     "react-markdown-css": "^1.0.2",
     "react-measure": "^2.5.2",
-    "react-router-dom": "^6.22.3",
     "react-usedatum": "^1.0.7",
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.0",
@@ -162,10 +161,10 @@
     "css-loader": "^6.8.1",
     "css-minimizer-webpack-plugin": "^5.0.1",
     "detect-port": "^1.5.1",
-    "electron": "^43.3.0",
+    "electron": "^43.8.8",
     "electron-builder": "^26.15.3",
     "electron-devtools-installer": "^4.0.0",
-    "electron-to-chromium": "^1.5.401",
+    "electron-to-chromium": "^1.5.481",
     "electronmon": "^2.0.4",
     "eslint": "^8.49.0",
     "eslint-config-airbnb-base": "^15.0.0",
