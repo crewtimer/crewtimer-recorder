@@ -123,7 +123,7 @@
     "electron-log": "^5.4.4",
     "electron-store": "^11.0.2",
     "electron-updater": "^6.8.9",
-    "firebase": "^9.9.0",
+    "firebase": "^10.14.1",
     "github-markdown-css": "^5.8.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
