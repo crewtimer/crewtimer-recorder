@@ -7,6 +7,9 @@ group of crossings, the way the recorder splits with overlap: every crossing
 lies within the middle 2 s of a 4 s file, and files overlap where crossings
 are close together. Video with no crossing is left out.
 
+Video Review's scoring records (interpolation.json and each sidecar's
+timestamps) are carried over for the times kept, pointing at the new files.
+
 The destination folder can be opened in CrewTimer Video Review to score or
 rescore the regatta.
 """
@@ -106,6 +109,7 @@ class Crossing:
     seconds_of_day: float
     entered_ms: int | None  # lap Timestamp, when the time was recorded
     label: str
+    uuid: str = ""  # the lap's uuid, which Video Review's scoring records are keyed by
     epoch: float = 0.0
 
 
@@ -154,7 +158,18 @@ def fetch_laps(regatta_id: str, waypoint: str) -> list[dict[str, Any]]:
         {"orderBy": json.dumps("Gate"), "equalTo": json.dumps(gate_from_waypoint(waypoint))}
     )
     data = fetch_json(f"{base}/regatta/{urllib.parse.quote(path_id)}/lapdata.json?{query}")
-    return list(data.values()) if isinstance(data, dict) else []
+    return laps_with_uuid(data)
+
+
+def laps_with_uuid(data: Any) -> list[dict[str, Any]]:
+    """Laps from a lapdata map or list; a lap without a uuid takes its key, as Video Review does."""
+    if isinstance(data, dict):
+        return [
+            {**lap, "uuid": lap.get("uuid") or key} for key, lap in data.items() if isinstance(lap, dict)
+        ]
+    if isinstance(data, list):
+        return [lap for lap in data if isinstance(lap, dict)]
+    return []
 
 
 def load_laps_file(path: Path, waypoint: str) -> list[dict[str, Any]]:
@@ -163,9 +178,8 @@ def load_laps_file(path: Path, waypoint: str) -> list[dict[str, Any]]:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise OptimizeError(f"could not read {path}: {exc}") from exc
-    laps = data.values() if isinstance(data, dict) else data
     gate = gate_from_waypoint(waypoint)
-    return [lap for lap in laps if isinstance(lap, dict) and lap.get("Gate") == gate]
+    return [lap for lap in laps_with_uuid(data) if lap.get("Gate") == gate]
 
 
 TIME_PATTERN = re.compile(r"^\s*(\d{1,2}):(\d{1,2}):(\d{1,2}(?:\.\d*)?)\s*$")
@@ -199,6 +213,7 @@ def crossings_from_laps(laps: list[dict[str, Any]], waypoint: str) -> list[Cross
                 seconds_of_day=hours * 3600 + minutes * 60 + seconds,
                 entered_ms=int(entered) if isinstance(entered, (int, float)) else None,
                 label=label,
+                uuid=str(lap.get("uuid") or ""),
             )
         )
     return crossings
@@ -359,6 +374,8 @@ class Placement:
     missing: list[Crossing]  # no video holds the time
     other_day: list[Crossing]  # entered live on a day other than --day
     ambiguous: list[Crossing]  # in video on more than one day; all were kept
+    # Placed at the same moment as an earlier crossing, so sharing its file
+    same_time: list[tuple[float, Crossing]] = field(default_factory=list)
 
 
 def resolve_epochs(
@@ -422,6 +439,8 @@ def resolve_epochs(
             key = round(epoch, 3)
             if key not in placed:
                 placed[key] = (epoch, crossing, stretch)
+            else:
+                result.same_time.append((epoch, crossing))
     result.placed = sorted(placed.values(), key=lambda item: item[0])
     return result
 
@@ -557,11 +576,127 @@ def crossing_warnings(plan: Plan) -> list[str]:
     return warnings
 
 
+# -------------------------------------------------- Video Review scoring records
+
+INTERPOLATION_FILENAME = "interpolation.json"
+
+
+def read_scoring_records(folder: Path, sources: list[SourceFile]) -> dict[str, dict[str, Any]]:
+    """Video Review's scoring records by lap uuid.
+
+    The folder's interpolation.json is the main copy; each sidecar's
+    timestamps hold a copy of the records scored in that file, which Video
+    Review falls back to.
+    """
+    records: dict[str, dict[str, Any]] = {}
+    for source in sources:
+        timestamps = source.sidecar.get("timestamps")
+        if isinstance(timestamps, dict):
+            for uuid, record in timestamps.items():
+                if isinstance(record, dict):
+                    records[str(uuid)] = record
+    store_path = folder / INTERPOLATION_FILENAME
+    if store_path.exists():
+        try:
+            store = json.loads(store_path.read_text(encoding="utf-8"))
+            stored = store.get("records") if isinstance(store, dict) and store.get("version") == 1 else None
+            if not isinstance(stored, dict):
+                raise ValueError("not a version 1 store")
+        except (OSError, ValueError) as exc:
+            print(f"Warning: ignoring {store_path.name}: {exc}", file=sys.stderr)
+        else:
+            records.update({str(uuid): record for uuid, record in stored.items() if isinstance(record, dict)})
+    return records
+
+
+def frame_position(times: list[float], epoch: float) -> float:
+    """Video Review's 1-based, fractional frame number for a time within a file."""
+    if len(times) < 2:
+        return 1.0
+    index = min(max(bisect_left(times, epoch), 1), len(times) - 1)
+    before, after = times[index - 1], times[index]
+    fraction = (epoch - before) / (after - before) if after > before else 0.0
+    return round(index + fraction, 6)
+
+
+def assign_scoring_records(
+    records: dict[str, dict[str, Any]], plans: list[Plan], placement: Placement
+) -> tuple[dict[str, dict[str, dict[str, Any]]], int]:
+    """Give each record for a kept time to the file holding its frame.
+
+    Returns the rewritten records by plan name, and how many records were
+    for kept times but are in none of the files.
+    """
+    epochs: dict[str, list[float]] = {}
+    for epoch, crossing, _ in placement.placed:
+        epochs.setdefault(crossing.uuid, []).append(epoch)
+    for epoch, crossing in placement.same_time:
+        epochs.setdefault(crossing.uuid, []).append(epoch)
+    epochs.pop("", None)
+
+    def span(plan: Plan) -> tuple[float, float]:
+        if plan.out_times:
+            return plan.out_times[0], plan.out_times[-1]
+        return plan.center - FILE_SECONDS / 2, plan.center + FILE_SECONDS / 2  # a dry run
+
+    assigned: dict[str, dict[str, dict[str, Any]]] = {}
+    unplaced = 0
+    for uuid, record in records.items():
+        if uuid not in epochs:
+            continue  # not one of the times kept
+        frame_ms = record.get("frameTimestampMs")
+        targets = [frame_ms / 1000] if isinstance(frame_ms, (int, float)) else epochs[uuid]
+        best: tuple[tuple[int, int, float], Plan, float] | None = None
+        for plan in plans:
+            low, high = span(plan)
+            for target in targets:
+                if not low <= target <= high:
+                    continue
+                holds_time = any(crossing.uuid == uuid for _, crossing in plan.times)
+                from_its_file = any(
+                    source.path.name == record.get("videoFile") for source, _, _, _ in plan.selections
+                )
+                rank = (0 if holds_time else 1, 0 if from_its_file else 1, abs(target - plan.center))
+                if best is None or rank < best[0]:
+                    best = (rank, plan, target)
+        if best is None:
+            unplaced += 1
+            continue
+        _, plan, target = best
+        moved = dict(record)
+        moved["videoFile"] = f"{plan.name}.mp4"
+        if isinstance(frame_ms, (int, float)) and plan.out_times:
+            moved["frameNum"] = frame_position(plan.out_times, target)
+        else:
+            moved.pop("frameNum", None)  # it counted frames of the source file
+        assigned.setdefault(plan.name, {})[uuid] = moved
+    return assigned, unplaced
+
+
+def write_scoring_store(destination: Path, records: dict[str, dict[str, Any]]) -> None:
+    """Add records to the destination's interpolation.json, keeping any already there."""
+    store_path = destination / INTERPOLATION_FILENAME
+    merged: dict[str, Any] = {}
+    if store_path.exists():
+        try:
+            existing = json.loads(store_path.read_text(encoding="utf-8"))
+            if isinstance(existing, dict) and isinstance(existing.get("records"), dict):
+                merged.update(existing["records"])
+        except (OSError, json.JSONDecodeError) as exc:
+            raise OptimizeError(f"could not read {store_path}: {exc}") from exc
+    merged.update(records)
+    temporary = destination / f".{INTERPOLATION_FILENAME}.partial"
+    temporary.write_text(json.dumps({"version": 1, "records": merged}, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary, store_path)
+
+
 # ---------------------------------------------------------------- encoding
 
 
-def encode(plan: Plan, destination: Path, crf: int, preset: str) -> int:
-    """Write plan's MP4 and sidecar; returns the MP4's size in bytes."""
+def encode(
+    plan: Plan, destination: Path, crf: int, preset: str, records: dict[str, dict[str, Any]]
+) -> int:
+    """Write plan's MP4 and sidecar, with its scoring records; returns the MP4's size in bytes."""
     assert plan.reference is not None
     # Rounded down, so the first frame's PTS is zero and never negative: a
     # negative first PTS shifts the track and hides the first and last frames.
@@ -661,9 +796,11 @@ def encode(plan: Plan, destination: Path, crf: int, preset: str) -> int:
             raise OptimizeError("frame timing does not match its source")
 
         sidecar = json.loads(json.dumps(plan.reference.sidecar))
-        # Video Review's scoring marks name the file they were made in and its
-        # frame numbers, which do not carry over to the new file.
+        # The source's scoring records name it and its frame numbers; this
+        # file gets its own, rewritten for it.
         sidecar.pop("timestamps", None)
+        if records:
+            sidecar["timestamps"] = records
         info = sidecar.setdefault("file", {})
         info["startTs"] = f"{float(out_start):.7f}"
         info["stopTs"] = f"{float(stop):.7f}"
@@ -808,8 +945,16 @@ def main() -> int:
         f"{len(plans)} files from {len(sources)} source videos"
     )
 
+    records = read_scoring_records(source_dir, sources)
+
     if args.dry_run:
         name_plans(plans, args.prefix)
+        if records:
+            assigned, unplaced = assign_scoring_records(records, plans, placement)
+            print(
+                f"{sum(len(found) for found in assigned.values())} of {len(records)} Video Review "
+                f"scoring records would be kept" + (f" ({unplaced} outside the files)" if unplaced else "")
+            )
         for plan in plans:
             tz = plan.stretch.tz_minutes
             print(f"  {plan.name}  center {local_text(plan.center, tz)}  {len(plan.times)} times")
@@ -826,6 +971,12 @@ def main() -> int:
     for plan in plans:
         for warning in crossing_warnings(plan):
             print(f"Warning: {warning}", file=sys.stderr)
+    assigned, unplaced = assign_scoring_records(records, plans, placement)
+    if unplaced:
+        print(
+            f"Warning: {unplaced} Video Review scoring records for kept times are outside the new files",
+            file=sys.stderr,
+        )
 
     destination.mkdir(parents=True, exist_ok=True)
     existing = [
@@ -841,7 +992,11 @@ def main() -> int:
     written_bytes = 0
     failures = 0
     with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        futures = {pool.submit(encode, plan, destination, args.crf, args.preset): plan for plan in plans}
+        futures = {
+            pool.submit(encode, plan, destination, args.crf, args.preset, assigned.get(plan.name, {})): plan
+            for plan in plans
+        }
+        written: list[Plan] = []
         for done, future in enumerate(as_completed(futures), start=1):
             plan = futures[future]
             try:
@@ -850,10 +1005,17 @@ def main() -> int:
                 failures += 1
                 print(f"Error: {plan.name}: {error}", file=sys.stderr)
                 continue
+            written.append(plan)
             line = f"[{done}/{len(plans)}] {plan.name}.mp4 ({len(plan.out_times)} frames)"
             if args.verbose:
                 line += ": " + ", ".join(f"{c.waypoint} {c.time}" for _, c in plan.times)
             print(line)
+
+    if records:
+        kept = {uuid: record for plan in written for uuid, record in assigned.get(plan.name, {}).items()}
+        if kept:
+            write_scoring_store(destination, kept)
+        print(f"Kept {len(kept)} of {len(records)} Video Review scoring records in {INTERPOLATION_FILENAME}")
 
     source_bytes = sum(source.path.stat().st_size for source in sources)
     print(
