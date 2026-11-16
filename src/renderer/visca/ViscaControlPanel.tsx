@@ -23,6 +23,7 @@ import {
   driveFocus,
   getLensPosition,
   settleLens,
+  stepFocus,
   shutterLabels,
   irisLabels,
   updateCameraState,
@@ -856,6 +857,8 @@ const ViscaControlPanel: React.FC = () => {
                   // Stepping focus by hand is Manual focus.
                   return leaveDistanceFocus();
                 }}
+                // 2 units by direct position where the range at this zoom is known.
+                step={(direction) => stepFocus(direction === 'up' ? 2 : -2)}
               />
               {distanceFocus && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

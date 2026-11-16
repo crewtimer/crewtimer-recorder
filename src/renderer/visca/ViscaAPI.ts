@@ -343,10 +343,49 @@ export const settleLens = async (axis: 'zoom' | 'focus') => {
   }
 };
 
+/** How close a direct focus move must land to count as reaching its position. */
+const FOCUS_TOLERANCE = 2;
+/** How far above inf the near-edge search looks. */
+const FOCUS_WINDOW = 7000;
+
 /**
- * Drives focus to a position and returns where it ends up: at the position, or short of it
- * where the lens stops (the limit at this zoom). Continuous moves are used because the X30
- * refuses direct focus positions at some zooms, reporting completion without moving.
+ * The focus window found at each zoom, keyed by camera and zoom reading. inf (the far edge) is
+ * where a refused position sends the lens; near, the highest position accepted, once searched.
+ */
+const focusEdges = new Map<string, { inf: number; near?: number }>();
+
+const edgeKey = (zoom: number, to?: ViscaAddress) =>
+  `${to?.ip ?? getViscaIP()}:${to?.port ?? getViscaPort()}:${zoom}`;
+
+/** Forgets every focus window found; for tests. */
+export const resetFocusEdges = () => focusEdges.clear();
+
+/** Polls a lens position until it stops changing, or until cancelled, and returns it. */
+const settle = async (
+  axis: 'zoom' | 'focus',
+  readings: number,
+  cancelled?: () => boolean,
+  to?: ViscaAddress,
+): Promise<number> => {
+  const deadline = Date.now() + 15000;
+  let pos = await getLensPosition(axis, to);
+  let still = 0;
+  while (still < readings && Date.now() < deadline && !cancelled?.()) {
+    await snooze(100);
+    const next = await getLensPosition(axis, to);
+    still = next === pos ? still + 1 : 0;
+    pos = next;
+  }
+  return pos;
+};
+
+/**
+ * Moves focus to a position and returns where it ends up: at the position, or as close as
+ * the lens can get at this zoom. The X30 takes any position inside a window that depends on
+ * the zoom; sent one outside it, it goes to the far edge (inf) instead. So the position is
+ * tried as sent, and if refused, where the lens landed is inf. Below inf, inf is the closest.
+ * Above, the near edge is found by binary search (about 13 visible moves, then cached for
+ * the zoom) and the lens sent just inside it.
  * The move stops early once cancelled() is true, without starting if it already is. All of
  * it goes to `to` when given, so a move ends on the camera it started on.
  */
@@ -356,28 +395,67 @@ export const driveFocus = async (
   to?: ViscaAddress,
 ): Promise<number> => {
   let pos = await getLensPosition('focus', to);
-  if (cancelled?.()) return pos;
-  const near = target > pos;
-  const remaining = () => (near ? target - pos : pos - target);
-  // Top speed, then the button speed for the last stretch so the stop lands close.
-  let speed = remaining() > 300 ? 7 : 2;
-  await sendViscaCommand({ type: 'FOCUS_DRIVE', near, speed }, to);
-  let still = 0;
+  if (cancelled?.() || Math.abs(pos - target) <= FOCUS_TOLERANCE) return pos;
+  const seek = async (value: number) => {
+    await sendViscaCommand({ type: 'SET_FOCUS', value }, to);
+    return settle('focus', 3, cancelled, to);
+  };
+  const reached = (at: number, value: number) =>
+    Math.abs(at - value) <= FOCUS_TOLERANCE;
   try {
-    while (remaining() > 0 && still < 3 && !cancelled?.()) {
-      await snooze(100);
-      const next = await getLensPosition('focus', to);
-      still = next === pos ? still + 1 : 0;
-      pos = next;
-      if (speed === 7 && remaining() <= 300) {
-        speed = 2;
-        await sendViscaCommand({ type: 'FOCUS_DRIVE', near, speed }, to);
+    pos = await seek(target);
+    if (cancelled?.() || reached(pos, target)) return pos;
+
+    // Refused, so the lens is at inf. The window depends on the zoom, so let it finish.
+    const inf = pos;
+    const zoom = await settle('zoom', 1, cancelled, to);
+    if (cancelled?.()) return pos;
+    const key = edgeKey(zoom, to);
+    const cached = focusEdges.get(key);
+    // A different inf means the zoom moved since the near edge was found.
+    let near = cached && reached(cached.inf, inf) ? cached.near : undefined;
+    focusEdges.set(key, { inf, near });
+    if (target <= inf) return pos;
+
+    if (near === undefined) {
+      let low = inf; // accepted
+      let high = inf + FOCUS_WINDOW; // taken as refused
+      while (high - low > 1) {
+        const mid = Math.floor((low + high) / 2);
+        pos = await seek(mid);
+        if (cancelled?.()) return pos;
+        if (reached(pos, mid)) low = mid;
+        else high = mid;
       }
+      near = low;
+      focusEdges.set(key, { inf, near });
     }
+    const inside = Math.min(target, near - 2);
+    return reached(pos, inside) ? pos : await seek(inside);
   } finally {
+    // Stops the lens if the move was cancelled part way.
     await sendViscaCommand({ type: 'FOCUS_RESET' }, to);
   }
-  return getLensPosition('focus', to);
+};
+
+/**
+ * Steps focus by a few units with a direct position when the window found at this zoom shows
+ * it is in range. Returns false, sending nothing, when that isn't known, so the caller can
+ * step another way. Goes to the selected camera.
+ */
+export const stepFocus = async (units: number): Promise<boolean> => {
+  const focus = await getLensPosition('focus');
+  const zoom = await getLensPosition('zoom');
+  const edges = focusEdges.get(edgeKey(zoom));
+  const target = focus + units;
+  // The lens's own position is inside the window, so moving toward inf needs only inf.
+  const inRange =
+    edges !== undefined &&
+    target >= edges.inf &&
+    (target <= focus || (edges.near !== undefined && target <= edges.near - 2));
+  if (!inRange) return false;
+  await sendViscaCommand({ type: 'SET_FOCUS', value: target });
+  return true;
 };
 
 export const getCameraState = async (): Promise<CameraState> => {

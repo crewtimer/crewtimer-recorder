@@ -19,6 +19,11 @@ interface ViscaValueButtonProps {
   autoOnce?: ViscaCommand;
   /** Called when a step button is pressed; the step waits for a returned promise. */
   onPress?: (direction: 'down' | 'up') => void | Promise<void>;
+  /**
+   * Takes a press's single step when it can, resolving true; on false the button sends its
+   * own short move-and-stop instead. Holding the button still moves continuously.
+   */
+  step?: (direction: 'down' | 'up') => Promise<boolean>;
   /** When defined, a Distance mode is offered; true while it is selected. */
   distance?: boolean;
   /** Called when a mode button is chosen; the mode's command waits for a returned promise. */
@@ -35,6 +40,7 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
   autoOff,
   autoOnce,
   onPress,
+  step,
   distance,
   onMode,
 }) => {
@@ -95,7 +101,13 @@ const ViscaValueButton: React.FC<ViscaValueButtonProps> = ({
       await snooze(50);
       await handleCommand(reset);
     };
-    sendStep();
+    const stepped = step
+      ? await step(direction).catch((error) => {
+          console.warn(`Step failed, moving instead: ${error}`);
+          return false;
+        })
+      : false;
+    if (!stepped) sendStep();
     // After a while, start again until released
     if (held.current) {
       setTimeoutRef.current = setTimeout(() => handleCommand(command), 300);
