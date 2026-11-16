@@ -397,6 +397,8 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
   const [clip, setClip] = useState<Rect>(recordingProps.cropArea);
   const draggingCornerRef = useRef<string | null>(null);
   const [draggingCorner, setDraggingCorner] = useState<string | null>(null);
+  // Where the timing guide was grabbed along its length ('line' drag), and where it was then.
+  const guideGrab = useRef<{ mouseX: number; pt1: number; pt2: number }>();
   const [isAdjustingCrop, setIsAdjustingCrop] = useState(false);
   const ignoreClick = useRef(false);
   const horizonClick = useRef<Point>();
@@ -543,6 +545,18 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         y <= corner.y + cornerSize,
     );
     return selectedCorner;
+  };
+
+  // Whether a point is on the shown timing guide, between its ends, in the zoomed view
+  const isOnZoomedGuide = (x: number, y: number) => {
+    if (videoScaling.zoomMode !== ZoomMode.Zoom || !settings.showFinishGuide) {
+      return false;
+    }
+    const { pt1, pt2 } = getNativeGuideCoords();
+    if (y < pt1.y || y > pt2.y || pt2.y === pt1.y) return false;
+    // The guide leans when its ends differ, so find where it crosses this height.
+    const lineX = pt1.x + ((y - pt1.y) / (pt2.y - pt1.y)) * (pt2.x - pt1.x);
+    return Math.abs(x - lineX) <= 6;
   };
 
   const handleMaximizeIconClick = () => {
@@ -720,6 +734,13 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         ignoreClick.current = true;
         e.stopPropagation();
         setDraggingCorner(corner.name);
+      } else if (e.button === 0 && isOnZoomedGuide(offsetX, offsetY)) {
+        // Zoomed in, the guide's end handles are usually off screen, so the line itself drags.
+        ignoreClick.current = true;
+        e.preventDefault();
+        e.stopPropagation();
+        guideGrab.current = { mouseX: offsetX, ...getGuide() };
+        setDraggingCorner('line');
       } else if (e.button === 0) {
         if (horizon.enabled) {
           horizonClick.current = { x: e.clientX, y: e.clientY };
@@ -824,7 +845,15 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       );
       const mouseOffsetX = offsetX;
 
-      if (
+      const grab = guideGrab.current;
+      if (draggingCornerRef.current === 'line' && grab) {
+        // Moves both ends by whole source pixels, keeping the guide's lean.
+        const delta = Math.round(
+          (mouseOffsetX - grab.mouseX) / videoScaling.pixScale,
+        );
+        setGuide({ pt1: grab.pt1 + delta, pt2: grab.pt2 + delta });
+        applyChanges(clip);
+      } else if (
         draggingCornerRef.current === 'ft' ||
         draggingCornerRef.current === 'fb'
       ) {
