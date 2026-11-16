@@ -1,5 +1,11 @@
 | Version | What's New |
 | --- | --- |
+| 2.0.3 | Zoom, focus and update check fixes |
+| | Zooming on a point outside the crop region zooms at that point instead of into the crop |
+| | The timing line can be dragged while zoomed in: press on the line itself and drag |
+| | Distance focus and the focus slider move straight to the focus position instead of overshooting it; a position the lens can't reach at the current zoom stops at the nearest end |
+| | Focus + and − step 2 units at a time where the focus range at the current zoom is known |
+| | Beta installs are offered the official release once it ships, and version numbers such as 1.1.1 compare correctly |
 | 2.0.2 | Correct video status while the recorder window is hidden |
 | 2.0.1 | Overlapped recording and splitting on regatta times |
 | | Overlapped recording: each file starts with the last 2 seconds of the one before, so a finish at a split can be reviewed in either file |
