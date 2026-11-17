@@ -31,9 +31,9 @@ import { showErrorDialog } from '../components/ErrorDialog';
 import { Panel } from '../components/Panel';
 import { SignalHealth } from './SignalHealth';
 import ViscaControlPanel from '../visca/ViscaControlPanel';
-import { useSelectedPage } from '../pages/SelectedPage';
 import { ZoomCalibrationWizard } from '../visca/ZoomCalibration';
 import { useZoomCalibrationCamera, useViscaIP } from '../visca/ViscaState';
+import { useSelectedPage } from '../pages/SelectedPage';
 import {
   refreshCameraList,
   useCameraList,
@@ -114,15 +114,11 @@ const FRAME_STALL_TIMEOUT_MS = 3000;
 /** Give up waiting on a requested rescan after this long. */
 const RESCAN_TIMEOUT_MS = 10000;
 
-const NoCamera: React.FC<{
-  selectedCamera: string;
-  cameras: Camera[];
-  onSelect: (name: string) => void;
-  /** The camera is on the network but its video stopped. */
-  noVideo?: boolean;
-}> = ({ selectedCamera, cameras, onSelect, noVideo }) => {
-  // Discovery is slow on first launch; avoid flashing the macOS permission hint
-  const [hintReady, setHintReady] = useState(false);
+/**
+ * Asks for a camera search now and reports until it finishes. The periodic search pauses while
+ * a camera is previewing, to keep the network quiet, so this is how a newly added camera is found.
+ */
+const useCameraSearch = () => {
   const [searching, setSearching] = useState(false);
   useEffect(() => {
     if (!searching) return undefined;
@@ -147,6 +143,23 @@ const NoCamera: React.FC<{
       clearTimeout(timer);
     };
   }, [searching]);
+  const search = () => {
+    setSearching(true);
+    refreshCameraList(true);
+  };
+  return { searching, search };
+};
+
+const NoCamera: React.FC<{
+  selectedCamera: string;
+  cameras: Camera[];
+  onSelect: (name: string) => void;
+  /** The camera is on the network but its video stopped. */
+  noVideo?: boolean;
+}> = ({ selectedCamera, cameras, onSelect, noVideo }) => {
+  // Discovery is slow on first launch; avoid flashing the macOS permission hint
+  const [hintReady, setHintReady] = useState(false);
+  const { searching, search } = useCameraSearch();
   useEffect(() => {
     const timer = setTimeout(() => setHintReady(true), 6000);
     return () => clearTimeout(timer);
@@ -185,14 +198,7 @@ const NoCamera: React.FC<{
           : 'Cameras are searched for every 5 seconds.'}
       </Typography>
       <Stack direction="row" gap={1} flexWrap="wrap" justifyContent="center">
-        <Button
-          variant="contained"
-          disabled={searching}
-          onClick={() => {
-            setSearching(true);
-            refreshCameraList(true);
-          }}
-        >
+        <Button variant="contained" disabled={searching} onClick={search}>
           {searching ? 'Searching…' : 'Search again'}
         </Button>
         {isMac && hintReady && cameras.length === 0 && (
@@ -223,6 +229,7 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
   const [cameraList] = useCameraList();
   const [initialSearchComplete] = useInitialCameraSearchComplete();
   const [isRecording] = useIsRecording();
+  const cameraSearch = useCameraSearch();
   const [viscaIP] = useViscaIP();
   const [nerdMode] = useNerdMode();
   const [page] = useSelectedPage();
@@ -469,33 +476,54 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
 
           {page === '/source' && (
             <Panel title="Source" aside={restartNote}>
-              <TextField
-                select
-                label="Camera"
-                size="small"
-                value={selectedCamera}
-                onChange={(e) => selectCamera(e.target.value)}
-                error={initialSearchComplete && !camFound && !!selectedCamera}
-                helperText={
-                  !initialSearchComplete
-                    ? 'Searching for cameras…'
-                    : !camFound && selectedCamera
-                      ? 'Not found on the network. Searching every 5 s.'
-                      : undefined
-                }
-                fullWidth
-              >
-                {cameraList.map((c) => (
-                  <MenuItem key={c.name} value={c.name}>
-                    {cameraLabel(c)}
-                  </MenuItem>
-                ))}
-                {!camFound && selectedCamera && (
-                  <MenuItem value={selectedCamera}>
-                    {`${selectedCamera} — ${initialSearchComplete ? 'not found' : 'searching…'}`}
-                  </MenuItem>
-                )}
-              </TextField>
+              <Stack direction="row" alignItems="flex-start" gap={1}>
+                <TextField
+                  select
+                  label="Camera"
+                  size="small"
+                  value={selectedCamera}
+                  onChange={(e) => selectCamera(e.target.value)}
+                  error={initialSearchComplete && !camFound && !!selectedCamera}
+                  helperText={
+                    !initialSearchComplete
+                      ? 'Searching for cameras…'
+                      : !camFound && selectedCamera
+                        ? 'Not found on the network. Searching every 5 s.'
+                        : undefined
+                  }
+                  fullWidth
+                >
+                  {cameraList.map((c) => (
+                    <MenuItem key={c.name} value={c.name}>
+                      {cameraLabel(c)}
+                    </MenuItem>
+                  ))}
+                  {!camFound && selectedCamera && (
+                    <MenuItem value={selectedCamera}>
+                      {`${selectedCamera} — ${initialSearchComplete ? 'not found' : 'searching…'}`}
+                    </MenuItem>
+                  )}
+                </TextField>
+                <Tooltip
+                  describeChild
+                  title={
+                    isRecording
+                      ? 'Searching is paused while recording'
+                      : 'Search the network for cameras now. While a camera is previewing, the regular search pauses, so use this after adding a camera.'
+                  }
+                >
+                  <span>
+                    <Button
+                      variant="outlined"
+                      disabled={cameraSearch.searching || isRecording}
+                      onClick={cameraSearch.search}
+                      sx={{ height: 40, whiteSpace: 'nowrap' }}
+                    >
+                      {cameraSearch.searching ? 'Searching…' : 'Search'}
+                    </Button>
+                  </span>
+                </Tooltip>
+              </Stack>
               <Stack direction="row" alignItems="flex-end" gap={1.5}>
                 <Box sx={{ flex: 1 }}>
                   <Typography
