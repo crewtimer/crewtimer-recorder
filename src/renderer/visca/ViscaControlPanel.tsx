@@ -952,7 +952,10 @@ const ViscaControlPanel: React.FC = () => {
               <GuideColorPicker />
             </Box>
             {!viscaEnabled && focusAssist}
-            <Tooltip title="Show an orange horizontal line on the preview to level the camera; left click the preview to move it">
+            <Tooltip
+              placement="left"
+              title="Show an orange horizontal line on the preview to level the camera; drag the line, or click the preview, to move it"
+            >
               <FormControlLabel
                 control={
                   <Checkbox

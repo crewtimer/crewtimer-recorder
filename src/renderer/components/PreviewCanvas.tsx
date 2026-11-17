@@ -559,6 +559,20 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
     return Math.abs(x - lineX) <= 6;
   };
 
+  // Whether a point is on the horizon line, so a press there drags it
+  const isOnHorizon = (x: number, y: number) => {
+    if (!horizon.enabled) return false;
+    const { y: horizonY } = translateSrcCanvas2DestCanvas({
+      x: 0,
+      y: videoScaling.srcHeight * horizon.yPct,
+    });
+    return (
+      Math.abs(y - horizonY) <= 6 &&
+      x >= videoScaling.destX &&
+      x <= videoScaling.destX + videoScaling.scaledWidth
+    );
+  };
+
   const handleMaximizeIconClick = () => {
     if (canvasRef.current) {
       const maxClip = { ...DefaultCrop };
@@ -741,6 +755,12 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         e.stopPropagation();
         guideGrab.current = { mouseX: offsetX, ...getGuide() };
         setDraggingCorner('line');
+      } else if (e.button === 0 && isOnHorizon(offsetX, offsetY)) {
+        // Pressed on the horizon line: drag it up or down rather than pan
+        ignoreClick.current = true;
+        e.preventDefault();
+        e.stopPropagation();
+        setDraggingCorner('horizon');
       } else if (e.button === 0) {
         if (horizon.enabled) {
           horizonClick.current = { x: e.clientX, y: e.clientY };
@@ -846,7 +866,13 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
       const mouseOffsetX = offsetX;
 
       const grab = guideGrab.current;
-      if (draggingCornerRef.current === 'line' && grab) {
+      if (draggingCornerRef.current === 'horizon') {
+        const { y } = translateDestCanvas2SrcCanvas({ x: offsetX, y: offsetY });
+        setHorizon((prior) => ({
+          ...prior,
+          yPct: Math.min(1, Math.max(0, y / videoScaling.srcHeight)),
+        }));
+      } else if (draggingCornerRef.current === 'line' && grab) {
         // Moves both ends by whole source pixels, keeping the guide's lean.
         const delta = Math.round(
           (mouseOffsetX - grab.mouseX) / videoScaling.pixScale,
@@ -927,7 +953,7 @@ const PreviewCanvas: React.FC<CanvasProps> = ({ divwidth, divheight }) => {
         });
       }
     },
-    [clip, setGuide, videoScaling, applyChanges],
+    [clip, setGuide, setHorizon, videoScaling, applyChanges],
   );
 
   const handleMouseUp = useCallback(
