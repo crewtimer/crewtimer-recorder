@@ -37,6 +37,23 @@ export const [useCameraModel, setCameraModel, getCameraModel] = UseStoredDatum<
   string | undefined
 >('cameraModel', undefined);
 
+/**
+ * A camera's zoom-center column: the image column that stays put as the lens zooms, in source
+ * pixels from the center of the frame, and the frame width it was measured at.
+ */
+export interface ZoomCenter {
+  column: number;
+  width: number;
+}
+/** Zoom-center columns by camera endpoint ("ip:port"), from Calibrate Zoom or typed in. */
+export const [useZoomCenters, setZoomCenters] = UseStoredDatum<
+  Record<string, ZoomCenter>
+>('zoomCenters', {});
+/** The endpoint of the camera Calibrate Zoom is running for, or undefined when it is closed. */
+export const [useZoomCalibrationCamera, setZoomCalibrationCamera] = UseDatum<
+  string | undefined
+>(undefined);
+
 /** The subject distance in meters that Distance focus keeps sharp as the zoom changes. */
 export const [useFocusDistance] = UseStoredDatum('focusDistance', 30);
 /** The VISCA address and port ("ip:port") of a camera, which binds per-camera state to it. */

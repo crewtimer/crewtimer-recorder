@@ -59,6 +59,7 @@ import {
 import ViscaValueButton from './ViscaValueButton';
 import RangeStepper from './RangeStepper';
 import ViscaPresets from './ViscaPresets';
+import ZoomCalibration from './ZoomCalibration';
 import {
   GuideColor,
   guideColorValues,
@@ -483,7 +484,7 @@ const ViscaControlPanel: React.FC = () => {
   // turned on for, so a newly selected camera never gets another camera's focus.
   const endpoint = viscaEndpoint(viscaIP, viscaPort);
   const [viscaModel] = useViscaModel();
-  const { focusFromDistance } = cameraFeatures(
+  const { focusFromDistance, zoomCalibration } = cameraFeatures(
     cameraReady && viscaModel?.endpoint === endpoint
       ? viscaCameraId(viscaModel.model)
       : undefined,
@@ -973,6 +974,12 @@ const ViscaControlPanel: React.FC = () => {
                 sx={{ m: 0 }}
               />
             </Tooltip>
+            {viscaEnabled && zoomCalibration && (
+              // The checkboxes above are spaced by their 9 px padding; match it.
+              <Box sx={{ mt: '9px' }}>
+                <ZoomCalibration endpoint={endpoint} />
+              </Box>
+            )}
           </Stack>
         </Group>
         {viscaEnabled && (

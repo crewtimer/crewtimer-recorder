@@ -6,6 +6,7 @@
 | | The horizon line can be dragged up and down as well as placed with a click |
 | | Distance focus and the focus slider move straight to the focus position instead of overshooting it; a position the lens can't reach at the current zoom stops at the nearest end |
 | | Focus + and − step 2 units at a time where the focus range at the current zoom is known |
+| | Calibrate Zoom for the AIDA UHD-NDI3-X30: a guided routine finds the column the lens zooms around, so a target on the timing line stays on it as you zoom. The column is saved for each camera, and Set line puts the timing line back on it |
 | | Beta installs are offered the official release once it ships, and version numbers such as 1.1.1 compare correctly |
 | 2.0.2 | Correct video status while the recorder window is hidden |
 | 2.0.1 | Overlapped recording and splitting on regatta times |

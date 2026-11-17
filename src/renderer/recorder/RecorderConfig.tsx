@@ -32,7 +32,8 @@ import { Panel } from '../components/Panel';
 import { SignalHealth } from './SignalHealth';
 import ViscaControlPanel from '../visca/ViscaControlPanel';
 import { useSelectedPage } from '../pages/SelectedPage';
-import { useViscaIP } from '../visca/ViscaState';
+import { ZoomCalibrationWizard } from '../visca/ZoomCalibration';
+import { useZoomCalibrationCamera, useViscaIP } from '../visca/ViscaState';
 import {
   refreshCameraList,
   useCameraList,
@@ -218,6 +219,7 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
 }) => {
   const [recordingProps, setRecordingProps] = useRecordingProps();
   const [, setRecordingPropsPending] = useRecordingPropsPending();
+  const [zoomCalibrationCamera] = useZoomCalibrationCamera();
   const [cameraList] = useCameraList();
   const [initialSearchComplete] = useInitialCameraSearchComplete();
   const [isRecording] = useIsRecording();
@@ -351,6 +353,8 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
     </Typography>
   );
 
+  const showCameraControls = !['/recording', '/source'].includes(page);
+
   return (
     <Box
       sx={{ display: 'flex', flexDirection: 'column', gap: 2, height: '100%' }}
@@ -461,7 +465,7 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
         >
           {nerdMode && <SignalHealth connected={camFound} />}
 
-          {!['/recording', '/source'].includes(page) && <ViscaControlPanel />}
+          {showCameraControls && <ViscaControlPanel />}
 
           {page === '/source' && (
             <Panel title="Source" aside={restartNote}>
@@ -618,6 +622,16 @@ const RecorderConfig: React.FC<{ showPreview?: boolean }> = ({
             </Panel>
           )}
         </Box>
+
+        {showCameraControls && zoomCalibrationCamera && (
+          <Box
+            component="aside"
+            aria-label="Calibrate Zoom"
+            sx={{ flex: '1 1 300px', maxWidth: 360, overflowY: { md: 'auto' } }}
+          >
+            <ZoomCalibrationWizard />
+          </Box>
+        )}
       </Box>
     </Box>
   );

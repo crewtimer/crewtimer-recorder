@@ -18,6 +18,15 @@ describe('cameraFeatures', () => {
     // A bare ID could come from any source, so it matches nothing.
     expect(cameraFeatures('0005011f').focusFromDistance).toBeUndefined();
   });
+
+  it('offers zoom calibration on the AIDA UHD-NDI3-X30 only', () => {
+    expect(cameraFeatures(viscaCameraId('0005011f')).zoomCalibration).toBe(
+      true,
+    );
+    expect(
+      cameraFeatures(viscaCameraId('00010519')).zoomCalibration,
+    ).toBeUndefined();
+  });
 });
 
 describe('AIDA UHD-NDI3-X30 focus model', () => {

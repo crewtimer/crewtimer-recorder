@@ -7,6 +7,8 @@ export const focusDistanceRange = { min: 10, max: 100 };
 export interface CameraFeatures {
   /** The focus position that holds a subject this many meters away sharp at a zoom, or null where the model has no answer. */
   focusFromDistance?: (zoom: number, meters: number) => number | null;
+  /** Offers Calibrate Zoom, which finds the column the lens zooms around (an AIDA zooms off center). */
+  zoomCalibration?: boolean;
 }
 
 /**
@@ -19,7 +21,10 @@ export const viscaCameraId = (model: string | undefined) =>
 
 const featuresByCamera: Record<string, CameraFeatures> = {
   // AIDA UHD-NDI3-X30
-  'visca:0005011f': { focusFromDistance: aidaX30FocusFromDistance },
+  'visca:0005011f': {
+    focusFromDistance: aidaX30FocusFromDistance,
+    zoomCalibration: true,
+  },
 };
 
 export const cameraFeatures = (cameraId: string | undefined): CameraFeatures =>
