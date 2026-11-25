@@ -55,7 +55,7 @@
     "build:win": "npm run build && npm run install:native:win && node_modules/.bin/electron-builder --win --x64 --config.npmRebuild=false",
     "build:mac": "npm run build && npm run build:native:mac && APPLE_KEYCHAIN_PROFILE=crewtimer-app-signing node_modules/.bin/electron-builder --mac --arm64",
     "kill": "kill -9 `lsof -i:1213 -t`",
-    "build:native": "cd release/app && yarn add ../../native/recorder",
+    "build:native": "cd release/app && yarn add ../../native/recorder && cd node_modules/crewtimer_video_recorder && node ../../../../native/recorder/node_modules/node-gyp/bin/node-gyp.js rebuild",
     "build:native:mac": "cross-env TS_NODE_TRANSPILE_ONLY=true ts-node .erb/scripts/build-native-mac.ts",
     "cleanbasic": "ts-node ./.erb/scripts/clean.js && rm -rf release/build",
     "build:release": "yarn clean && yarn build && yarn build:mac && yarn build:win && open release/build",

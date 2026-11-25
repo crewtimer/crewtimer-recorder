@@ -14,7 +14,7 @@
  * Logs frame to frame camera intervals 2 ms or more from the declared frame rate.
  * The first is logged at once; later ones are counted and summarised once a minute so a
  * continuously irregular source does not flood the log. Fed every frame a reader
- * delivers, so it covers preview as well as recording, for every source type.
+ * delivers, so it covers preview as well as recording; VideoController uses it for SRT.
  */
 class FrameIntervalMonitor
 {

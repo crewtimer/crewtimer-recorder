@@ -59,5 +59,10 @@ if (!isMacArm64(built)) {
   throw new Error(`${built} is not a macOS arm64 module`);
 }
 fs.mkdirSync(path.dirname(installed), { recursive: true });
-fs.copyFileSync(built, installed);
+// Copy to a new file and rename it into place. Overwriting the old file in place,
+// e.g. while a running app has it loaded, leaves macOS holding the old file's code
+// signature, and any process that then loads the new one is killed.
+const staged = `${installed}.tmp`;
+fs.copyFileSync(built, staged);
+fs.renameSync(staged, installed);
 console.log(`Installed native recorder into ${installed}`);

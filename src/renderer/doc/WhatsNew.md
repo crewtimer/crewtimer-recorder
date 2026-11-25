@@ -1,7 +1,7 @@
 | Version | What's New |
 | --- | --- |
 | 2.0.4 | Frame timing warnings |
-| | The log warns when the time between frames is 2 ms or more off the camera's frame rate, during preview as well as recording. The first is logged at once, then at most one summary a minute |
+| | For SRT cameras, the log warns when the time between frames is 2 ms or more off the camera's frame rate, during preview as well as recording. The first is logged at once, then at most one summary a minute |
 | 2.0.3 | Zoom, focus and update check fixes |
 | | Zooming on a point outside the crop region zooms at that point instead of into the crop |
 | | The timing line can be dragged while zoomed in: press on the line itself and drag |

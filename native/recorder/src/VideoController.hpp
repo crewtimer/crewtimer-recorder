@@ -177,9 +177,14 @@ private:
 
     lastFrameArrivalMilli = 0;
     frameIntervalMonitor.reset();
-    err = videoReader->start(camera, [this](FramePtr frame)
+    // Frame interval warnings are only for SRT sources.
+    const bool checkFrameIntervals = protocol == "SRT";
+    err = videoReader->start(camera, [this, checkFrameIntervals](FramePtr frame)
                              {
-                               frameIntervalMonitor.addFrame(frame);
+                               if (checkFrameIntervals)
+                               {
+                                 frameIntervalMonitor.addFrame(frame);
+                               }
                                if (frame->frameType == Frame::FrameType::VIDEO)
                                {
                                  lastFrameArrivalMilli = std::chrono::duration_cast<std::chrono::milliseconds>(
