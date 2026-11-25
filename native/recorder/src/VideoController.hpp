@@ -7,6 +7,7 @@
 #include <thread>
 #include <vector>
 
+#include "FrameIntervalMonitor.hpp"
 #include "FrameProcessor.hpp"
 #include "Message.hpp"
 #include "MulticastReceiver.hpp"
@@ -68,6 +69,7 @@ private:
   FramePtr lastPreviewFrame;
   std::mutex frameSinkMutex;
   std::atomic<int> frameRotation{0};
+  FrameIntervalMonitor frameIntervalMonitor;
 
   // mdns
   std::condition_variable scanWake;
@@ -174,8 +176,10 @@ private:
     }
 
     lastFrameArrivalMilli = 0;
+    frameIntervalMonitor.reset();
     err = videoReader->start(camera, [this](FramePtr frame)
                              {
+                               frameIntervalMonitor.addFrame(frame);
                                if (frame->frameType == Frame::FrameType::VIDEO)
                                {
                                  lastFrameArrivalMilli = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -226,6 +230,7 @@ private:
     }
     readerRunning = false;
     activeSourceName.clear();
+    frameIntervalMonitor.reset();
     scanPaused = false;
     {
       std::lock_guard<std::mutex> lock(frameSinkMutex);
